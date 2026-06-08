@@ -26,6 +26,7 @@
 | 调整资源画质 | `tools/build_quality_previews.py` | 生成预览，确认后再替换正式帧 |
 | 修改 Windows 便携版打包 | `electron-app/README.md` | `build-electron-win.ps1` |
 | 修改 Windows 安装包 | `electron-app/README.md` | `build-installer-win.ps1`、`build/installer.nsh`、`package.json` |
+| 规划或实现 macOS 适配 | `docs/ARCHITECTURE.md`、`electron-app/electron/README.md` | 平台适配层、`main.cjs`、未来 macOS provider |
 | 修改测试 | `electron-app/test/README.md` | `test/*.test.cjs` |
 
 ## 修改前检查清单
@@ -49,6 +50,7 @@
 | 气泡 | `bubble`、`startupBubble` |
 | 自启动 | `autoStart`、`WINDOWS_STARTUP_RUN_KEY` |
 | 窗口漫游/贴靠 | `windowRoam`、`windowSurface`、`dock` |
+| macOS 适配 | `darwin`、`platform`、`WindowProvider`、`SurfaceProvider` |
 | 变体 | `PetVariant`、`pet_variant.json`、`buildPetRuntimeConfig` |
 
 ## 验证建议

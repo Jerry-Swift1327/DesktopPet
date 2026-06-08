@@ -13,6 +13,8 @@
 | `tools` | 资源处理和画质预览 Python 脚本 | 抠像、抽帧、循环段选择、替换动作视频 |
 | `app_icon.ico` | 应用图标源文件 | 更新应用图标 |
 
+当前项目根目录为 `C:\Users\86183\Documents\DesktopPet`。旧 `New project\DesktopPetPackage` 目录仅作为历史参考，不作为当前开发入口。
+
 ## Electron 应用结构
 
 | 路径 | 当前作用 | 常见修改场景 |
@@ -75,6 +77,7 @@
 
 - `electron-app/node_modules`
 - `electron-app/.runtime-assets`
+- `electron-app/.npm-cache*`
 - `electron-app/.electron-builder-cache`
 - `electron-app/release`
 - `electron-app/cat_release`

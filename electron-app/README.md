@@ -4,6 +4,14 @@
 
 ## 运行和测试
 
+首次进入新根目录或重新拉取项目后，先安装依赖：
+
+```powershell
+npm.cmd install
+```
+
+`node_modules`、`.npm-cache*` 和 `.runtime-assets` 均为本机生成产物，不提交 Git。PowerShell 下优先使用 `npm.cmd`，避免 `npm.ps1` 被执行策略拦截。
+
 开发运行：
 
 ```powershell
@@ -72,6 +80,8 @@ npm.cmd run prepare:runtime-assets
 - 指定变体的运行资源
 
 `electron-app` 根目录下旧的同名入口文件已经清理。修改运行时行为时只进入 `electron` 和 `static` 目录。
+
+当前迁移后的启动链路已验证：`npm.cmd install` 可安装依赖，`npm.cmd start` 可启动并显示宠物。
 
 ## 宠物变体
 
