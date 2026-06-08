@@ -3511,6 +3511,9 @@ function createPetWindow() {
     log("pet window ready-to-show");
     moveToStartPosition(false);
     petWindow.show();
+    if (process.platform === "darwin") {
+      moveToStartPosition(false);
+    }
     sendPetState();
     showStartupBubble();
   });
