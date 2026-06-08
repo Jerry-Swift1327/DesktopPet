@@ -100,6 +100,14 @@ Windows 贴靠逻辑使用：
 - `window-from-point.ps1` 辅助拖拽命中判断。
 - `main.cjs` 中的 `WINDOW_DOCK_*`、`WINDOW_SURFACE_*`、`windowRoam*` 相关逻辑做缓存、验证、回退。
 
+上述窗口候选和命中逻辑当前属于 Windows 实现。进入 macOS 适配时，不应直接复用 PowerShell/Win32 路径；建议新增平台适配层，将窗口枚举、窗口命中、Dock/任务栏边界、自启动等系统能力收口到平台 provider 中。macOS provider 未完成前，相关功能应降级或隐藏，避免影响基础桌宠启动、动画、拖拽、菜单和缩放。
+
+macOS 适配建议分阶段推进：
+
+1. 基础运行版：启动、透明窗口、动画播放、拖拽、右键菜单、悬停面板、气泡、缩放和退出。
+2. 系统能力版：窗口枚举、窗口吸附/跟随、Dock 避让、自启动、权限申请。
+3. 交付能力版：`.app/.dmg` 打包、签名、公证、Gatekeeper 和客户机器冒烟测试。
+
 ## 状态数据
 
 运行状态存储在 Electron `userData` 下，主要包括：
