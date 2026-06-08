@@ -24,7 +24,7 @@ electron-app/.runtime-assets/
 electron-app/.user-data/
 electron-app/.electron-cache/
 electron-app/.electron-builder-cache/
-electron-app/.npm-cache/
+electron-app/.npm-cache*/
 electron-app/logs/
 
 # Build and installer outputs
