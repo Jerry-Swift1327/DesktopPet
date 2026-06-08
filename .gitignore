@@ -1,0 +1,52 @@
+﻿# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Local archives and transfer packages
+*.zip
+*.7z
+*.rar
+
+# Codex/local temporary directories
+.tmp/
+.codex-temp/
+tools/__pycache__/
+
+# Node dependencies
+electron-app/node_modules/
+
+# Electron runtime/user data/caches
+electron-app/.tmp/
+electron-app/.runtime-assets/
+electron-app/.user-data/
+electron-app/.electron-cache/
+electron-app/.electron-builder-cache/
+electron-app/.npm-cache/
+electron-app/logs/
+
+# Build and installer outputs
+electron-app/release/
+electron-app/cat_release/
+electron-app/shorthair_release/
+electron-app/installer/
+electron-app/cat_installer/
+electron-app/shorthair_installer/
+electron-app/dist/
+electron-app/out/
+
+# Installer sidecars that are not needed for source control
+electron-app/installer/win-unpacked/
+electron-app/cat_installer/win-unpacked/
+electron-app/shorthair_installer/win-unpacked/
+electron-app/installer/*.blockmap
+electron-app/cat_installer/*.blockmap
+electron-app/shorthair_installer/*.blockmap
+electron-app/installer/builder-debug.yml
+electron-app/cat_installer/builder-debug.yml
+electron-app/shorthair_installer/builder-debug.yml
+
+# Resource replacement scratch output
+assets/animations/*/_replacement_work/

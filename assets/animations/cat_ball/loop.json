@@ -1,0 +1,17 @@
+{
+  "action": "cat_ball",
+  "video": "cat_ball.mp4",
+  "frameCount": 136,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 135,
+  "sourceLoopStart": 1,
+  "sourceLoopEnd": 136,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.041437,
+  "loopSelection": "long",
+  "qualityScore": 0.041326,
+  "targetLength": 135
+}

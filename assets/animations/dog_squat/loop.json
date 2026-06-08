@@ -1,0 +1,14 @@
+{
+  "action": "dog_squat",
+  "video": "dog_squat.mp4",
+  "frameCount": 92,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 91,
+  "sourceLoopStart": 70,
+  "sourceLoopEnd": 161,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.006208
+}

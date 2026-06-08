@@ -1,0 +1,17 @@
+{
+  "action": "shorthair_ball",
+  "video": "shorthair_ball.mp4",
+  "frameCount": 125,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 124,
+  "sourceLoopStart": 26,
+  "sourceLoopEnd": 150,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.042614,
+  "loopSelection": "long",
+  "qualityScore": 0.042614,
+  "targetLength": 125
+}
