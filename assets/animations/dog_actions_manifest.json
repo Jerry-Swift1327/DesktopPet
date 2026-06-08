@@ -1,0 +1,58 @@
+[
+  {
+    "action": "dog_squat",
+    "video": "dog_squat.mp4",
+    "frameCount": 92,
+    "frameMs": 30,
+    "loopStart": 0,
+    "loopEnd": 91,
+    "sourceLoopStart": 70,
+    "sourceLoopEnd": 161,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "score": 0.006208
+  },
+  {
+    "action": "dog_walk",
+    "video": "dog_walk.mp4",
+    "frameCount": 74,
+    "frameMs": 30,
+    "loopStart": 0,
+    "loopEnd": 73,
+    "sourceLoopStart": 62,
+    "sourceLoopEnd": 135,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "score": 0.034149
+  },
+  {
+    "action": "dog_feed",
+    "video": "dog_feed.mp4",
+    "frameCount": 104,
+    "frameMs": 30,
+    "loopStart": 0,
+    "loopEnd": 103,
+    "sourceLoopStart": 51,
+    "sourceLoopEnd": 154,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "score": 0.006471
+  },
+  {
+    "action": "dog_ball",
+    "video": "dog_ball.mp4",
+    "frameCount": 142,
+    "frameMs": 30,
+    "loopStart": 0,
+    "loopEnd": 141,
+    "sourceLoopStart": 20,
+    "sourceLoopEnd": 161,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "score": 0.019957
+  }
+]
