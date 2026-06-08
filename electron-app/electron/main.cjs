@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, ipcMain, nativeImage, screen } = require("electron");
 const { execFile, execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -17,7 +17,7 @@ const {
 } = require("./pet-variants.cjs");
 
 const APP_INTERNAL_NAME = "Chongban";
-const APP_DISPLAY_NAME = "瀹犱即";
+const APP_DISPLAY_NAME = "宠伴";
 const APP_ICON_FILE = "app_icon.ico";
 const WINDOWS_STARTUP_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 
@@ -207,42 +207,42 @@ const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const sharedGreetings = [
-  "涓讳汉锛屼綘鎯虫垜娌★紵鎴戝緢鎯充綘",
-  "鐜板湪浣犲湪鎯宠皝鍛紵",
-  "绱潖鎴戝疂浜嗭紝鍋蜂釜鎳掓瓏浼氬惂锛?,
-  "鎴戞兂浣犱簡锛屼綘鎯虫垜浜嗗悧锛?,
-  "涓栫晫涓囪埇濂斤紝涓嶅強浣犱竴鍗?",
-  "鐩厜鎵€鍙婏紝鍥涗笅鐨嗘槸浣狅紒",
-  "涓囦簨涓嶇敤鎰侊紝鍜卞涓轰綘鍔犳补锛?,
-  "浣犱笉鐢ㄥ濂斤紝鏈変綘灏辨槸鏈€濂斤紒",
-  "涓讳汉鍟ユ椂鍊欏甫鎴戝悆棣欏枬杈ｇ殑锛?,
-  "鍐嶅繖涔熼櫔闄垜鍢涳紒",
-  "鑲氬瓙鍜曞挄鍙紝蹇杺鎴戝ソ鍚冪殑鍢?,
-  "绌虹┖鐨勮倸瀛愶紝鎬ラ渶缇庨鎶曞杺",
-  "鍐嶄笉鍚冧笢瑗匡紝鎴戝氨瑕佸晝灞忓箷鍜?,
-  "浣犲ソ涔呴兘娌＄悊鎴戜簡鈥︹€?,
-  "瀛ら浂闆剁殑锛屾湁鐐归毦杩囧憿",
-  "鍝硷紝鎴戞墠涓嶈涓诲姩鎼瘽",
-  "鎴戝氨鍦ㄨ繖鍎匡紝闄潃浣犲摝",
-  "蹇欏畬鍟︼紵鏉ヨ亰涓ゅ彞鍚?,
-  "鏈€鍠滄涓讳汉鍟︼紝璐磋创锝?,
-  "涓€鍒婚兘涓嶆兂绂诲紑浣犺韩杈?,
-  "鎶撳埌浣犲暒锛屼笉璁稿伔鍋峰拷鐣ユ垜",
-  "韬綋妫掓锛岄櫔浣犱竴鏁村ぉ",
-  "鐘舵€佸湪绾匡紝闅忔椂闄帺鍝?,
-  "绮惧姏鐖嗘锛屾兂鍒板婧滆揪锛?,
-  "娴戣韩鍏呮弧鍔涙皵锛屽お寮€蹇冨暒",
-  "鎽搁奔鏃堕棿鍒帮紝蹇箰鍔犲€嶏紒",
-  "閿洏鏁茬疮鍟︼紝鎶ご鐪嬬湅鎴戝憲",
-  "涓嶇澶氬繖锛屾垜涓€鐩撮櫔鐫€浣?,
-  "绱簡灏辨瓏姝囷紝鎴戝湪韬竟鍝?,
-  "骞冲嚒鏃跺厜锛屾湁鎴戝氨寰堢編濂?,
-  "鍋峰伔婧滀竴鍦堬紝鍚撳敩涓€涓嬩富浜?,
-  "鐚滅寽鎴戜笅涓€绉掕鍘诲摢閲岋紵",
-  "琚綘鎽稿埌鍟︼紝鐥掔棐~",
-  "鍢垮樋锛屽氨鍠滄鍜屼綘鐜╄€?,
-  "涓€鐩撮櫔鐫€浣狅紝闈欓潤瀹堢潃灞忓箷",
-  "鍜屼富浜鸿创璐存渶骞哥"
+  "主人，你想我没？我很想你",
+  "现在你在想谁呢？",
+  "累坏我宝了，偷个懒歇会吧！",
+  "我想你了，你想我了吗？",
+  "世界万般好，不及你一半!",
+  "目光所及，四下皆是你！",
+  "万事不用愁，咱家为你加油！",
+  "你不用多好，有你就是最好！",
+  "主人啥时候带我吃香喝辣的？",
+  "再忙也陪陪我嘛！",
+  "肚子咕咕叫，快喂我好吃的嘛",
+  "空空的肚子，急需美食投喂",
+  "再不吃东西，我就要啃屏幕咯",
+  "你好久都没理我了……",
+  "孤零零的，有点难过呢",
+  "哼，我才不要主动搭话",
+  "我就在这儿，陪着你哦",
+  "忙完啦？来聊两句吧",
+  "最喜欢主人啦，贴贴～",
+  "一刻都不想离开你身边",
+  "抓到你啦，不许偷偷忽略我",
+  "身体棒棒，陪你一整天",
+  "状态在线，随时陪玩哦",
+  "精力爆棚，想到处溜达！",
+  "浑身充满力气，太开心啦",
+  "摸鱼时间到，快乐加倍！",
+  "键盘敲累啦，抬头看看我呗",
+  "不管多忙，我一直陪着你",
+  "累了就歇歇，我在身边哦",
+  "平凡时光，有我就很美好",
+  "偷偷溜一圈，吓唬一下主人",
+  "猜猜我下一秒要去哪里？",
+  "被你摸到啦，痒痒~",
+  "嘿嘿，就喜欢和你玩耍",
+  "一直陪着你，静静守着屏幕",
+  "和主人贴贴最幸福"
 ];
 
 function readPetRuntimeConfigFile(configPath) {
@@ -307,11 +307,11 @@ function getActionMetadataPath(action) {
 }
 
 const states = [
-  { id: STATE_SQUAT, label: "韫插潗", folder: getActionFrameFolder("squat"), metadata: getActionMetadataPath("squat"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_WALK, label: "闂查€?, folder: getActionFrameFolder("walk"), metadata: getActionMetadataPath("walk"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: true, greetings: sharedGreetings },
+  { id: STATE_SQUAT, label: "蹲坐", folder: getActionFrameFolder("squat"), metadata: getActionMetadataPath("squat"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_WALK, label: "闲逛", folder: getActionFrameFolder("walk"), metadata: getActionMetadataPath("walk"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: true, greetings: sharedGreetings },
   {
     id: STATE_FEED,
-    label: "鍠傞",
+    label: "喂食",
     folder: getActionFrameFolder("feed"),
     metadata: getActionMetadataPath("feed"),
     frameMs: 30,
@@ -326,17 +326,17 @@ const states = [
     },
     greetings: sharedGreetings
   },
-  { id: STATE_BALL, label: "鐜╄€?, folder: getActionFrameFolder("ball"), metadata: getActionMetadataPath("ball"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
+  { id: STATE_BALL, label: "玩耍", folder: getActionFrameFolder("ball"), metadata: getActionMetadataPath("ball"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
 ];
 
 const statMessages = {
-  hungry: ["鎴戦タ浜嗭紝纰楃鍙戞潵鎻愰啋", "鑲氬瓙鍦ㄥ紑浼氾紝涓婚鏄姞椁?],
-  needFood: ["瑕佸杺椋熶簡锛屽揩涔愬揩娌＄數浜?, "琛ョ粰璇锋眰宸插彂閫?],
-  exhausted: ["宸查タ鏅曪紝鎬ラ渶鍠傞缁懡锛?],
-  full: ["鍚冮ケ浜嗭紝骞哥鍊兼弧鏍?, "楗变簡楗变簡锛屽熬宸撮兘浜簡"],
-  tired: ["鎴戝緱缂撶紦锛岃繍鍔ㄩ噺鏈夌偣璁ょ湡", "浣撳姏鍛婃€ワ紝鐢宠韫插潗鍥炶"],
-  recovered: ["鍥炶鎴愬姛锛屾垜鍙堢簿绁炰簡", "鐘舵€佸洖鏉ヤ簡锛屽彲浠ョ户缁惀涓?],
-  close: ["浜插瘑搴︾垎琛紝浠婂ぉ涔熸渶鍠滄浣?, "浣犱竴鍑虹幇锛屾垜灏辫嚜鍔ㄥ紑蹇?]
+  hungry: ["我饿了，碗碗发来提醒", "肚子在开会，主题是加餐"],
+  needFood: ["要喂食了，快乐快没电了", "补给请求已发送"],
+  exhausted: ["已饿晕，急需喂食续命！"],
+  full: ["吃饱了，幸福值满格", "饱了饱了，尾巴都亮了"],
+  tired: ["我得缓缓，运动量有点认真", "体力告急，申请蹲坐回血"],
+  recovered: ["回血成功，我又精神了", "状态回来了，可以继续营业"],
+  close: ["亲密度爆表，今天也最喜欢你", "你一出现，我就自动开心"]
 };
 
 let petWindow;
@@ -739,7 +739,7 @@ function getNextIdleGreeting() {
   if (idleGreetingPool.length === 0) {
     idleGreetingPool = sharedGreetings.slice(1).filter(Boolean).sort(() => Math.random() - 0.5);
   }
-  return idleGreetingPool[idleGreetingPool.length - 1] || sharedGreetings[1] || "鎴戝湪杩欓噷锛岄殢鏃跺緟鍛姐€?;
+  return idleGreetingPool[idleGreetingPool.length - 1] || sharedGreetings[1] || "我在这里，随时待命。";
 }
 
 function markIdleGreetingShown() {
@@ -2365,9 +2365,9 @@ function getAppIconPath() {
     path.join(__dirname, "..", APP_ICON_FILE),
     path.join(__dirname, "..", "..", APP_ICON_FILE),
     path.join(process.resourcesPath || "", APP_ICON_FILE),
-    path.join(__dirname, "..", "app_icon.ico"),
-    path.join(__dirname, "..", "..", "app_icon.ico"),
-    path.join(process.resourcesPath || "", "app_icon.ico")
+    path.join(__dirname, "..", "appIcon.ico"),
+    path.join(__dirname, "..", "..", "appIcon.ico"),
+    path.join(process.resourcesPath || "", "appIcon.ico")
   ];
   return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
 }
@@ -6451,7 +6451,6 @@ ipcMain.on("pet:drag-end", () => {
   }
   clearDragState({ notify: true });
 });
-
 
 
 
