@@ -68,11 +68,6 @@ const PET_CHANNEL_PROFILES = Object.freeze({
     id: "installer",
     showDebugTimers: false,
     hoverPanelHeight: 150
-  }),
-  pomeranian: Object.freeze({
-    id: "pomeranian",
-    showDebugTimers: true,
-    hoverPanelHeight: 180
   })
 });
 
