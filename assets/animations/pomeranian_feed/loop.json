@@ -1,0 +1,17 @@
+{
+  "action": "pomeranian_feed",
+  "video": "pomeranian_feed.mp4",
+  "frameCount": 66,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 65,
+  "sourceLoopStart": 87,
+  "sourceLoopEnd": 152,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.034474,
+  "loopSelection": "long",
+  "qualityScore": 0.010377,
+  "targetLength": 166
+}
