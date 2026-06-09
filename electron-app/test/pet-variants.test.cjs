@@ -62,14 +62,20 @@ test("installer channel hides debug timers and uses compact panel height", () =>
   assert.equal(config.channelConfig.hoverPanelHeight, 150);
 });
 
-test("pomeranian channel keeps preview timers visible", () => {
-  const config = buildPetRuntimeConfig({ variant: "pomeranian", channel: "pomeranian" });
+test("pomeranian variant uses release and installer channels", () => {
+  const releaseConfig = buildPetRuntimeConfig({ variant: "pomeranian", channel: "release" });
+  const installerConfig = buildPetRuntimeConfig({ variant: "pomeranian", channel: "installer" });
 
-  assert.equal(config.variant, "pomeranian");
-  assert.equal(config.channel, "pomeranian");
-  assert.equal(config.animationPrefix, "pomeranian");
-  assert.equal(config.channelConfig.showDebugTimers, true);
-  assert.equal(config.channelConfig.hoverPanelHeight, 180);
+  assert.equal(releaseConfig.variant, "pomeranian");
+  assert.equal(releaseConfig.channel, "release");
+  assert.equal(releaseConfig.animationPrefix, "pomeranian");
+  assert.equal(releaseConfig.channelConfig.showDebugTimers, true);
+  assert.equal(releaseConfig.channelConfig.hoverPanelHeight, 180);
+  assert.equal(installerConfig.variant, "pomeranian");
+  assert.equal(installerConfig.channel, "installer");
+  assert.equal(installerConfig.animationPrefix, "pomeranian");
+  assert.equal(installerConfig.channelConfig.showDebugTimers, false);
+  assert.equal(installerConfig.channelConfig.hoverPanelHeight, 150);
 });
 
 test("invalid variant and channel fall back to defaults", () => {
