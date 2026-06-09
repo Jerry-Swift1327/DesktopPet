@@ -1,0 +1,17 @@
+{
+  "action": "pomeranian_walk",
+  "video": "pomeranian_walk.mp4",
+  "frameCount": 125,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 124,
+  "sourceLoopStart": 30,
+  "sourceLoopEnd": 154,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.03396,
+  "loopSelection": "long",
+  "qualityScore": 0.024081,
+  "targetLength": 166
+}

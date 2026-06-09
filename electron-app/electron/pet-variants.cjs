@@ -44,6 +44,17 @@ const PET_VARIANT_PROFILES = Object.freeze({
       autoStart: false,
       windowRoam: false
     })
+  }),
+  pomeranian: Object.freeze({
+    id: "pomeranian",
+    animationPrefix: "pomeranian",
+    defaultScale: 1.1,
+    autoStartRegistryKey: "ChongbanDesktopPet-pomeranian",
+    singleInstanceKey: "com.chongban.desktoppet.pomeranian",
+    features: Object.freeze({
+      autoStart: false,
+      windowRoam: false
+    })
   })
 });
 
@@ -57,6 +68,11 @@ const PET_CHANNEL_PROFILES = Object.freeze({
     id: "installer",
     showDebugTimers: false,
     hoverPanelHeight: 150
+  }),
+  pomeranian: Object.freeze({
+    id: "pomeranian",
+    showDebugTimers: true,
+    hoverPanelHeight: 180
   })
 });
 

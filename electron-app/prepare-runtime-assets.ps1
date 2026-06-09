@@ -1,7 +1,7 @@
 param(
-  [ValidateSet("dog", "cat", "shorthair")]
+  [ValidateSet("dog", "cat", "shorthair", "pomeranian")]
   [string]$PetVariant = "dog",
-  [ValidateSet("release", "installer")]
+  [ValidateSet("release", "installer", "pomeranian")]
   [string]$PetChannel = "release"
 )
 

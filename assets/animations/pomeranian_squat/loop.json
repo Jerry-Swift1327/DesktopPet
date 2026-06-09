@@ -1,0 +1,17 @@
+{
+  "action": "pomeranian_squat",
+  "video": "pomeranian_squat.mp4",
+  "frameCount": 125,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 124,
+  "sourceLoopStart": 34,
+  "sourceLoopEnd": 158,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.017085,
+  "loopSelection": "long",
+  "qualityScore": 0.007205,
+  "targetLength": 166
+}

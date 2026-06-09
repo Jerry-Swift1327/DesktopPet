@@ -32,6 +32,7 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   const dogConfig = buildPetRuntimeConfig({ variant: "dog" });
   const catConfig = buildPetRuntimeConfig({ variant: "cat" });
   const shorthairConfig = buildPetRuntimeConfig({ variant: "shorthair" });
+  const pomeranianConfig = buildPetRuntimeConfig({ variant: "pomeranian" });
 
   assert.equal(dogConfig.features.autoStart, true);
   assert.equal(dogConfig.features.windowRoam, true);
@@ -45,6 +46,10 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   assert.equal(shorthairConfig.features.windowRoam, false);
   assert.equal(shorthairConfig.defaultScale, 1.1);
   assert.equal(shorthairConfig.autoStartRegistryKey, "ChongbanDesktopPet-shorthair");
+  assert.equal(pomeranianConfig.features.autoStart, false);
+  assert.equal(pomeranianConfig.features.windowRoam, false);
+  assert.equal(pomeranianConfig.defaultScale, 1.1);
+  assert.equal(pomeranianConfig.autoStartRegistryKey, "ChongbanDesktopPet-pomeranian");
 });
 
 test("installer channel hides debug timers and uses compact panel height", () => {
@@ -55,6 +60,16 @@ test("installer channel hides debug timers and uses compact panel height", () =>
   assert.equal(config.animationPrefix, "cat");
   assert.equal(config.channelConfig.showDebugTimers, false);
   assert.equal(config.channelConfig.hoverPanelHeight, 150);
+});
+
+test("pomeranian channel keeps preview timers visible", () => {
+  const config = buildPetRuntimeConfig({ variant: "pomeranian", channel: "pomeranian" });
+
+  assert.equal(config.variant, "pomeranian");
+  assert.equal(config.channel, "pomeranian");
+  assert.equal(config.animationPrefix, "pomeranian");
+  assert.equal(config.channelConfig.showDebugTimers, true);
+  assert.equal(config.channelConfig.hoverPanelHeight, 180);
 });
 
 test("invalid variant and channel fall back to defaults", () => {
@@ -69,5 +84,12 @@ test("variant assets follow the existing animation folder convention", () => {
     "shorthair_feed",
     "shorthair_ball"
   ]);
+  assert.deepEqual(getVariantAnimationFolders("pomeranian"), [
+    "pomeranian_squat",
+    "pomeranian_walk",
+    "pomeranian_feed",
+    "pomeranian_ball"
+  ]);
   assert.equal(getVariantManifestName("cat"), "cat_actions_manifest.json");
+  assert.equal(getVariantManifestName("pomeranian"), "pomeranian_actions_manifest.json");
 });
