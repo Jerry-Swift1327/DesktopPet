@@ -177,6 +177,7 @@ const WALK_MIRROR_COOLDOWN_STEPS = 1;
 const WALK_SCALE_APPLY_THROTTLE_MS = 120;
 const WALK_EDGE_STUCK_STEPS_TO_FORCE_MIRROR = 2;
 const WALK_LOOP_DURATION_MS = 5 * 60 * 1000;
+const DARWIN_BOTTOM_DOCK_WIDTH_HEIGHT_FACTOR = 14;
 const TASKBAR_WALK_RUNWAY_PADDING_MIN = 120;
 const TASKBAR_WALK_RUNWAY_PADDING_MAX = 220;
 const TASKBAR_WALK_RUNWAY_PADDING_SCALE = 1.15;
@@ -884,18 +885,41 @@ function getDefaultDirectionForState(stateId = activeState) {
   return getState(stateId)?.defaultFacing === "right" ? 1 : -1;
 }
 
+function getDarwinBottomDock(display) {
+  if (process.platform !== "darwin") {
+    return null;
+  }
+  const area = display.workArea;
+  const bounds = display.bounds;
+  const boundsBottom = Math.round(bounds.y + bounds.height);
+  const areaBottom = Math.round(area.y + area.height);
+  const dockHeight = boundsBottom - areaBottom;
+  if (dockHeight <= 0 || Math.round(area.x) !== Math.round(bounds.x) || Math.round(area.width) !== Math.round(bounds.width)) {
+    return null;
+  }
+  const dockWidth = Math.min(Math.round(bounds.width), Math.round(dockHeight * DARWIN_BOTTOM_DOCK_WIDTH_HEIGHT_FACTOR));
+  const centerX = Math.round(bounds.x + bounds.width / 2);
+  return {
+    left: centerX - Math.round(dockWidth / 2),
+    right: centerX + Math.round(dockWidth / 2),
+    screenGroundY: boundsBottom - VISIBLE_BOTTOM_GAP
+  };
+}
+
 function clampPetScale(value) {
   return Math.round(clamp(Number(value) || 1, PET_SCALE_MIN, PET_SCALE_MAX) * 100) / 100;
 }
 
 function getTaskbarSurface(display = screen.getPrimaryDisplay()) {
   const area = display.workArea;
+  const darwinBottomDock = getDarwinBottomDock(display);
   return {
     type: "taskbar",
     displayId: display.id,
     left: area.x + VISIBLE_SIDE_GAP,
     right: area.x + area.width - VISIBLE_SIDE_GAP,
     groundY: area.y + area.height - VISIBLE_BOTTOM_GAP,
+    darwinBottomDock,
     workArea: { x: area.x, y: area.y, width: area.width, height: area.height }
   };
 }
@@ -1007,14 +1031,25 @@ function getSurfaceWorkArea(surface = getCurrentSurface()) {
   return getSurfaceDisplay(surface).workArea;
 }
 
-function getSurfaceVisibleTop(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection) {
-  const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-  const visibleHeight = getPetSpriteSize() - visibleInsets.top - visibleInsets.bottom;
-  return Math.round(surface.groundY - visibleHeight);
+function getSurfaceGroundY(surface = getCurrentSurface(), centerX = null) {
+  const dock = surface?.darwinBottomDock;
+  if (dock && Number.isFinite(centerX)) {
+    const edgePadding = Math.round(getPetSpriteSize() / 2);
+    return centerX < dock.left - edgePadding || centerX > dock.right + edgePadding
+      ? dock.screenGroundY
+      : surface.groundY;
+  }
+  return surface.groundY;
 }
 
-function getGroundedWindowYForSurface(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection) {
-  const visibleTop = getSurfaceVisibleTop(surface, stateId, direction);
+function getSurfaceVisibleTop(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection, centerX = null) {
+  const visibleInsets = getVisibleSpriteInsets(stateId, direction);
+  const visibleHeight = getPetSpriteSize() - visibleInsets.top - visibleInsets.bottom;
+  return Math.round(getSurfaceGroundY(surface, centerX) - visibleHeight);
+}
+
+function getGroundedWindowYForSurface(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection, centerX = null) {
+  const visibleTop = getSurfaceVisibleTop(surface, stateId, direction, centerX);
   const windowHeight = getPetWindowHeight();
   const spriteSize = getPetSpriteSize();
   const verticalInset = Math.max(0, windowHeight - spriteSize);
@@ -1025,14 +1060,15 @@ function getGroundedWindowYForSurface(surface = getCurrentSurface(), stateId = a
 function clampPetWindowPositionToSurface(x, y, surface = getCurrentSurface(), stateId = activeState, direction = walkDirection) {
   const windowWidth = getPetWindowWidth();
   const windowHeight = getPetWindowHeight();
-  const surfaceY = getGroundedWindowYForSurface(surface, stateId, direction);
   const pointRect = {
     x: Math.round(x),
-    y: Math.round(surfaceY),
+    y: Math.round(y),
     width: windowWidth,
     height: windowHeight
   };
   const visibleRect = getVisiblePetRectFromBounds(pointRect, stateId, direction);
+  const centerX = visibleRect.x + Math.round(visibleRect.width / 2);
+  const surfaceY = getGroundedWindowYForSurface(surface, stateId, direction, centerX);
   const minX = x + surface.left - visibleRect.x;
   const maxX = x + surface.right - (visibleRect.x + visibleRect.width);
   return {
@@ -5509,15 +5545,16 @@ function ensureTaskbarWalkRunwayForCenter(centerX, y, direction = walkDirection,
   const nextDirection = direction >= 0 ? 1 : -1;
   const centerLimits = getTaskbarWalkCenterLimits(surface, activeState);
   const nextCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
+  const nextY = getGroundedWindowYForSurface(surface, activeState, nextDirection, nextCenterX);
   const current = taskbarWalkRunway;
   const needsRecenter = force
     || !current
     || current.windowWidth !== getTaskbarWalkRunwayWindowWidth(surface)
     || current.windowHeight !== getPetWindowHeight()
-    || Math.round(y) !== current.windowY;
+    || Math.round(nextY) !== current.windowY;
   if (needsRecenter) {
     return applyTaskbarRunwayLayout(
-      buildTaskbarRunwayLayout(nextCenterX, y, nextDirection, surface),
+      buildTaskbarRunwayLayout(nextCenterX, nextY, nextDirection, surface),
       { force: true, reason }
     );
   }
