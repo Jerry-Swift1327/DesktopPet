@@ -118,6 +118,7 @@ const WINDOW_DOCK_DRAG_RETRY_DELAY_MS = 260;
 const WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS = 2500;
 const WINDOW_ROAM_POLL_INTERVAL_MS = 900;
 const WINDOW_ROAM_MAX_MISSING_TICKS = 2;
+const DARWIN_DISPLAY_METRICS_SETTLE_MS = 300;
 // Panel positioning knobs. Change these first when tuning visual spacing.
 const OVERLAY_BASE_GAP = 25; 
 const OVERLAY_GAP_MIN = 12; 
@@ -384,6 +385,7 @@ let nextWalkStartDirection = null;
 let walkLoop = null;
 let walkLoopTimer = null;
 let dragTimer = null;
+let displayMetricsSettleTimer = null;
 let dragState = null;
 let lastDragSample = null;
 let homeDisplayId = null;
@@ -6236,6 +6238,19 @@ function stopWindowSurfacePolling() {
   windowSurfacePollTimer = null;
 }
 
+function scheduleDarwinDisplayMetricsSettle() {
+  if (dragState || !petWindow || petWindow.isDestroyed()) {
+    return;
+  }
+  clearTimeout(displayMetricsSettleTimer);
+  displayMetricsSettleTimer = setTimeout(() => {
+    displayMetricsSettleTimer = null;
+    if (!dragState && petWindow && !petWindow.isDestroyed()) {
+      moveToStartPosition(false);
+    }
+  }, DARWIN_DISPLAY_METRICS_SETTLE_MS);
+}
+
 function startDragTimer() {
   if (dragTimer) {
     clearInterval(dragTimer);
@@ -6264,6 +6279,13 @@ if (!gotSingleInstanceLock) {
     updateWindowRoamPolling();
     startIntimacyDecayTimer();
     scheduleIdleGreeting();
+    if (process.platform === "darwin") {
+      screen.on("display-metrics-changed", (_event, _display, metrics) => {
+        if (metrics.includes("workArea")) {
+          scheduleDarwinDisplayMetricsSettle();
+        }
+      });
+    }
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -6296,6 +6318,10 @@ app.on("before-quit", () => {
   if (randomGreetingTimer) {
     clearTimeout(randomGreetingTimer);
     randomGreetingTimer = null;
+  }
+  if (displayMetricsSettleTimer) {
+    clearTimeout(displayMetricsSettleTimer);
+    displayMetricsSettleTimer = null;
   }
 });
 
