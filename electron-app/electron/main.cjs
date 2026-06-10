@@ -13,7 +13,8 @@ const {
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
   getPetActionIds,
-  buildPetRuntimeConfig
+  buildPetRuntimeConfig,
+  getPetUserDataFolder
 } = require("./pet-variants.cjs");
 
 const APP_INTERNAL_NAME = "Chongban";
@@ -35,13 +36,21 @@ if (process.platform === "win32") {
   app.setAppUserModelId(petRuntimeConfig.singleInstanceKey);
 }
 
-const userDataRoot = app.isPackaged
-  ? path.join(process.env.LOCALAPPDATA || path.join(path.dirname(process.execPath), "user-data"), APP_INTERNAL_NAME, petRuntimeConfig.variant)
-  : path.join(__dirname, "..", ".user-data", petRuntimeConfig.variant);
+const userDataRoot = getUserDataRoot();
 fs.mkdirSync(userDataRoot, { recursive: true });
 fs.mkdirSync(path.join(userDataRoot, "session"), { recursive: true });
 app.setPath("userData", userDataRoot);
 app.setPath("sessionData", path.join(userDataRoot, "session"));
+
+function getUserDataRoot() {
+  if (!app.isPackaged) {
+    return path.join(__dirname, "..", ".user-data", petRuntimeConfig.variant);
+  }
+  if (process.platform === "darwin") {
+    return path.join(app.getPath("appData"), getPetUserDataFolder({ ...petRuntimeConfig, platform: process.platform }));
+  }
+  return path.join(process.env.LOCALAPPDATA || path.join(path.dirname(process.execPath), "user-data"), APP_INTERNAL_NAME, petRuntimeConfig.variant);
+}
 
 const petActionIds = getPetActionIds();
 const petAnimationPrefix = petRuntimeConfig.animationPrefix;

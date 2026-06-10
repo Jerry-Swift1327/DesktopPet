@@ -6,6 +6,7 @@ const {
   normalizePetVariant,
   normalizePetChannel,
   buildPetRuntimeConfig,
+  getPetUserDataFolder,
   getVariantAnimationFolders,
   getVariantManifestName
 } = require("../electron/pet-variants.cjs");
@@ -81,6 +82,18 @@ test("pomeranian variant uses release and installer channels", () => {
 test("invalid variant and channel fall back to defaults", () => {
   assert.equal(normalizePetVariant("unknown"), DEFAULT_PET_VARIANT);
   assert.equal(normalizePetChannel("unknown"), DEFAULT_PET_CHANNEL);
+});
+
+test("mac packaged user data folder separates variant and channel", () => {
+  assert.equal(
+    getPetUserDataFolder({ variant: "pomeranian", channel: "installer", platform: "darwin" }),
+    "DesktopPet/pomeranian-installer"
+  );
+  assert.equal(
+    getPetUserDataFolder({ variant: "pomeranian", channel: "release", platform: "darwin" }),
+    "DesktopPet/pomeranian-release"
+  );
+  assert.equal(getPetUserDataFolder({ variant: "pomeranian", channel: "installer", platform: "win32" }), "pomeranian");
 });
 
 test("variant assets follow the existing animation folder convention", () => {

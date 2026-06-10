@@ -7,11 +7,12 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/**/*.test.cjs\"",
-    "prepare:runtime-assets": "powershell -ExecutionPolicy Bypass -File prepare-runtime-assets.ps1",
+    "prepare:runtime-assets": "node prepare-runtime-assets.cjs",
     "package:win": "powershell -ExecutionPolicy Bypass -File build-electron-win.ps1",
     "installer:win": "powershell -ExecutionPolicy Bypass -File build-installer-win.ps1",
     "pack:win": "npm run prepare:runtime-assets && electron-builder --win dir --x64",
-    "package:mac": "npm run prepare:runtime-assets && electron-packager . Chongban --platform=darwin --arch=x64,arm64 --out=release --overwrite --asar --ignore=\"^/(\\.runtime-assets|\\.npm-cache|\\.electron-cache|\\.electron-builder-cache|logs|release|installer)$\" --extra-resource=\".runtime-assets\" --extra-resource=\"../app_icon.ico\""
+    "package:mac": "node build-installer-mac.cjs",
+    "installer:mac": "node build-installer-mac.cjs"
   },
   "devDependencies": {
     "electron": "^37.0.0",
@@ -38,6 +39,7 @@
       "!installer/**/*",
       "!cat_installer/**/*",
       "!shorthair_installer/**/*",
+      "!mac_installer/**/*",
       "!logs/**/*",
       "!user-data/**/*",
       "!.user-data/**/*",
