@@ -1,7 +1,7 @@
 const PET_VARIANT_CONFIG_FILE = "pet_variant.json";
 const DEFAULT_PET_VARIANT = "dog";
 const DEFAULT_PET_CHANNEL = "release";
-const MAC_USER_DATA_PARENT = "DesktopPet";
+const MAC_USER_DATA_PARENT = "Chongban";
 
 const PET_ACTIONS = Object.freeze({
   squat: Object.freeze({ id: "petSquat", asset: "squat" }),
@@ -136,8 +136,16 @@ function buildPetRuntimeConfig(config = {}) {
 
 function getPetUserDataFolder(config = {}) {
   const variant = normalizePetVariant(config.variant);
-  const channel = normalizePetChannel(config.channel);
-  return config.platform === "darwin" ? `${MAC_USER_DATA_PARENT}/${variant}-${channel}` : variant;
+  return config.platform === "darwin" ? `${MAC_USER_DATA_PARENT}/${variant}` : variant;
+}
+
+function getPetPlatformFeatures(config = {}) {
+  const variantProfile = getPetVariantProfile(config.variant);
+  const isWindows = config.platform === "win32";
+  return {
+    autoStart: Boolean(variantProfile.features.autoStart) && isWindows,
+    windowRoam: Boolean(variantProfile.features.windowRoam) && isWindows
+  };
 }
 
 function getVariantAnimationFolders(value) {
@@ -167,6 +175,7 @@ module.exports = {
   getPetChannelProfile,
   buildPetRuntimeConfig,
   getPetUserDataFolder,
+  getPetPlatformFeatures,
   getVariantAnimationFolders,
   getVariantManifestName
 };
