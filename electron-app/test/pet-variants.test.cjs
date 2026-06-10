@@ -7,6 +7,7 @@ const {
   normalizePetChannel,
   buildPetRuntimeConfig,
   getPetUserDataFolder,
+  getPetPlatformFeatures,
   getVariantAnimationFolders,
   getVariantManifestName
 } = require("../electron/pet-variants.cjs");
@@ -84,16 +85,31 @@ test("invalid variant and channel fall back to defaults", () => {
   assert.equal(normalizePetChannel("unknown"), DEFAULT_PET_CHANNEL);
 });
 
-test("mac packaged user data folder separates variant and channel", () => {
+test("mac packaged user data folder uses Chongban parent and variant folder", () => {
   assert.equal(
     getPetUserDataFolder({ variant: "pomeranian", channel: "installer", platform: "darwin" }),
-    "DesktopPet/pomeranian-installer"
+    "Chongban/pomeranian"
   );
   assert.equal(
     getPetUserDataFolder({ variant: "pomeranian", channel: "release", platform: "darwin" }),
-    "DesktopPet/pomeranian-release"
+    "Chongban/pomeranian"
   );
   assert.equal(getPetUserDataFolder({ variant: "pomeranian", channel: "installer", platform: "win32" }), "pomeranian");
+});
+
+test("platform features hide Windows-only menu items on macOS", () => {
+  assert.deepEqual(getPetPlatformFeatures({ variant: "dog", platform: "darwin" }), {
+    autoStart: false,
+    windowRoam: false
+  });
+  assert.deepEqual(getPetPlatformFeatures({ variant: "cat", platform: "win32" }), {
+    autoStart: true,
+    windowRoam: true
+  });
+  assert.deepEqual(getPetPlatformFeatures({ variant: "pomeranian", platform: "win32" }), {
+    autoStart: false,
+    windowRoam: false
+  });
 });
 
 test("variant assets follow the existing animation folder convention", () => {

@@ -14,7 +14,8 @@ const {
   DEFAULT_PET_CHANNEL,
   getPetActionIds,
   buildPetRuntimeConfig,
-  getPetUserDataFolder
+  getPetUserDataFolder,
+  getPetPlatformFeatures
 } = require("./pet-variants.cjs");
 
 const APP_INTERNAL_NAME = "Chongban";
@@ -648,6 +649,14 @@ function buildWindowRoamSummary(error = "") {
   };
 }
 
+function buildMenuFeatures() {
+  const features = getPetPlatformFeatures({ variant: petRuntimeConfig.variant, platform: process.platform });
+  return {
+    autoStart: features.autoStart,
+    windowRoam: features.windowRoam && ENABLE_WINDOW_DOCKING
+  };
+}
+
 function sendMenuConfig() {
   if (menuWindow && !menuWindow.isDestroyed() && menuWindowReady && !menuWindow.webContents.isLoading()) {
     menuWindow.webContents.send("pet:menu-data", buildPetConfig());
@@ -655,11 +664,12 @@ function sendMenuConfig() {
 }
 
 function getQuickMenuItemCount() {
+  const features = buildMenuFeatures();
   let itemCount = 3;
-  if (petRuntimeConfig.features?.windowRoam) {
+  if (features.windowRoam) {
     itemCount += 1;
   }
-  if (petRuntimeConfig.features?.autoStart) {
+  if (features.autoStart) {
     itemCount += 1;
   }
   return itemCount;
@@ -2471,7 +2481,7 @@ function buildPetConfig() {
   return {
     variant: petRuntimeConfig.variant,
     channel: petRuntimeConfig.channel,
-    features: petRuntimeConfig.features,
+    features: buildMenuFeatures(),
     autoStart: buildAutoStartSummary(),
     windowRoam: buildWindowRoamSummary(),
     actionIds: petRuntimeConfig.actions,
