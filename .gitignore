@@ -34,6 +34,7 @@ electron-app/shorthair_release/
 electron-app/installer/
 electron-app/cat_installer/
 electron-app/shorthair_installer/
+electron-app/mac_installer/
 electron-app/dist/
 electron-app/out/
 
