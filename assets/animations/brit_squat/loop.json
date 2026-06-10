@@ -1,0 +1,17 @@
+{
+  "action": "brit_squat",
+  "video": "brit_squat.mp4",
+  "frameCount": 154,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 153,
+  "sourceLoopStart": 1,
+  "sourceLoopEnd": 154,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.01483,
+  "loopSelection": "long",
+  "qualityScore": 0.011938,
+  "targetLength": 166
+}

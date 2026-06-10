@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("dog", "cat", "shorthair")]
+  [ValidateSet("dog", "cat", "shorthair", "tabby", "brit")]
   [string]$PetVariant = "dog"
 )
 
@@ -11,8 +11,8 @@ $electronDist = Join-Path $appRoot "node_modules\electron\dist"
 $electronExe = Join-Path $electronDist "electron.exe"
 $appIcon = Join-Path $projectRoot "app_icon.ico"
 $rceditExe = Join-Path $appRoot "node_modules\rcedit\bin\rcedit-x64.exe"
-$releaseFolderName = if ($PetVariant -eq "dog") { "release" } else { "${PetVariant}_release" }
-$releaseRoot = Join-Path $appRoot $releaseFolderName
+$releaseOutput = if ($PetVariant -in @("tabby", "brit")) { "deliverables/custom/cat/$PetVariant/release" } elseif ($PetVariant -eq "dog") { "release" } else { "${PetVariant}_release" }
+$releaseRoot = Join-Path $appRoot ($releaseOutput -replace '/', '\')
 $outDir = Join-Path $releaseRoot "Chongban-win32-x64"
 $legacyOutDirs = @(
   (Join-Path $releaseRoot "PetMate-win32-x64"),

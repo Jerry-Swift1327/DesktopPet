@@ -40,6 +40,7 @@
       "!cat_installer/**/*",
       "!shorthair_installer/**/*",
       "!mac_installer/**/*",
+      "!deliverables/**/*",
       "!logs/**/*",
       "!user-data/**/*",
       "!.user-data/**/*",

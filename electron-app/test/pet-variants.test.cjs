@@ -34,6 +34,8 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   const dogConfig = buildPetRuntimeConfig({ variant: "dog" });
   const catConfig = buildPetRuntimeConfig({ variant: "cat" });
   const shorthairConfig = buildPetRuntimeConfig({ variant: "shorthair" });
+  const tabbyConfig = buildPetRuntimeConfig({ variant: "tabby" });
+  const britConfig = buildPetRuntimeConfig({ variant: "brit" });
   const pomeranianConfig = buildPetRuntimeConfig({ variant: "pomeranian" });
 
   assert.equal(dogConfig.features.autoStart, true);
@@ -48,6 +50,14 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   assert.equal(shorthairConfig.features.windowRoam, false);
   assert.equal(shorthairConfig.defaultScale, 1.1);
   assert.equal(shorthairConfig.autoStartRegistryKey, "ChongbanDesktopPet-shorthair");
+  assert.equal(tabbyConfig.features.autoStart, true);
+  assert.equal(tabbyConfig.features.windowRoam, true);
+  assert.equal(tabbyConfig.defaultScale, 1.1);
+  assert.equal(tabbyConfig.autoStartRegistryKey, "ChongbanDesktopPet-tabby");
+  assert.equal(britConfig.features.autoStart, true);
+  assert.equal(britConfig.features.windowRoam, true);
+  assert.equal(britConfig.defaultScale, 1.1);
+  assert.equal(britConfig.autoStartRegistryKey, "ChongbanDesktopPet-brit");
   assert.equal(pomeranianConfig.features.autoStart, false);
   assert.equal(pomeranianConfig.features.windowRoam, false);
   assert.equal(pomeranianConfig.defaultScale, 1.1);
@@ -106,6 +116,14 @@ test("platform features hide Windows-only menu items on macOS", () => {
     autoStart: true,
     windowRoam: true
   });
+  assert.deepEqual(getPetPlatformFeatures({ variant: "tabby", platform: "win32" }), {
+    autoStart: true,
+    windowRoam: true
+  });
+  assert.deepEqual(getPetPlatformFeatures({ variant: "brit", platform: "win32" }), {
+    autoStart: true,
+    windowRoam: true
+  });
   assert.deepEqual(getPetPlatformFeatures({ variant: "pomeranian", platform: "win32" }), {
     autoStart: false,
     windowRoam: false
@@ -125,6 +143,20 @@ test("variant assets follow the existing animation folder convention", () => {
     "pomeranian_feed",
     "pomeranian_ball"
   ]);
+  assert.deepEqual(getVariantAnimationFolders("tabby"), [
+    "tabby_squat",
+    "tabby_walk",
+    "tabby_feed",
+    "tabby_ball"
+  ]);
+  assert.deepEqual(getVariantAnimationFolders("brit"), [
+    "brit_squat",
+    "brit_walk",
+    "brit_feed",
+    "brit_ball"
+  ]);
   assert.equal(getVariantManifestName("cat"), "cat_actions_manifest.json");
+  assert.equal(getVariantManifestName("tabby"), "tabby_actions_manifest.json");
+  assert.equal(getVariantManifestName("brit"), "brit_actions_manifest.json");
   assert.equal(getVariantManifestName("pomeranian"), "pomeranian_actions_manifest.json");
 });
