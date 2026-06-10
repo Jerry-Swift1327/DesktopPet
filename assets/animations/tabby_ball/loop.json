@@ -1,17 +1,17 @@
 {
   "action": "tabby_ball",
   "video": "tabby_ball.mp4",
-  "frameCount": 81,
+  "frameCount": 117,
   "frameMs": 30,
   "loopStart": 0,
-  "loopEnd": 80,
-  "sourceLoopStart": 34,
-  "sourceLoopEnd": 114,
+  "loopEnd": 116,
+  "sourceLoopStart": 13,
+  "sourceLoopEnd": 129,
   "sourceFrameSize": 128,
   "frameSize": 256,
   "qualityProfile": "enhanced_2x_conservative",
-  "score": 0.047851,
+  "score": 0.042628,
   "loopSelection": "long",
-  "qualityScore": 0.027369,
-  "targetLength": 166
+  "qualityScore": 0.040068,
+  "targetLength": 125
 }
