@@ -1,0 +1,17 @@
+{
+  "action": "brit_ball",
+  "video": "brit_ball.mp4",
+  "frameCount": 144,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 143,
+  "sourceLoopStart": 1,
+  "sourceLoopEnd": 144,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.037605,
+  "loopSelection": "long",
+  "qualityScore": 0.032303,
+  "targetLength": 166
+}

@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("dog", "cat", "shorthair")]
+  [ValidateSet("dog", "cat", "shorthair", "tabby", "brit")]
   [string]$PetVariant = "dog"
 )
 
@@ -10,8 +10,8 @@ $packageJsonPath = Join-Path $appRoot "package.json"
 $rceditExe = Join-Path $appRoot "node_modules\rcedit\bin\rcedit-x64.exe"
 $appIcon = Join-Path $appRoot "build\app_icon.ico"
 $installerVariantInclude = Join-Path $appRoot "build\installer-variant.nsh"
-$installerFolderName = if ($PetVariant -eq "dog") { "installer" } else { "${PetVariant}_installer" }
-$installerRoot = Join-Path $appRoot $installerFolderName
+$installerOutput = if ($PetVariant -in @("tabby", "brit")) { "deliverables/custom/cat/$PetVariant/installer" } elseif ($PetVariant -eq "dog") { "installer" } else { "${PetVariant}_installer" }
+$installerRoot = Join-Path $appRoot ($installerOutput -replace '/', '\')
 $packagedOutputRelative = ".tmp/installer-prepackaged-$([guid]::NewGuid().ToString('N'))"
 $packagedRoot = Join-Path $appRoot ($packagedOutputRelative -replace '/', '\')
 $unpackedRoot = Join-Path $packagedRoot "win-unpacked"
@@ -22,6 +22,8 @@ $variantIdentity = @{
   dog = @{ suffix = "1.1"; guid = "9f5b91c8-e03a-58e9-a3bd-5ca74a95e2f1" }
   cat = @{ suffix = "1.2"; guid = "0793c0d4-f31d-5e02-b7d8-23331f7f85b0" }
   shorthair = @{ suffix = "1.3"; guid = "497f37d9-3152-5d4e-a62f-b41d7f247b1e" }
+  tabby = @{ suffix = "1.0"; guid = "521bbcee-864b-4f43-8854-25d0948a2b2c" }
+  brit = @{ suffix = "1.0"; guid = "c5230690-90c2-463f-992a-58f5f3cef2df" }
 }[$PetVariant]
 $exeDisplayName = "$displayName $($variantIdentity.suffix)"
 $installDirName = "$internalName $($variantIdentity.suffix)"
@@ -78,7 +80,7 @@ function Write-InstallerVariantInclude {
   $lines = @("!define PET_VARIANT `"$Variant`"")
   $lines += "!define PET_INSTALL_DIR_NAME `"$InstallDirName`""
   $lines += "!define PET_EXE_DISPLAY_NAME `"$exeDisplayName`""
-  if ($Variant -in @("dog", "cat")) {
+  if ($Variant -in @("dog", "cat", "tabby", "brit")) {
     $lines += "!define PET_AUTO_START_REGISTRY_KEY `"ChongbanDesktopPet-$Variant`""
     $lines += "!define PET_AUTO_START_AVAILABLE"
   }
@@ -159,7 +161,7 @@ try {
       throw "rcedit failed with exit code $LASTEXITCODE"
     }
 
-    $installerPackageJson = Get-InstallerPackageJson -PackageJsonContent $originalPackageJson -Output $installerFolderName
+    $installerPackageJson = Get-InstallerPackageJson -PackageJsonContent $originalPackageJson -Output $installerOutput
     [System.IO.File]::WriteAllText($packageJsonPath, $installerPackageJson, [System.Text.UTF8Encoding]::new($false))
 
     & npx.cmd electron-builder --win nsis --x64 --prepackaged $unpackedRoot

@@ -46,6 +46,28 @@ const PET_VARIANT_PROFILES = Object.freeze({
       windowRoam: false
     })
   }),
+  tabby: Object.freeze({
+    id: "tabby",
+    animationPrefix: "tabby",
+    defaultScale: 1.1,
+    autoStartRegistryKey: "ChongbanDesktopPet-tabby",
+    singleInstanceKey: "com.chongban.desktoppet.tabby",
+    features: Object.freeze({
+      autoStart: true,
+      windowRoam: true
+    })
+  }),
+  brit: Object.freeze({
+    id: "brit",
+    animationPrefix: "brit",
+    defaultScale: 1.1,
+    autoStartRegistryKey: "ChongbanDesktopPet-brit",
+    singleInstanceKey: "com.chongban.desktoppet.brit",
+    features: Object.freeze({
+      autoStart: true,
+      windowRoam: true
+    })
+  }),
   pomeranian: Object.freeze({
     id: "pomeranian",
     animationPrefix: "pomeranian",
