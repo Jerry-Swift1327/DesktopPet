@@ -688,6 +688,7 @@ async function renderHoverWindow() {
   app.className = config.channelConfig?.showDebugTimers === false
     ? "hover-stage hover-stage--compact"
     : "hover-stage";
+  app.style.setProperty("--hover-panel-height", `${config.channelConfig?.hoverPanelHeight || 180}px`);
   app.innerHTML = `
     <section class="hover-panel" aria-label="宠物状态">
       <header class="hover-panel__header">
