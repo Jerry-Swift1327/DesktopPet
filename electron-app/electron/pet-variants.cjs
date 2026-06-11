@@ -7,10 +7,17 @@ const PET_ACTIONS = Object.freeze({
   squat: Object.freeze({ id: "petSquat", asset: "squat" }),
   walk: Object.freeze({ id: "petWalk", asset: "walk" }),
   feed: Object.freeze({ id: "petFeed", asset: "feed" }),
-  ball: Object.freeze({ id: "petBall", asset: "ball" })
+  ball: Object.freeze({ id: "petBall", asset: "ball" }),
+  lie: Object.freeze({ id: "petLie", asset: "lie" }),
+  lick: Object.freeze({ id: "petLick", asset: "lick" }),
+  belly: Object.freeze({ id: "petBelly", asset: "belly" })
 });
 
 const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
+const TABBY_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly"]);
+const PET_VARIANT_ACTION_ORDERS = Object.freeze({
+  tabby: TABBY_ACTION_ORDER
+});
 
 const PET_VARIANT_PROFILES = Object.freeze({
   dog: Object.freeze({
@@ -115,14 +122,15 @@ function getPetActions() {
 }
 
 function getPetActionIds() {
-  return PET_ACTION_ORDER.reduce((result, key) => {
+  return Object.keys(PET_ACTIONS).reduce((result, key) => {
     result[key] = PET_ACTIONS[key].id;
     return result;
   }, {});
 }
 
-function getPetActionOrder() {
-  return PET_ACTION_ORDER.map((key) => PET_ACTIONS[key].id);
+function getPetActionOrder(value) {
+  const order = PET_VARIANT_ACTION_ORDERS[normalizePetVariant(value)] || PET_ACTION_ORDER;
+  return order.map((key) => PET_ACTIONS[key].id);
 }
 
 function getPetVariantProfile(value) {
@@ -138,6 +146,7 @@ function buildPetRuntimeConfig(config = {}) {
   const channel = normalizePetChannel(config.channel);
   const variantProfile = getPetVariantProfile(variant);
   const channelProfile = getPetChannelProfile(channel);
+  const actionOrder = getPetActionOrder(variant);
 
   return {
     variant,
@@ -148,10 +157,10 @@ function buildPetRuntimeConfig(config = {}) {
     singleInstanceKey: variantProfile.singleInstanceKey,
     features: variantProfile.features,
     actions: getPetActionIds(),
-    actionOrder: getPetActionOrder(),
+    actionOrder,
     channelConfig: {
       showDebugTimers: channelProfile.showDebugTimers,
-      hoverPanelHeight: channelProfile.hoverPanelHeight
+      hoverPanelHeight: channelProfile.hoverPanelHeight + Math.max(0, Math.ceil(actionOrder.length / 4) - 1) * 45
     }
   };
 }
@@ -172,7 +181,8 @@ function getPetPlatformFeatures(config = {}) {
 
 function getVariantAnimationFolders(value) {
   const profile = getPetVariantProfile(value);
-  return PET_ACTION_ORDER.map((key) => `${profile.animationPrefix}_${PET_ACTIONS[key].asset}`);
+  const order = PET_VARIANT_ACTION_ORDERS[normalizePetVariant(value)] || PET_ACTION_ORDER;
+  return order.map((key) => `${profile.animationPrefix}_${PET_ACTIONS[key].asset}`);
 }
 
 function getVariantManifestName(value) {

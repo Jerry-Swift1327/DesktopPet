@@ -59,6 +59,9 @@ const STATE_SQUAT = petActionIds.squat;
 const STATE_WALK = petActionIds.walk;
 const STATE_FEED = petActionIds.feed;
 const STATE_BALL = petActionIds.ball;
+const STATE_LIE = petActionIds.lie;
+const STATE_LICK = petActionIds.lick;
+const STATE_BELLY = petActionIds.belly;
 
 const BASE_PET_WINDOW_WIDTH = 180;
 const BASE_PET_WINDOW_HEIGHT = 180;
@@ -215,7 +218,7 @@ const DAILY_DECAY_FULLNESS = 0;
 const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const sharedGreetings = [
@@ -340,6 +343,12 @@ const states = [
   },
   { id: STATE_BALL, label: "玩耍", folder: getActionFrameFolder("ball"), metadata: getActionMetadataPath("ball"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
 ];
+
+states.push(
+  { id: STATE_LIE, label: "趴下", folder: getActionFrameFolder("lie"), metadata: getActionMetadataPath("lie"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_LICK, label: "舔爪", folder: getActionFrameFolder("lick"), metadata: getActionMetadataPath("lick"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_BELLY, label: "翻肚", folder: getActionFrameFolder("belly"), metadata: getActionMetadataPath("belly"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
+);
 
 const statMessages = {
   hungry: ["我饿了，碗碗发来提醒", "肚子在开会，主题是加餐"],
@@ -2478,6 +2487,8 @@ function sanitizeFrameSequence(sequence, maxFrame) {
 }
 
 function buildPetConfig() {
+  const actionOrder = petRuntimeConfig.actionOrder;
+  const visibleActionIds = new Set(actionOrder);
   return {
     variant: petRuntimeConfig.variant,
     channel: petRuntimeConfig.channel,
@@ -2485,14 +2496,14 @@ function buildPetConfig() {
     autoStart: buildAutoStartSummary(),
     windowRoam: buildWindowRoamSummary(),
     actionIds: petRuntimeConfig.actions,
-    actionOrder: petRuntimeConfig.actionOrder,
+    actionOrder,
     channelConfig: petRuntimeConfig.channelConfig,
     defaultState: DEFAULT_STATE,
     activeState,
     stats: buildStatsSummary(),
     scale: buildScaleSummary(),
     alwaysOnTop: petWindow?.isAlwaysOnTop() ?? true,
-    states: states.map((state) => {
+    states: states.filter((state) => visibleActionIds.has(state.id)).map((state) => {
       const frames = listFrames(state.folder);
       const metadata = readMetadata(state.metadata);
       const maxFrame = Math.max(0, frames.length - 1);

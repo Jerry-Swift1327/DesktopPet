@@ -1,0 +1,17 @@
+{
+  "action": "tabby_lie",
+  "video": "tabby_lie.mp4",
+  "frameCount": 120,
+  "frameMs": 30,
+  "loopStart": 0,
+  "loopEnd": 119,
+  "sourceLoopStart": 45,
+  "sourceLoopEnd": 164,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "score": 0.005466,
+  "loopSelection": "long",
+  "qualityScore": 0.005466,
+  "targetLength": 120
+}

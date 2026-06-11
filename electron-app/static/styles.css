@@ -102,12 +102,13 @@ button {
 }
 
 .hover-stage {
+  --hover-panel-height: 180px;
   width: 232px;
   min-width: 232px;
   max-width: 232px;
-  height: 180px;
-  min-height: 180px;
-  max-height: 180px;
+  height: var(--hover-panel-height);
+  min-height: var(--hover-panel-height);
+  max-height: var(--hover-panel-height);
   padding: 0;
   background: transparent;
   user-select: none;
@@ -117,9 +118,9 @@ button {
   width: 232px;
   min-width: 232px;
   max-width: 232px;
-  height: 180px;
-  min-height: 180px;
-  max-height: 180px;
+  height: var(--hover-panel-height);
+  min-height: var(--hover-panel-height);
+  max-height: var(--hover-panel-height);
   overflow: hidden;
   border: 1px solid rgba(232, 224, 213, 0.95);
   border-radius: 12px;
@@ -127,18 +128,6 @@ button {
   box-shadow: 0 10px 26px rgba(56, 41, 27, 0.18);
   color: #4a3929;
   padding: 12px;
-}
-
-.hover-stage--compact {
-  height: 150px;
-  min-height: 150px;
-  max-height: 150px;
-}
-
-.hover-stage--compact .hover-panel {
-  height: 150px;
-  min-height: 150px;
-  max-height: 150px;
 }
 
 .hover-panel__header {

@@ -146,6 +146,9 @@ New-Item -ItemType Directory -Force -Path (Join-Path $assetsOut "animations") | 
 
 $animationPrefix = $PetVariant
 $animationFolders = @("${animationPrefix}_ball", "${animationPrefix}_feed", "${animationPrefix}_squat", "${animationPrefix}_walk")
+if ($PetVariant -eq "tabby") {
+  $animationFolders += @("${animationPrefix}_lie", "${animationPrefix}_lick", "${animationPrefix}_belly")
+}
 foreach ($folder in $animationFolders) {
   $source = Join-Path $assetsRoot "animations\$folder"
   $target = Join-Path $assetsOut "animations\$folder"
