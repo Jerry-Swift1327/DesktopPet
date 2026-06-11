@@ -25,6 +25,7 @@ electron-app/.user-data/
 electron-app/.electron-cache/
 electron-app/.electron-builder-cache/
 electron-app/.npm-cache*/
+electron-app/.mac-builder-cache/
 electron-app/logs/
 
 # Build and installer outputs
@@ -35,6 +36,9 @@ electron-app/installer/
 electron-app/cat_installer/
 electron-app/shorthair_installer/
 electron-app/mac_installer/
+electron-app/mac_release/
+electron-app/*.dmg
+electron-app/*.app
 electron-app/deliverables/
 electron-app/dist/
 electron-app/out/
@@ -49,6 +53,11 @@ electron-app/shorthair_installer/*.blockmap
 electron-app/installer/builder-debug.yml
 electron-app/cat_installer/builder-debug.yml
 electron-app/shorthair_installer/builder-debug.yml
+electron-app/mac_installer/**/*.dmg
+electron-app/mac_installer/**/*.blockmap
+electron-app/mac_installer/**/builder-debug.yml
+electron-app/mac_installer/**/*.app/
+electron-app/mac_installer/**/mac/
 
 # Resource replacement scratch output
 assets/animations/*/_replacement_work/
