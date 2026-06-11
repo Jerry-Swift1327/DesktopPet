@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("desktopPet", {
   setAutoStart: (enabled) => ipcRenderer.invoke("pet:set-auto-start", enabled),
   toggleAutoStart: () => ipcRenderer.invoke("pet:toggle-auto-start"),
   setWindowRoam: (enabled) => ipcRenderer.invoke("pet:set-window-roam", enabled),
+  setEyeTracking: (enabled) => ipcRenderer.invoke("pet:set-eye-tracking", enabled),
   showPetMenu: () => ipcRenderer.send("pet:show-menu"),
   resizeMenu: (height) => ipcRenderer.send("pet:resize-menu", height),
   resizeBubble: (size) => ipcRenderer.send("pet:resize-bubble", size),
@@ -48,6 +49,11 @@ contextBridge.exposeInMainWorld("desktopPet", {
     const listener = (_event, isPaused) => callback(isPaused);
     ipcRenderer.on("pet:pause-state-changed", listener);
     return () => ipcRenderer.removeListener("pet:pause-state-changed", listener);
+  },
+  onEyeTrackingLook: (callback) => {
+    const listener = (_event, look) => callback(look);
+    ipcRenderer.on("pet:eye-tracking-look", listener);
+    return () => ipcRenderer.removeListener("pet:eye-tracking-look", listener);
   },
   onScaleChanged: (callback) => {
     const listener = (_event, scale) => callback(scale);

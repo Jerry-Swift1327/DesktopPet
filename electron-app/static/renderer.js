@@ -53,6 +53,12 @@ async function renderPetWindow() {
   const decodedStates = new Set();
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
+  const EYE_LOOK_STEP_MS = 120;
+  const EYE_LOOK_ORDER = ["left", "up-left", "up", "up-right", "right", "down-right", "down", "down-left"];
+  const eyeTrackingFrames = config.eyeTrackingFrames || {};
+  let targetEyeLook = "off";
+  let currentEyeLook = "off";
+  let lastEyeLookStepAt = 0;
 
   function getStateFrameSequence(state) {
     if (!state) {
@@ -133,6 +139,10 @@ async function renderPetWindow() {
       const preload = new Image();
       preload.src = frame;
     }
+  }
+  for (const frame of Object.values(eyeTrackingFrames)) {
+    const preload = new Image();
+    preload.src = frame;
   }
 
   app.className = "pet-stage";
@@ -225,6 +235,41 @@ async function renderPetWindow() {
     return config.states.find((state) => state.id === activeState) || config.states[0];
   }
 
+  function getNextEyeLook(current, target) {
+    if (target === "center" || current === "center") {
+      return target;
+    }
+
+    const currentIndex = EYE_LOOK_ORDER.indexOf(current);
+    const targetIndex = EYE_LOOK_ORDER.indexOf(target);
+    if (currentIndex < 0 || targetIndex < 0) {
+      return target;
+    }
+
+    const forward = (targetIndex - currentIndex + EYE_LOOK_ORDER.length) % EYE_LOOK_ORDER.length;
+    const backward = (currentIndex - targetIndex + EYE_LOOK_ORDER.length) % EYE_LOOK_ORDER.length;
+    const step = forward <= backward ? 1 : -1;
+    return EYE_LOOK_ORDER[(currentIndex + step + EYE_LOOK_ORDER.length) % EYE_LOOK_ORDER.length];
+  }
+
+  function getEyeTrackingFrame(state) {
+    if (state?.id !== config.defaultState || targetEyeLook === "off" || !eyeTrackingFrames[targetEyeLook]) {
+      currentEyeLook = "off";
+      return "";
+    }
+
+    const now = performance.now();
+    if (currentEyeLook === "off" || !eyeTrackingFrames[currentEyeLook]) {
+      currentEyeLook = eyeTrackingFrames.center ? "center" : targetEyeLook;
+    }
+    if (currentEyeLook !== targetEyeLook && now - lastEyeLookStepAt >= EYE_LOOK_STEP_MS) {
+      currentEyeLook = getNextEyeLook(currentEyeLook, targetEyeLook);
+      lastEyeLookStepAt = now;
+    }
+
+    return eyeTrackingFrames[currentEyeLook] || "";
+  }
+
   async function decodeStateFrames(state) {
     if (!state || decodedStates.has(state.id)) {
       return true;
@@ -268,15 +313,17 @@ async function renderPetWindow() {
     const step = shouldLoopFrames ? frameStep % stepCount : Math.min(frameStep, stepCount - 1);
     const frameIndex = frameSequence[step] ?? 0;
     const frame = state.frames[frameIndex] || state.frames[0];
+    const eyeFrame = getEyeTrackingFrame(state);
+    const renderedFrame = eyeFrame || frame;
     const shouldMirror = state.defaultFacing === "left" ? direction > 0 : direction < 0;
     const transform = shouldMirror ? "scaleX(-1)" : "scaleX(1)";
-    if (img.src !== frame) {
-      img.src = frame;
+    if (img.src !== renderedFrame) {
+      img.src = renderedFrame;
     }
     if (img.style.transform !== transform) {
       img.style.transform = transform;
     }
-    const renderedKey = `${state.id}:${frameIndex}:${direction}`;
+    const renderedKey = `${state.id}:${frameIndex}:${direction}:${eyeFrame ? currentEyeLook : ""}`;
     if (renderedKey !== lastRenderedFrameKey) {
       const now = performance.now();
       const directionChanged = direction !== lastRenderedFrameDirection;
@@ -439,6 +486,11 @@ async function renderPetWindow() {
     renderFrame();
   });
 
+  window.desktopPet.onEyeTrackingLook((look) => {
+    targetEyeLook = typeof look === "string" ? look : "off";
+    renderFrame();
+  });
+
   window.desktopPet.onScaleChanged((nextScale) => {
     applyScale(nextScale);
   });
@@ -488,6 +540,7 @@ async function renderQuickMenuWindow() {
   let config = await window.desktopPet.getPetConfig();
   const showWindowRoam = Boolean(config.features?.windowRoam);
   const showAutoStart = Boolean(config.features?.autoStart);
+  const showEyeTracking = Boolean(config.features?.eyeTracking);
   const windowRoamButton = showWindowRoam ? `
       <button type="button" class="quick-menu__item" data-command="window-roam" data-window-roam>
         <span class="quick-menu__icon" aria-hidden="true">
@@ -504,6 +557,16 @@ async function renderQuickMenuWindow() {
           <svg viewBox="0 0 24 24"><path d="M12 3v10"></path><path d="m8 9 4 4 4-4"></path><path d="M5 14.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3.5"></path></svg>
         </span>
         <span>自动开机</span>
+        <span class="quick-menu__check" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 12.5 9.2 16.7 19 6.8"></path></svg>
+        </span>
+      </button>` : "";
+  const eyeTrackingButton = showEyeTracking ? `
+      <button type="button" class="quick-menu__item" data-command="eye-tracking" data-eye-tracking>
+        <span class="quick-menu__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.8"></circle></svg>
+        </span>
+        <span>眼神追踪</span>
         <span class="quick-menu__check" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M5 12.5 9.2 16.7 19 6.8"></path></svg>
         </span>
@@ -526,6 +589,7 @@ ${windowRoamButton}
         <span>重置大小</span>
       </button>
 ${autoStartButton}
+${eyeTrackingButton}
       <button type="button" class="quick-menu__item quick-menu__item--danger" data-command="quit">
         <span class="quick-menu__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 3.8v8"></path><path d="M7.2 6.8a8 8 0 1 0 9.6 0"></path></svg>
@@ -574,6 +638,18 @@ ${autoStartButton}
     button.classList.toggle("is-active", Boolean(windowRoam.enabled));
     button.disabled = !windowRoam.canToggle;
     button.title = windowRoam.error || "";
+  }
+
+  function updateEyeTrackingState() {
+    const eyeTracking = config.eyeTracking || {};
+    const button = app.querySelector("[data-eye-tracking]");
+    if (!button) {
+      return;
+    }
+
+    button.classList.toggle("is-active", Boolean(eyeTracking.enabled));
+    button.disabled = !eyeTracking.canToggle;
+    button.title = eyeTracking.error || "";
   }
 
   app.addEventListener("contextmenu", (event) => {
@@ -658,6 +734,37 @@ ${autoStartButton}
       return;
     }
 
+    if (target.dataset.command === "eye-tracking") {
+      const previousEyeTracking = config.eyeTracking || {};
+      const nextEnabled = !Boolean(previousEyeTracking.enabled);
+      config = {
+        ...config,
+        eyeTracking: {
+          ...previousEyeTracking,
+          error: "",
+          enabled: nextEnabled
+        }
+      };
+      updateEyeTrackingState();
+      window.setTimeout(() => {
+        window.desktopPet.hideMenu();
+        window.desktopPet.setEyeTracking(nextEnabled).then((eyeTracking) => {
+          config = {
+            ...config,
+            eyeTracking
+          };
+          updateEyeTrackingState();
+        }).catch(() => {
+          config = {
+            ...config,
+            eyeTracking: previousEyeTracking
+          };
+          updateEyeTrackingState();
+        });
+      }, 1000);
+      return;
+    }
+
     if (target.dataset.command === "quit") {
       window.desktopPet.quit();
     }
@@ -667,11 +774,13 @@ ${autoStartButton}
     config = nextConfig || config;
     updateAutoStartState();
     updateWindowRoamState();
+    updateEyeTrackingState();
     reportMenuHeight();
   });
 
   updateAutoStartState();
   updateWindowRoamState();
+  updateEyeTrackingState();
   reportMenuHeight();
 }
 
