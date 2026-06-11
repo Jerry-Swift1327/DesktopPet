@@ -5,6 +5,8 @@ const { PET_VARIANT_IDS } = require("./electron/pet-variants.cjs");
 
 const appRoot = __dirname;
 const packageJsonPath = path.join(appRoot, "package.json");
+const macIconPath = path.join(appRoot, "build", "app_icon.icns");
+const macBuilderCache = path.join(appRoot, ".mac-builder-cache");
 const displayName = `${String.fromCharCode(0x5ba0, 0x4f34)} Pomeranian`;
 
 function readOption(name, fallback) {
@@ -45,6 +47,9 @@ if (!PET_VARIANT_IDS.includes(variant)) {
 if (!["x64", "arm64"].includes(arch)) {
   throw new Error(`Invalid mac arch: ${arch}`);
 }
+if (!fs.existsSync(macIconPath)) {
+  throw new Error(`Mac icon was not found: ${macIconPath}`);
+}
 
 const output = path.posix.join("mac_installer", variant);
 const outputRoot = path.join(appRoot, "mac_installer", variant);
@@ -52,6 +57,7 @@ const originalPackageJson = fs.readFileSync(packageJsonPath, "utf8");
 
 try {
   removeInsideAppRoot(outputRoot);
+  fs.mkdirSync(macBuilderCache, { recursive: true });
   run("node", ["prepare-runtime-assets.cjs", `--pet-variant=${variant}`, "--pet-channel=installer"]);
 
   const packageJson = JSON.parse(originalPackageJson);
@@ -63,6 +69,7 @@ try {
     category: "public.app-category.utilities",
     hardenedRuntime: false,
     gatekeeperAssess: false,
+    icon: "build/app_icon.icns",
     identity: null,
     target: ["dmg", "dir"]
   };
@@ -72,7 +79,8 @@ try {
   fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 
   run("npx", ["electron-builder", "--mac", "dmg", "dir", `--${arch}`], {
-    CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    CSC_IDENTITY_AUTO_DISCOVERY: "false",
+    ELECTRON_BUILDER_CACHE: process.env.ELECTRON_BUILDER_CACHE || macBuilderCache
   });
 } finally {
   fs.writeFileSync(packageJsonPath, originalPackageJson, "utf8");
