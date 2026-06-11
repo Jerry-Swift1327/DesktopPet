@@ -109,14 +109,14 @@ test("invalid variant and channel fall back to defaults", () => {
   assert.equal(normalizePetChannel("unknown"), DEFAULT_PET_CHANNEL);
 });
 
-test("mac packaged user data folder uses Chongban parent and variant folder", () => {
+test("mac packaged user data folder uses versioned Chongban parent and variant folder", () => {
   assert.equal(
     getPetUserDataFolder({ variant: "pomeranian", channel: "installer", platform: "darwin" }),
-    "Chongban/pomeranian"
+    "Chongban 1.0/pomeranian"
   );
   assert.equal(
     getPetUserDataFolder({ variant: "pomeranian", channel: "release", platform: "darwin" }),
-    "Chongban/pomeranian"
+    "Chongban 1.0/pomeranian"
   );
   assert.equal(getPetUserDataFolder({ variant: "pomeranian", channel: "installer", platform: "win32" }), "pomeranian");
 });

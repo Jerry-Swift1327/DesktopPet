@@ -1,7 +1,7 @@
 const PET_VARIANT_CONFIG_FILE = "pet_variant.json";
 const DEFAULT_PET_VARIANT = "dog";
 const DEFAULT_PET_CHANNEL = "release";
-const MAC_USER_DATA_PARENT = "Chongban";
+const MAC_USER_DATA_PARENT = "Chongban 1.0";
 
 const PET_ACTIONS = Object.freeze({
   squat: Object.freeze({ id: "petSquat", asset: "squat" }),

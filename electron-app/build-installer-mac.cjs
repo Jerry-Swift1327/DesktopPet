@@ -76,6 +76,7 @@ try {
       target: ["dmg", "dir"]
     };
     packageJson.build.dmg = {
+      title: displayName,
       artifactName: `${displayName}.\${ext}`
     };
     fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
