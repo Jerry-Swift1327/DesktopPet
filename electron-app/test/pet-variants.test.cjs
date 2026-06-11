@@ -55,6 +55,7 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   assert.equal(shorthairConfig.autoStartRegistryKey, "ChongbanDesktopPet-shorthair");
   assert.equal(tabbyConfig.features.autoStart, true);
   assert.equal(tabbyConfig.features.windowRoam, true);
+  assert.equal(tabbyConfig.features.eyeTracking, true);
   assert.equal(tabbyConfig.defaultScale, 1.1);
   assert.equal(tabbyConfig.autoStartRegistryKey, "ChongbanDesktopPet-tabby");
   assert.deepEqual(tabbyConfig.actionOrder, [
@@ -123,23 +124,28 @@ test("mac packaged user data folder uses Chongban parent and variant folder", ()
 test("platform features hide Windows-only menu items on macOS", () => {
   assert.deepEqual(getPetPlatformFeatures({ variant: "dog", platform: "darwin" }), {
     autoStart: false,
-    windowRoam: false
+    windowRoam: false,
+    eyeTracking: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "cat", platform: "win32" }), {
     autoStart: true,
-    windowRoam: true
+    windowRoam: true,
+    eyeTracking: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "tabby", platform: "win32" }), {
     autoStart: true,
-    windowRoam: true
+    windowRoam: true,
+    eyeTracking: true
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "brit", platform: "win32" }), {
     autoStart: true,
-    windowRoam: true
+    windowRoam: true,
+    eyeTracking: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "pomeranian", platform: "win32" }), {
     autoStart: false,
-    windowRoam: false
+    windowRoam: false,
+    eyeTracking: false
   });
 });
 
@@ -163,7 +169,8 @@ test("variant assets follow the existing animation folder convention", () => {
     "tabby_ball",
     "tabby_lie",
     "tabby_lick",
-    "tabby_belly"
+    "tabby_belly",
+    "tabby_look"
   ]);
   assert.deepEqual(getVariantAnimationFolders("brit"), [
     "brit_squat",

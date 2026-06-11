@@ -110,7 +110,7 @@ const STARTUP_BUBBLE_HOVER_LOCK_MS = 1800;
 const PET_MENU_WIDTH = 196;
 const PET_MENU_COLLAPSED_HEIGHT = 142;
 const PET_MENU_MIN_HEIGHT = 128;
-const PET_MENU_MAX_HEIGHT = 240;
+const PET_MENU_MAX_HEIGHT = 280;
 const PET_MENU_PADDING_Y = 14;
 const PET_MENU_ITEM_HEIGHT = 40;
 const PET_MENU_HIDE_DELAY_MS = 700;
@@ -131,6 +131,9 @@ const WINDOW_DOCK_DRAG_RETRY_DELAY_MS = 260;
 const WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS = 2500;
 const WINDOW_ROAM_POLL_INTERVAL_MS = 900;
 const WINDOW_ROAM_MAX_MISSING_TICKS = 2;
+const EYE_TRACKING_POLL_INTERVAL_MS = 100;
+const EYE_TRACKING_DEAD_ZONE_PX = 18;
+const EYE_TRACKING_LOOKS = Object.freeze(["center", "left", "right", "up", "down", "up-left", "up-right", "down-left", "down-right"]);
 const DARWIN_DISPLAY_METRICS_SETTLE_MS = 300;
 // Panel positioning knobs. Change these first when tuning visual spacing.
 const OVERLAY_BASE_GAP = 25; 
@@ -445,9 +448,13 @@ let windowRoamPollTimer = null;
 let windowRoamLastTargetId = "";
 let windowRoamSuppressedWindowId = "";
 let windowRoamMissingTicks = 0;
+let eyeTrackingEnabledCache = false;
+let eyeTrackingPollTimer = null;
+let lastEyeTrackingLook = "off";
 const statsFile = path.join(userDataRoot, "pet-stats.json");
 const autoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
 const windowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
+const eyeTrackingPreferenceFile = path.join(userDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
 const logDir = path.join(userDataRoot, "logs");
 const logFile = path.join(logDir, "main.log");
 const visibleBoundsCache = new Map();
@@ -658,11 +665,48 @@ function buildWindowRoamSummary(error = "") {
   };
 }
 
+function canToggleEyeTracking() {
+  return Boolean(petRuntimeConfig.features?.eyeTracking);
+}
+
+function readEyeTrackingPreference() {
+  if (!fs.existsSync(eyeTrackingPreferenceFile)) {
+    return;
+  }
+
+  try {
+    const preference = JSON.parse(fs.readFileSync(eyeTrackingPreferenceFile, "utf8"));
+    if (typeof preference.enabled === "boolean") {
+      eyeTrackingEnabledCache = preference.enabled;
+    }
+  } catch (error) {
+    log(`failed to read eye tracking preference: ${error.stack || error.message}`);
+  }
+}
+
+function writeEyeTrackingPreference(enabled) {
+  try {
+    fs.writeFileSync(eyeTrackingPreferenceFile, JSON.stringify({ enabled: Boolean(enabled) }, null, 2), "utf8");
+  } catch (error) {
+    log(`failed to write eye tracking preference: ${error.stack || error.message}`);
+  }
+}
+
+function buildEyeTrackingSummary(error = "") {
+  return {
+    supported: canToggleEyeTracking(),
+    enabled: eyeTrackingEnabledCache,
+    canToggle: canToggleEyeTracking(),
+    error
+  };
+}
+
 function buildMenuFeatures() {
   const features = getPetPlatformFeatures({ variant: petRuntimeConfig.variant, platform: process.platform });
   return {
     autoStart: features.autoStart,
-    windowRoam: features.windowRoam && ENABLE_WINDOW_DOCKING
+    windowRoam: features.windowRoam && ENABLE_WINDOW_DOCKING,
+    eyeTracking: Boolean(features.eyeTracking)
   };
 }
 
@@ -679,6 +723,9 @@ function getQuickMenuItemCount() {
     itemCount += 1;
   }
   if (features.autoStart) {
+    itemCount += 1;
+  }
+  if (features.eyeTracking) {
     itemCount += 1;
   }
   return itemCount;
@@ -730,6 +777,18 @@ function setWindowRoamPreference(enabled) {
   updateWindowRoamPolling();
   sendMenuConfig();
   return buildWindowRoamSummary();
+}
+
+function setEyeTrackingPreference(enabled) {
+  if (!canToggleEyeTracking()) {
+    return buildEyeTrackingSummary("Eye tracking is not available for this build.");
+  }
+
+  eyeTrackingEnabledCache = Boolean(enabled);
+  writeEyeTrackingPreference(eyeTrackingEnabledCache);
+  updateEyeTrackingPolling();
+  sendMenuConfig();
+  return buildEyeTrackingSummary();
 }
 
 function logInteractionPauseDiagnostic(action, reason) {
@@ -1916,6 +1975,74 @@ function updateWindowRoamPolling() {
   }
 }
 
+function sendEyeTrackingLook(look) {
+  const nextLook = look || "center";
+  if (nextLook === lastEyeTrackingLook) {
+    return;
+  }
+  lastEyeTrackingLook = nextLook;
+  petWindow?.webContents.send("pet:eye-tracking-look", nextLook);
+}
+
+function getEyeTrackingLookForCursor(point) {
+  const rect = getRenderedFrameHeadRectFromBounds(petWindow.getBounds()) || getRenderedFrameVisibleRect() || getVisiblePetRect();
+  if (!rect) {
+    return "center";
+  }
+
+  const dx = point.x - (rect.x + rect.width / 2);
+  const dy = point.y - (rect.y + rect.height / 2);
+  if (Math.abs(dx) < EYE_TRACKING_DEAD_ZONE_PX && Math.abs(dy) < EYE_TRACKING_DEAD_ZONE_PX) {
+    return "center";
+  }
+
+  const horizontal = Math.abs(dx) >= EYE_TRACKING_DEAD_ZONE_PX ? (dx < 0 ? "left" : "right") : "";
+  const vertical = Math.abs(dy) >= EYE_TRACKING_DEAD_ZONE_PX ? (dy < 0 ? "up" : "down") : "";
+  return vertical && horizontal ? `${vertical}-${horizontal}` : vertical || horizontal || "center";
+}
+
+function tickEyeTracking() {
+  if (!eyeTrackingEnabledCache || activeState !== STATE_SQUAT || dragState || !petWindow || petWindow.isDestroyed()) {
+    sendEyeTrackingLook("off");
+    return;
+  }
+
+  const menuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
+  const hoverVisible = hoverWindow && !hoverWindow.isDestroyed() && hoverWindow.isVisible();
+  const point = screen.getCursorScreenPoint();
+  if (menuVisible || hoverVisible || isPointInsideRect(point, getWindowRect(petWindow)) || isPointInsideRenderedFrame(point)) {
+    sendEyeTrackingLook("off");
+    return;
+  }
+
+  sendEyeTrackingLook(getEyeTrackingLookForCursor(point));
+}
+
+function startEyeTrackingPolling() {
+  if (eyeTrackingPollTimer || !canToggleEyeTracking()) {
+    return;
+  }
+  tickEyeTracking();
+  eyeTrackingPollTimer = setInterval(tickEyeTracking, EYE_TRACKING_POLL_INTERVAL_MS);
+}
+
+function stopEyeTrackingPolling() {
+  if (!eyeTrackingPollTimer) {
+    return;
+  }
+  clearInterval(eyeTrackingPollTimer);
+  eyeTrackingPollTimer = null;
+  sendEyeTrackingLook("off");
+}
+
+function updateEyeTrackingPolling() {
+  if (eyeTrackingEnabledCache) {
+    startEyeTrackingPolling();
+  } else {
+    stopEyeTrackingPolling();
+  }
+}
+
 function getScaleForSurface(surface, requestedScale = preferredPetScale, stateId = activeState, direction = walkDirection) {
   const currentScale = petScale;
   let candidate = clampPetScale(requestedScale);
@@ -2410,6 +2537,25 @@ function listFramePaths(folder) {
   return framePaths;
 }
 
+function listEyeTrackingFrames() {
+  if (!canToggleEyeTracking()) {
+    return {};
+  }
+
+  const folder = path.join(getAssetsRoot(), "animations", `${petAnimationPrefix}_look`, "transparent_frames");
+  if (!fs.existsSync(folder)) {
+    return {};
+  }
+
+  return EYE_TRACKING_LOOKS.reduce((frames, look) => {
+    const filePath = path.join(folder, `${petAnimationPrefix}_look_${look}.png`);
+    if (fs.existsSync(filePath)) {
+      frames[look] = toFileUrl(filePath);
+    }
+    return frames;
+  }, {});
+}
+
 function readMetadata(relativePath) {
   const fullPath = path.join(getAssetsRoot(), relativePath);
   if (!fs.existsSync(fullPath)) {
@@ -2495,6 +2641,8 @@ function buildPetConfig() {
     features: buildMenuFeatures(),
     autoStart: buildAutoStartSummary(),
     windowRoam: buildWindowRoamSummary(),
+    eyeTracking: buildEyeTrackingSummary(),
+    eyeTrackingFrames: listEyeTrackingFrames(),
     actionIds: petRuntimeConfig.actions,
     actionOrder,
     channelConfig: petRuntimeConfig.channelConfig,
@@ -4747,6 +4895,7 @@ function sendPetState() {
   menuWindow?.webContents.send("pet:direction-changed", walkDirection);
   hoverWindow?.webContents.send("pet:direction-changed", walkDirection);
   petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+  petWindow.webContents.send("pet:eye-tracking-look", lastEyeTrackingLook);
   sendStats();
 }
 
@@ -6338,12 +6487,14 @@ if (!gotSingleInstanceLock) {
     readPetStats();
     readAutoStartPreference();
     readWindowRoamPreference();
+    readEyeTrackingPreference();
     rememberHomeDisplay();
     createPetWindow();
     refreshAutoStartCacheAsync();
     startHoverPolling();
     startWindowSurfacePolling();
     updateWindowRoamPolling();
+    updateEyeTrackingPolling();
     startIntimacyDecayTimer();
     scheduleIdleGreeting();
     if (process.platform === "darwin") {
@@ -6367,6 +6518,7 @@ app.on("before-quit", () => {
   stopHoverPolling();
   stopWindowSurfacePolling();
   stopWindowRoamPolling();
+  stopEyeTrackingPolling();
   stopIntimacyDecayTimer();
   clearHoverIntent();
   clearDragState({ notify: false });
@@ -6402,6 +6554,7 @@ ipcMain.handle("pet:get-config", () => buildPetConfig());
 ipcMain.handle("pet:set-auto-start", (_event, enabled) => setAutoStartPreference(enabled));
 ipcMain.handle("pet:toggle-auto-start", () => toggleAutoStart());
 ipcMain.handle("pet:set-window-roam", (_event, enabled) => setWindowRoamPreference(enabled));
+ipcMain.handle("pet:set-eye-tracking", (_event, enabled) => setEyeTrackingPreference(enabled));
 ipcMain.handle("pet:advance-walk-step", (_event, frameStep, elapsedMs) => advanceWalkStep(frameStep, elapsedMs));
 ipcMain.on("pet:show-menu", () => {
   recordUserOperation();

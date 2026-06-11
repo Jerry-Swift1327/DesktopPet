@@ -18,6 +18,9 @@ const TABBY_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "lie"
 const PET_VARIANT_ACTION_ORDERS = Object.freeze({
   tabby: TABBY_ACTION_ORDER
 });
+const PET_VARIANT_EXTRA_ANIMATION_ASSETS = Object.freeze({
+  tabby: Object.freeze(["look"])
+});
 
 const PET_VARIANT_PROFILES = Object.freeze({
   dog: Object.freeze({
@@ -61,7 +64,8 @@ const PET_VARIANT_PROFILES = Object.freeze({
     singleInstanceKey: "com.chongban.desktoppet.tabby",
     features: Object.freeze({
       autoStart: true,
-      windowRoam: true
+      windowRoam: true,
+      eyeTracking: true
     })
   }),
   brit: Object.freeze({
@@ -175,14 +179,20 @@ function getPetPlatformFeatures(config = {}) {
   const isWindows = config.platform === "win32";
   return {
     autoStart: Boolean(variantProfile.features.autoStart) && isWindows,
-    windowRoam: Boolean(variantProfile.features.windowRoam) && isWindows
+    windowRoam: Boolean(variantProfile.features.windowRoam) && isWindows,
+    eyeTracking: Boolean(variantProfile.features.eyeTracking)
   };
 }
 
 function getVariantAnimationFolders(value) {
   const profile = getPetVariantProfile(value);
-  const order = PET_VARIANT_ACTION_ORDERS[normalizePetVariant(value)] || PET_ACTION_ORDER;
-  return order.map((key) => `${profile.animationPrefix}_${PET_ACTIONS[key].asset}`);
+  const variant = normalizePetVariant(value);
+  const order = PET_VARIANT_ACTION_ORDERS[variant] || PET_ACTION_ORDER;
+  const extras = PET_VARIANT_EXTRA_ANIMATION_ASSETS[variant] || [];
+  return order
+    .map((key) => PET_ACTIONS[key].asset)
+    .concat(extras)
+    .map((asset) => `${profile.animationPrefix}_${asset}`);
 }
 
 function getVariantManifestName(value) {
