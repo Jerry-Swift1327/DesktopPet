@@ -37,51 +37,54 @@ function removeInsideAppRoot(target) {
 }
 
 const variant = readOption("pet-variant", "pomeranian");
-const arch = readOption("arch", process.arch === "arm64" ? "arm64" : "x64");
+const archOption = readOption("arch", "all");
+const archs = archOption === "all" ? ["arm64", "x64"] : [archOption];
 if (process.platform !== "darwin") {
   throw new Error("Mac installer must be built on macOS.");
 }
 if (!PET_VARIANT_IDS.includes(variant)) {
   throw new Error(`Invalid pet variant: ${variant}`);
 }
-if (!["x64", "arm64"].includes(arch)) {
-  throw new Error(`Invalid mac arch: ${arch}`);
+if (archs.some((arch) => !["x64", "arm64"].includes(arch))) {
+  throw new Error(`Invalid mac arch: ${archOption}`);
 }
 if (!fs.existsSync(macIconPath)) {
   throw new Error(`Mac icon was not found: ${macIconPath}`);
 }
 
-const output = path.posix.join("mac_installer", variant);
-const outputRoot = path.join(appRoot, "mac_installer", variant);
 const originalPackageJson = fs.readFileSync(packageJsonPath, "utf8");
 
 try {
-  removeInsideAppRoot(outputRoot);
+  for (const arch of archs) {
+    removeInsideAppRoot(path.join(appRoot, "mac_installer", variant, arch));
+  }
   fs.mkdirSync(macBuilderCache, { recursive: true });
   run("node", ["prepare-runtime-assets.cjs", `--pet-variant=${variant}`, "--pet-channel=installer"]);
 
-  const packageJson = JSON.parse(originalPackageJson);
-  packageJson.build.appId = `com.chongban.desktoppet.${variant}`;
-  packageJson.build.productName = displayName;
-  packageJson.build.executableName = displayName;
-  packageJson.build.directories.output = output;
-  packageJson.build.mac = {
-    category: "public.app-category.utilities",
-    hardenedRuntime: false,
-    gatekeeperAssess: false,
-    icon: "build/app_icon.icns",
-    identity: null,
-    target: ["dmg", "dir"]
-  };
-  packageJson.build.dmg = {
-    artifactName: `${displayName}-${variant}-installer-\${arch}.\${ext}`
-  };
-  fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+  for (const arch of archs) {
+    const packageJson = JSON.parse(originalPackageJson);
+    packageJson.build.appId = `com.chongban.desktoppet.${variant}`;
+    packageJson.build.productName = displayName;
+    packageJson.build.executableName = displayName;
+    packageJson.build.directories.output = path.posix.join("mac_installer", variant, arch);
+    packageJson.build.mac = {
+      category: "public.app-category.utilities",
+      hardenedRuntime: false,
+      gatekeeperAssess: false,
+      icon: "build/app_icon.icns",
+      identity: null,
+      target: ["dmg", "dir"]
+    };
+    packageJson.build.dmg = {
+      artifactName: `${displayName}-${packageJson.version}-macOS-${arch}.\${ext}`
+    };
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 
-  run("npx", ["electron-builder", "--mac", "dmg", "dir", `--${arch}`], {
-    CSC_IDENTITY_AUTO_DISCOVERY: "false",
-    ELECTRON_BUILDER_CACHE: process.env.ELECTRON_BUILDER_CACHE || macBuilderCache
-  });
+    run("npx", ["electron-builder", "--mac", "dmg", "dir", `--${arch}`], {
+      CSC_IDENTITY_AUTO_DISCOVERY: "false",
+      ELECTRON_BUILDER_CACHE: process.env.ELECTRON_BUILDER_CACHE || macBuilderCache
+    });
+  }
 } finally {
   fs.writeFileSync(packageJsonPath, originalPackageJson, "utf8");
 }

@@ -2,27 +2,51 @@
 
 本项目的 macOS 安装包必须在 macOS 终端生成。Windows 本机只能做脚本语法和资源检查。
 
-## 标准 DMG 构建
+## 同时生成 arm64 和 x64
+
+不确定客户 Mac 架构时，直接生成两个 DMG：
 
 ```bash
 cd /path/to/DesktopPet/electron-app
 npm install
-npm run installer:mac -- --pet-variant=pomeranian --arch=arm64
-```
-
-Intel Mac 改用：
-
-```bash
-npm run installer:mac -- --pet-variant=pomeranian --arch=x64
+npm run installer:mac -- --pet-variant=pomeranian
 ```
 
 产物目录：
 
 ```bash
-electron-app/mac_installer/pomeranian
+electron-app/mac_installer/pomeranian/arm64
+electron-app/mac_installer/pomeranian/x64
 ```
 
-构建脚本会先生成 `.runtime-assets`，再调用 electron-builder 生成 `.app` 和 `.dmg`。macOS 图标使用：
+DMG 命名格式：
+
+```bash
+宠伴 Pomeranian-1.0.0-macOS-arm64.dmg
+宠伴 Pomeranian-1.0.0-macOS-x64.dmg
+```
+
+App 名称：
+
+```bash
+宠伴 Pomeranian.app
+```
+
+## 单独生成某个架构
+
+Apple Silicon Mac，也就是 M1/M2/M3/M4：
+
+```bash
+npm run installer:mac -- --pet-variant=pomeranian --arch=arm64
+```
+
+Intel Mac：
+
+```bash
+npm run installer:mac -- --pet-variant=pomeranian --arch=x64
+```
+
+macOS 图标使用：
 
 ```bash
 electron-app/build/app_icon.icns
@@ -34,22 +58,24 @@ electron-app/build/app_icon.icns
 
 ```bash
 cd /path/to/DesktopPet/electron-app
-npm run installer:mac -- --pet-variant=pomeranian --arch=arm64
+npm run installer:mac -- --pet-variant=pomeranian
 ```
 
 仍失败时，清理 electron-builder 缓存后再试：
 
 ```bash
 rm -rf .mac-builder-cache
-npm run installer:mac -- --pet-variant=pomeranian --arch=arm64
+npm run installer:mac -- --pet-variant=pomeranian
 ```
 
-如果交付时间紧，可以用 macOS 自带 `hdiutil` 基于已生成的 `.app` 兜底生成 DMG：
+如果交付时间紧，可以用 macOS 自带 `hdiutil` 基于已生成的 `.app` 兜底生成 DMG。以 arm64 为例：
 
 ```bash
-cd /path/to/DesktopPet/electron-app/mac_installer/pomeranian
+cd /path/to/DesktopPet/electron-app/mac_installer/pomeranian/arm64
 APP_PATH="$(find . -type d -name '*.app' -print -quit)"
-hdiutil create -volname "宠伴 Pomeranian" -srcfolder "$APP_PATH" -ov -format UDZO "宠伴 Pomeranian-pomeranian-installer-arm64.dmg"
+hdiutil create -volname "宠伴 Pomeranian" -srcfolder "$APP_PATH" -ov -format UDZO "宠伴 Pomeranian-1.0.0-macOS-arm64.dmg"
 ```
+
+x64 时进入 `mac_installer/pomeranian/x64`，并把文件名里的 `arm64` 改成 `x64`。
 
 生成后先在客户同架构 Mac 上双击 `.app` 或挂载 `.dmg` 做冒烟测试。
