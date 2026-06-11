@@ -7,7 +7,7 @@ const appRoot = __dirname;
 const packageJsonPath = path.join(appRoot, "package.json");
 const macIconPath = path.join(appRoot, "build", "app_icon.icns");
 const macBuilderCache = path.join(appRoot, ".mac-builder-cache");
-const displayName = `${String.fromCharCode(0x5ba0, 0x4f34)} Pomeranian`;
+const displayName = `${String.fromCharCode(0x5ba0, 0x4f34)} 1.0`;
 
 function readOption(name, fallback) {
   const prefix = `--${name}=`;
@@ -76,7 +76,7 @@ try {
       target: ["dmg", "dir"]
     };
     packageJson.build.dmg = {
-      artifactName: `${displayName}-${packageJson.version}-macOS-${arch}.\${ext}`
+      artifactName: `${displayName}.\${ext}`
     };
     fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 

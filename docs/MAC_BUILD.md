@@ -19,17 +19,16 @@ electron-app/mac_installer/pomeranian/arm64
 electron-app/mac_installer/pomeranian/x64
 ```
 
-DMG 命名格式：
+DMG 名称：
 
 ```bash
-宠伴 Pomeranian-1.0.0-macOS-arm64.dmg
-宠伴 Pomeranian-1.0.0-macOS-x64.dmg
+宠伴 1.0.dmg
 ```
 
 App 名称：
 
 ```bash
-宠伴 Pomeranian.app
+宠伴 1.0.app
 ```
 
 ## 单独生成某个架构
@@ -73,9 +72,9 @@ npm run installer:mac -- --pet-variant=pomeranian
 ```bash
 cd /path/to/DesktopPet/electron-app/mac_installer/pomeranian/arm64
 APP_PATH="$(find . -type d -name '*.app' -print -quit)"
-hdiutil create -volname "宠伴 Pomeranian" -srcfolder "$APP_PATH" -ov -format UDZO "宠伴 Pomeranian-1.0.0-macOS-arm64.dmg"
+hdiutil create -volname "宠伴 1.0" -srcfolder "$APP_PATH" -ov -format UDZO "宠伴 1.0.dmg"
 ```
 
-x64 时进入 `mac_installer/pomeranian/x64`，并把文件名里的 `arm64` 改成 `x64`。
+x64 时进入 `mac_installer/pomeranian/x64` 执行同一条 `hdiutil` 命令。
 
 生成后先在客户同架构 Mac 上双击 `.app` 或挂载 `.dmg` 做冒烟测试。
