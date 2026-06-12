@@ -1,93 +1,78 @@
-# Maintenance
+# Documentation Maintenance
 
-本文件定义 Desktop-Pet 的文档维护规则，目标是让后续功能开发、优化和 bug 修复可以快速定位相关文件，并在改动后保持文档可信。
+本文件说明公开文档的维护规则。除根目录 `AGENTS.md` 外，仓库中的 Markdown 都应面向开源社区浏览者，介绍项目、目录、脚本和使用方式。
 
 ## 文档分层
 
-| 文档 | 目标读者 | 更新时机 |
+| 文档 | 读者 | 内容 |
 | --- | --- | --- |
-| `README.md` | 人类维护者和首次进入项目的 AI | 项目入口、运行方式、目录结构变化 |
-| `docs/PROJECT_MAP.md` | AI 和维护者 | 文件/目录职责、生成产物、关键入口变化 |
-| `docs/AI_GUIDE.md` | 后续 AI | 新增功能域、新增常见需求、定位路径变化 |
-| `docs/ARCHITECTURE.md` | 需要理解系统的人或 AI | 主链路、数据流、IPC、变体、状态模型变化 |
-| `docs/STATUS.md` | 项目维护者 | 当前进度、风险点、后续建议变化 |
-| 各目录 `README.md` | 进入该目录修改的人或 AI | 目录内文件职责、常见修改场景变化 |
+| `README.md` | 首次进入仓库的用户和贡献者 | 项目介绍、运行、测试、打包、目录结构 |
+| `docs/PROJECT_MAP.md` | 贡献者 | 目录职责、关键文件和常见修改入口 |
+| `docs/ARCHITECTURE.md` | 需要理解系统设计的贡献者 | 运行链路、IPC、资源加载、状态数据 |
+| `docs/MAC_BUILD.md` | 需要生成 macOS 包的贡献者 | macOS 打包命令、输出目录和故障处理 |
+| 各目录 `README.md` | 准备修改该目录的贡献者 | 同目录文件职责、运行方式和注意事项 |
+| `AGENTS.md` | 自动化协作者和维护者 | 操作约束、阅读范围、验证和提交要求 |
 
-## 修改后同步规则
+## 同步规则
 
-| 改动类型 | 必查文档 |
+| 改动类型 | 需要检查 |
 | --- | --- |
-| 新增或删除顶层目录 | `README.md`、`docs/PROJECT_MAP.md`、`docs/AI_GUIDE.md` |
-| 新增 Electron 主进程能力 | `electron-app/electron/README.md`、`docs/ARCHITECTURE.md`、`docs/AI_GUIDE.md` |
-| 新增渲染层 UI 或交互 | `electron-app/static/README.md`、`docs/AI_GUIDE.md` |
-| 新增 IPC 通道 | `electron-app/electron/README.md`、`electron-app/static/README.md`、`docs/ARCHITECTURE.md` |
-| 新增宠物变体 | `assets/animations/README.md`、`electron-app/electron/README.md`、`electron-app/test/README.md`、`docs/PROJECT_MAP.md` |
-| 替换或新增动作资源 | `assets/animations/README.md`、`tools/README.md`、必要时 `docs/STATUS.md` |
-| 修改构建/安装包脚本 | `electron-app/README.md`、`docs/PROJECT_MAP.md` |
-| 修改测试入口或测试覆盖 | `electron-app/test/README.md` |
-| 修改文档维护方式 | `docs/MAINTENANCE.md` |
+| 新增或删除顶层目录 | `README.md`、`docs/PROJECT_MAP.md` |
+| 修改 Electron 主进程能力 | `docs/ARCHITECTURE.md`、`electron-app/electron/README.md` |
+| 修改渲染层 UI 或交互 | `electron-app/static/README.md` |
+| 新增 IPC 通道 | `docs/ARCHITECTURE.md`、`electron-app/electron/README.md`、`electron-app/static/README.md` |
+| 新增宠物变体或动作 | `assets/README.md`、`assets/animations/README.md`、`electron-app/electron/README.md`、`electron-app/test/README.md` |
+| 修改资源处理脚本 | `tools/README.md`、`assets/animations/README.md` |
+| 修改构建或安装脚本 | `README.md`、`electron-app/README.md`、`docs/PROJECT_MAP.md` |
+| 修改测试命令或测试覆盖 | `README.md`、`electron-app/test/README.md` |
+| 修改文档维护规则 | 本文件和 `AGENTS.md` |
 
-## 目录 README 模板
+## 目录 README 建议结构
 
-新增核心目录时，建议加入 README，并使用以下结构：
+新增核心目录时，建议补充 README，并使用下面的简洁结构：
 
 ```md
 # Directory Name
 
 ## 作用
 
-这个目录负责什么。
+说明这个目录负责什么。
 
 ## 关键文件
 
-| 文件 | 作用 | 常见修改场景 |
-| --- | --- | --- |
+| 文件 | 作用 |
+| --- | --- |
+
+## 使用方式
+
+列出必要命令或入口。
 
 ## 修改注意
 
-改这里时需要同步检查什么。
-
-## 相关文档
-
-- `../docs/PROJECT_MAP.md`
+说明修改该目录时需要同步检查的文件。
 ```
 
-## 定期巡检建议
+## 不应写入公开文档的内容
 
-建议每周或每个功能批次结束后做一次轻量文档巡检：
+以下内容不应放入常规公开文档：
 
-1. 扫描关键目录是否缺 README。
-2. 检查 README 中列出的文件是否仍存在。
-3. 检查打包脚本、npm scripts、测试命令是否与文档一致。
-4. 检查新增功能是否已经写入 `AI_GUIDE.md` 的定位表。
-5. 检查 `STATUS.md` 是否仍反映当前进度。
+- 交接记录。
+- 临时排查过程。
+- 功能开发进度清单。
+- 面向单个本机环境的路径或账号信息。
+- 只给自动化工具看的操作提示。
 
-## 不应纳入常规文档维护的目录
+确实需要保留时，放入 `.gitignore` 已忽略的位置，例如 `.codex-temp/` 或 `.tmp/`。
 
-以下目录多为依赖、缓存、临时文件或打包产物，一般只在构建排查时查看：
+## 提交前检查
 
-- `electron-app/node_modules`
-- `electron-app/.runtime-assets`
-- `electron-app/.electron-builder-cache`
-- `electron-app/.tmp`
-- `electron-app/release`
-- `electron-app/cat_release`
-- `electron-app/shorthair_release`
-- `electron-app/installer`
-- `electron-app/cat_installer`
-- `electron-app/shorthair_installer`
-- `quality_previews`
-- `tools/__pycache__`
-- `assets/animations/*/raw_frames`
-- `assets/animations/*/_replacement_work`
-
-## 提交前建议
-
-文档改动提交前至少执行：
+文档改动提交前建议执行：
 
 ```powershell
+rg -n "交接|进度|New project|DesktopPetPackage"
 git diff --stat
-git diff -- README.md docs electron-app/README.md assets tools
+cd electron-app
+npm.cmd test
 ```
 
-如果改动涉及代码逻辑，再按影响范围运行测试或手动启动应用。
+如果新增可再生成目录、安装包、缓存或临时文档，同步检查 `.gitignore`。

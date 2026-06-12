@@ -1,17 +1,17 @@
 # Electron Runtime
 
-本目录包含 Electron 主进程和与系统能力相关的运行时代码，是桌宠行为的核心目录。
+本目录包含 Electron 主进程和系统能力相关代码，是桌宠行为的核心目录。
 
 ## 关键文件
 
-| 文件 | 作用 | 常见修改场景 |
-| --- | --- | --- |
-| `main.cjs` | 主进程核心逻辑 | 窗口创建、动作状态、菜单、悬停面板、拖拽、贴靠、行走、状态值、自启动 |
-| `preload.cjs` | 安全暴露 IPC API 给渲染层 | 新增或调整 `window.desktopPet` 方法 |
-| `pet-variants.cjs` | 宠物变体、动作 ID、渠道配置 | 新增变体、调整默认缩放、开关自启动或窗口漫游 |
-| `walk-clock.cjs` | 行走循环暂停/恢复计时 | 修改行走倒计时或暂停恢复规则 |
-| `window-surfaces.ps1` | Windows 窗口候选列表探测 | 修复窗口贴靠/漫游候选问题 |
-| `window-from-point.ps1` | 根据屏幕点查找窗口 | 修复拖拽吸附命中问题 |
+| 文件 | 作用 |
+| --- | --- |
+| `main.cjs` | 主进程核心逻辑，负责窗口、状态、动作、菜单、拖拽、贴靠、行走和自启动 |
+| `preload.cjs` | 安全暴露 IPC API 给渲染层 |
+| `pet-variants.cjs` | 宠物变体、动作 ID、渠道配置和打包 profile |
+| `walk-clock.cjs` | 行走循环暂停/恢复计时 |
+| `window-surfaces.ps1` | Windows 窗口候选列表探测 |
+| `window-from-point.ps1` | 根据屏幕点查找窗口 |
 
 ## 主进程功能域
 
@@ -50,15 +50,17 @@
 - `PET_CHANNEL_PROFILES`
 - `getVariantAnimationFolders`
 - `getVariantManifestName`
+- `getWindowsBuildProfile`
 
 然后同步：
 
 - `../../assets/animations` 下的资源目录和 manifest。
-- `../prepare-runtime-assets.ps1`。
+- `../prepare-runtime-assets.cjs`。
 - `../build-electron-win.ps1`。
 - `../build-installer-win.ps1`。
+- `../build-installer-mac.cjs`，如果变体支持 macOS。
 - `../test/pet-variants.test.cjs`。
-- `../../docs/PROJECT_MAP.md` 和 `../../docs/AI_GUIDE.md`。
+- `../../docs/PROJECT_MAP.md`。
 
 ## 验证
 
