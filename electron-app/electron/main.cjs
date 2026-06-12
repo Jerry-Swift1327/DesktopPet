@@ -17,6 +17,9 @@ const {
   getPetUserDataFolder,
   getPetPlatformFeatures
 } = require("./pet-variants.cjs");
+const {
+  isLikelyDesktopOrSystemWindow
+} = require("./window-surface-filter.cjs");
 
 const APP_INTERNAL_NAME = "Chongban";
 const APP_DISPLAY_NAME = "宠伴";
@@ -87,20 +90,6 @@ const WINDOW_DOCK_COARSE_CORRECTION_LIMIT = 28;
 const WINDOW_DOCK_FINE_CORRECTION_LIMIT = 2;
 const WINDOW_DOCK_DRAG_RELEASE_BUDGET_MS = 120;
 const WINDOW_DOCK_DEBUG = true;
-const WINDOW_DOCK_EXCLUDED_CLASSES = new Set([
-  "Progman",
-  "WorkerW",
-  "Shell_TrayWnd",
-  "Shell_SecondaryTrayWnd",
-  "Windows.UI.Core.CoreWindow",
-  "XamlExplorerHostIslandWindow",
-  "Shell_InputSwitchTopLevelWindow",
-  "ApplicationFrameWindow"
-]);
-const WINDOW_DOCK_EXCLUDED_TITLES = new Set([
-  "program manager",
-  "desktopwindowxamlsource"
-]);
 const STARTUP_BUBBLE_DEFAULT_WIDTH = 238;
 const STARTUP_BUBBLE_MIN_WIDTH = 150;
 const STARTUP_BUBBLE_MAX_WIDTH = 320;
@@ -1677,26 +1666,6 @@ function isValidRect(rect) {
     && Number.isFinite(rect.bottom)
     && rect.right > rect.left
     && rect.bottom > rect.top;
-}
-
-function isLikelyDesktopOrSystemWindow(item, rect, area) {
-  const className = String(item.className || "").trim();
-  const processName = String(item.processName || "").trim().toLowerCase();
-  const title = String(item.title || "").trim().toLowerCase();
-  const coversDisplay = rect.left <= area.x + 2
-    && rect.top <= area.y + 2
-    && rect.right >= area.x + area.width - 2
-    && rect.bottom >= area.y + area.height - 2;
-  if (WINDOW_DOCK_EXCLUDED_CLASSES.has(className)) {
-    return true;
-  }
-  if (WINDOW_DOCK_EXCLUDED_TITLES.has(title)) {
-    return true;
-  }
-  if (processName === "dwm") {
-    return true;
-  }
-  return coversDisplay && rect.top <= area.y + 2;
 }
 
 function isWindowTopDockable(rect, area) {
