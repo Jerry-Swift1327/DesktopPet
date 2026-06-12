@@ -459,6 +459,7 @@ const statsFile = path.join(userDataRoot, "pet-stats.json");
 const autoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
 const windowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
 const eyeTrackingPreferenceFile = path.join(userDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
+const scalePreferenceFile = path.join(userDataRoot, `scale-${petRuntimeConfig.variant}.json`);
 const logDir = path.join(userDataRoot, "logs");
 const logFile = path.join(logDir, "main.log");
 const visibleBoundsCache = new Map();
@@ -703,6 +704,30 @@ function buildEyeTrackingSummary(error = "") {
     canToggle: canToggleEyeTracking(),
     error
   };
+}
+
+function readPetScalePreference() {
+  if (!fs.existsSync(scalePreferenceFile)) {
+    return;
+  }
+
+  try {
+    const preference = JSON.parse(fs.readFileSync(scalePreferenceFile, "utf8"));
+    if (Number.isFinite(preference.scale)) {
+      preferredPetScale = clampPetScale(preference.scale);
+      petScale = preferredPetScale;
+    }
+  } catch (error) {
+    log(`failed to read scale preference: ${error.stack || error.message}`);
+  }
+}
+
+function writePetScalePreference() {
+  try {
+    fs.writeFileSync(scalePreferenceFile, JSON.stringify({ scale: preferredPetScale }, null, 2), "utf8");
+  } catch (error) {
+    log(`failed to write scale preference: ${error.stack || error.message}`);
+  }
 }
 
 function buildMenuFeatures() {
@@ -4985,6 +5010,7 @@ function setPetScale(nextScale) {
     return;
   }
   preferredPetScale = clampPetScale(nextScale);
+  writePetScalePreference();
   const previousScale = petScale;
   const clampedScale = clampPetScale(nextScale);
   if (Math.abs(previousScale - clampedScale) < 0.001) {
@@ -6522,6 +6548,7 @@ if (!gotSingleInstanceLock) {
     readAutoStartPreference();
     readWindowRoamPreference();
     readEyeTrackingPreference();
+    readPetScalePreference();
     rememberHomeDisplay();
     createPetWindow();
     refreshAutoStartCacheAsync();
