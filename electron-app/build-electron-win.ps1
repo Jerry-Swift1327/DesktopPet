@@ -22,6 +22,7 @@ $resourcesDir = Join-Path $outDir "resources"
 $appDir = Join-Path $resourcesDir "app"
 $assetsOut = Join-Path $resourcesDir "assets"
 $assetsRoot = Join-Path $projectRoot "assets"
+$soundsOut = Join-Path $assetsOut "sounds"
 $displayName = [string]::Concat([char]0x5BA0, [char]0x4F34)
 $appVersion = "1.0.0"
 $internalName = "Chongban"
@@ -170,6 +171,12 @@ $manifestName = "${animationPrefix}_actions_manifest.json"
 $manifest = Join-Path $assetsRoot "animations\$manifestName"
 if (Test-Path $manifest) {
   Copy-Item -LiteralPath $manifest -Destination (Join-Path $assetsOut "animations\$manifestName") -Force
+}
+
+$variantSounds = Join-Path $assetsRoot "sounds\$PetVariant"
+if (Test-Path $variantSounds) {
+  New-Item -ItemType Directory -Force -Path $soundsOut | Out-Null
+  Copy-Item -LiteralPath $variantSounds -Destination (Join-Path $soundsOut $PetVariant) -Recurse -Force
 }
 
 Write-Host "Built Electron portable app:"

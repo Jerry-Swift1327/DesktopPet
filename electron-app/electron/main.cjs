@@ -2559,6 +2559,23 @@ function listEyeTrackingFrames() {
   return frames;
 }
 
+function listSquatSounds() {
+  if (petRuntimeConfig.variant !== "tabby") {
+    return [];
+  }
+
+  const folder = path.join(getAssetsRoot(), "sounds", "tabby");
+  if (!fs.existsSync(folder)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(folder)
+    .filter((name) => /^cat_(?:meow|purr)_.*\.mp3$/i.test(name))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
+    .map((name) => toFileUrl(path.join(folder, name)));
+}
+
 function readMetadata(relativePath) {
   const fullPath = path.join(getAssetsRoot(), relativePath);
   if (!fs.existsSync(fullPath)) {
@@ -2646,6 +2663,7 @@ function buildPetConfig() {
     windowRoam: buildWindowRoamSummary(),
     eyeTracking: buildEyeTrackingSummary(),
     eyeTrackingFrames: listEyeTrackingFrames(),
+    squatSounds: listSquatSounds(),
     actionIds: petRuntimeConfig.actions,
     actionOrder,
     channelConfig: petRuntimeConfig.channelConfig,

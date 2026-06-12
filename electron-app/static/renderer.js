@@ -64,6 +64,8 @@ async function renderPetWindow() {
   let targetEyeLook = "off";
   let currentEyeLook = "off";
   let lastEyeLookStepAt = 0;
+  let squatSound = null;
+  const squatSounds = Array.isArray(config.squatSounds) ? config.squatSounds : [];
 
   function getStateFrameSequence(state) {
     if (!state) {
@@ -238,6 +240,24 @@ async function renderPetWindow() {
 
   function getState() {
     return config.states.find((state) => state.id === activeState) || config.states[0];
+  }
+
+  function stopSquatSound() {
+    if (!squatSound) {
+      return;
+    }
+    squatSound.pause();
+    squatSound.currentTime = 0;
+    squatSound = null;
+  }
+
+  function maybePlaySquatSound(previousState, nextState) {
+    if (nextState !== config.defaultState || previousState === nextState || squatSounds.length === 0 || Math.random() >= 0.25) {
+      return;
+    }
+    stopSquatSound();
+    squatSound = new Audio(squatSounds[Math.floor(Math.random() * squatSounds.length)]);
+    squatSound.play().catch(() => {});
   }
 
   function getNextEyeLook(current, target) {
@@ -446,7 +466,13 @@ async function renderPetWindow() {
   }
 
   window.desktopPet.onStateChanged((state) => {
+    const previousState = activeState;
     activeState = state;
+    if (state !== config.defaultState) {
+      stopSquatSound();
+    } else {
+      maybePlaySquatSound(previousState, state);
+    }
     frameStep = 0;
     completedOneShotState = "";
     animationEpoch += 1;
