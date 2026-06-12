@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("dog", "cat", "shorthair", "tabby", "brit")]
+  [ValidateSet("dog", "cat", "shorthair", "tabby", "brit", "pomeranian")]
   [string]$PetVariant = "dog"
 )
 
@@ -11,7 +11,13 @@ $electronDist = Join-Path $appRoot "node_modules\electron\dist"
 $electronExe = Join-Path $electronDist "electron.exe"
 $appIcon = Join-Path $projectRoot "app_icon.ico"
 $rceditExe = Join-Path $appRoot "node_modules\rcedit\bin\rcedit-x64.exe"
-$releaseOutput = if ($PetVariant -in @("tabby", "brit")) { "deliverables/custom/cat/$PetVariant/release" } elseif ($PetVariant -eq "dog") { "release" } else { "${PetVariant}_release" }
+$petVariantsModule = (Join-Path $appRoot "electron\pet-variants.cjs") -replace '\\', '/'
+$buildProfileJson = & node -e "const { getWindowsBuildProfile } = require(process.argv[1]); process.stdout.write(JSON.stringify(getWindowsBuildProfile(process.argv[2], 'release')));" $petVariantsModule $PetVariant
+if ($LASTEXITCODE -ne 0) {
+  throw "Could not read Windows build profile for $PetVariant."
+}
+$buildProfile = $buildProfileJson | ConvertFrom-Json
+$releaseOutput = $buildProfile.output
 $releaseRoot = Join-Path $appRoot ($releaseOutput -replace '/', '\')
 $outDir = Join-Path $releaseRoot "Chongban-win32-x64"
 $legacyOutDirs = @(
@@ -26,7 +32,7 @@ $soundsOut = Join-Path $assetsOut "sounds"
 $displayName = [string]::Concat([char]0x5BA0, [char]0x4F34)
 $appVersion = "1.0.0"
 $internalName = "Chongban"
-$exeDisplayName = "$displayName 1.0"
+$exeDisplayName = "$displayName $($buildProfile.deliveryVersion)"
 $releasedExeName = "$exeDisplayName.exe"
 $reuseExistingRuntime = $false
 
@@ -145,11 +151,7 @@ if (Test-Path $assetsOut) {
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $assetsOut "animations") | Out-Null
 
-$animationPrefix = $PetVariant
-$animationFolders = @("${animationPrefix}_ball", "${animationPrefix}_feed", "${animationPrefix}_squat", "${animationPrefix}_walk")
-if ($PetVariant -eq "tabby") {
-  $animationFolders += @("${animationPrefix}_lie", "${animationPrefix}_lick", "${animationPrefix}_belly", "${animationPrefix}_stretch", "${animationPrefix}_look")
-}
+$animationFolders = @($buildProfile.animationFolders)
 foreach ($folder in $animationFolders) {
   $source = Join-Path $assetsRoot "animations\$folder"
   $target = Join-Path $assetsOut "animations\$folder"
@@ -167,7 +169,7 @@ foreach ($folder in $animationFolders) {
   }
 }
 
-$manifestName = "${animationPrefix}_actions_manifest.json"
+$manifestName = $buildProfile.manifestName
 $manifest = Join-Path $assetsRoot "animations\$manifestName"
 if (Test-Path $manifest) {
   Copy-Item -LiteralPath $manifest -Destination (Join-Path $assetsOut "animations\$manifestName") -Force

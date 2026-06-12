@@ -6,10 +6,12 @@ const {
   normalizePetVariant,
   normalizePetChannel,
   buildPetRuntimeConfig,
+  getPetVariantProfile,
   getPetUserDataFolder,
   getPetPlatformFeatures,
   getVariantAnimationFolders,
-  getVariantManifestName
+  getVariantManifestName,
+  getWindowsBuildProfile
 } = require("../electron/pet-variants.cjs");
 
 test("pet runtime config defaults to dog release", () => {
@@ -104,6 +106,24 @@ test("pomeranian variant uses release and installer channels", () => {
   assert.equal(installerConfig.animationPrefix, "pomeranian");
   assert.equal(installerConfig.channelConfig.showDebugTimers, false);
   assert.equal(installerConfig.channelConfig.hoverPanelHeight, 150);
+});
+
+test("variant metadata describes delivery and supported platforms", () => {
+  assert.deepEqual(getPetVariantProfile("cat").platforms, ["win32", "darwin"]);
+  assert.deepEqual(getPetVariantProfile("shorthair").deliveryPathSegments, ["custom", "cat", "bsh", "blue-fold"]);
+  assert.deepEqual(getPetVariantProfile("brit").deliveryPathSegments, ["custom", "cat", "bsh", "blue-bicolor"]);
+  assert.deepEqual(getPetVariantProfile("tabby").actions, ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
+  assert.deepEqual(getPetVariantProfile("pomeranian").platforms, ["darwin"]);
+});
+
+test("Windows build profile centralizes paths and package names", () => {
+  assert.equal(getWindowsBuildProfile("dog", "release").output, "deliverables/internal/dog/release");
+  assert.equal(getWindowsBuildProfile("cat", "installer").output, "deliverables/internal/cat/installer");
+  assert.equal(getWindowsBuildProfile("cat", "installer").deliveryVersion, "2.0");
+  assert.equal(getWindowsBuildProfile("brit", "installer").output, "deliverables/custom/cat/bsh/blue-bicolor/installer");
+  assert.equal(getWindowsBuildProfile("shorthair", "release").output, "deliverables/custom/cat/bsh/blue-fold/release");
+  assert.equal(getWindowsBuildProfile("tabby", "release").deliveryVersion, "1.0");
+  assert.throws(() => getWindowsBuildProfile("pomeranian", "installer"), /does not support Windows packaging/);
 });
 
 test("invalid variant and channel fall back to defaults", () => {
