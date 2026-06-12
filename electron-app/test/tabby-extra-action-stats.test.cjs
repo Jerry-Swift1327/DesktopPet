@@ -11,10 +11,12 @@ test("tabby extra one-shot actions settle stats after playback", () => {
   assert.match(delayBody, /STATE_LIE/);
   assert.match(delayBody, /STATE_LICK/);
   assert.match(delayBody, /STATE_BELLY/);
+  assert.match(delayBody, /STATE_STRETCH/);
 });
 
 test("tabby extra actions update hover panel stats", () => {
   assert.match(mainSource, /stateId === STATE_LIE[\s\S]*petStats\.health/);
   assert.match(mainSource, /stateId === STATE_LICK[\s\S]*petStats\.health/);
   assert.match(mainSource, /stateId === STATE_BELLY[\s\S]*petStats\.fullness/);
+  assert.match(mainSource, /stateId === STATE_STRETCH[\s\S]*petStats\.health[\s\S]*petStats\.fullness/);
 });

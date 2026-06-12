@@ -10,11 +10,12 @@ const PET_ACTIONS = Object.freeze({
   ball: Object.freeze({ id: "petBall", asset: "ball" }),
   lie: Object.freeze({ id: "petLie", asset: "lie" }),
   lick: Object.freeze({ id: "petLick", asset: "lick" }),
-  belly: Object.freeze({ id: "petBelly", asset: "belly" })
+  belly: Object.freeze({ id: "petBelly", asset: "belly" }),
+  stretch: Object.freeze({ id: "petStretch", asset: "stretch" })
 });
 
 const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
-const TABBY_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly"]);
+const TABBY_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
 const PET_VARIANT_ACTION_ORDERS = Object.freeze({
   tabby: TABBY_ACTION_ORDER
 });
