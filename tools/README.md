@@ -1,6 +1,6 @@
 # Tools
 
-本目录存放宠物动作资源处理脚本，主要用于从视频生成透明运行帧、替换动作视频、生成画质对比预览。
+本目录存放宠物动作资源处理脚本，用于从视频生成透明运行帧、替换动作视频和生成画质对比预览。
 
 ## 环境依赖
 
@@ -15,19 +15,19 @@
 1. 命令参数 `--ffmpeg`
 2. 环境变量 `FFMPEG_PATH`
 3. 系统 `PATH`
-4. 脚本中保留的本机剪映 ffmpeg 路径
+4. 脚本中保留的本机兜底路径
 
 ## 脚本说明
 
-| 文件 | 作用 | 常见修改场景 |
-| --- | --- | --- |
-| `process_pet_videos.py` | 批量抽帧、绿幕抠像、归一化尺寸、寻找循环段、写 manifest | 调整抠像参数、批量处理默认动作 |
-| `replace_action_video.py` | 替换单个动作视频，生成 2x 透明帧并更新 `loop.json`/manifest | 新动作素材上线、手动选择循环段 |
-| `build_quality_previews.py` | 生成当前帧、候选帧和并排对比预览视频 | 上线前检查画质和动作循环 |
+| 文件 | 作用 |
+| --- | --- |
+| `process_pet_videos.py` | 批量抽帧、绿幕抠像、归一化尺寸、寻找循环段、写 manifest |
+| `replace_action_video.py` | 替换单个动作视频，生成 2x 透明帧并更新 `loop.json`/manifest |
+| `build_quality_previews.py` | 生成当前帧、候选帧和并排对比预览视频 |
 
 ## process_pet_videos.py
 
-用途：从动作目录内的视频批量生成 `raw_frames`、`transparent_frames`、`loop.json`，并写入默认狗狗 manifest。
+用途：从动作目录内的视频批量生成 `raw_frames`、`transparent_frames`、`loop.json`，并写入 manifest。
 
 示例：
 
@@ -42,8 +42,6 @@ python tools\process_pet_videos.py --actions dog_ball dog_feed dog_squat dog_wal
 | `--actions` | 指定要处理的动作目录 |
 | `--ffmpeg` | 指定 ffmpeg 路径 |
 | `--fps` | 抽帧帧率，默认 `100/3` |
-
-注意：脚本内默认 `ACTIONS` 和输出 manifest 目前偏向狗狗动作。处理其他变体时需显式传入 `--actions`，并确认 manifest 是否需要手动调整或改脚本。
 
 ## replace_action_video.py
 
@@ -94,10 +92,10 @@ python tools\build_quality_previews.py --actions dog_walk --clean
 3. 使用 `build_quality_previews.py` 生成预览。
 4. 启动 Electron 应用检查动作播放、循环和落地点。
 5. 确认后删除不需要的中间产物。
-6. 更新 `assets/animations/README.md` 中的资源状态。
+6. 更新 `assets/animations/README.md` 中的资源说明。
 
 ## 修改注意
 
 - 脚本会写入资源目录，运行前确认目标 `--action` 和 `--manifest`。
 - 不要把 `__pycache__` 当作源码。
-- 修改脚本参数或默认行为后，同步更新本 README、`../assets/animations/README.md` 和 `../docs/AI_GUIDE.md`。
+- 修改脚本参数或默认行为后，同步更新本 README、`../assets/animations/README.md` 和 `../docs/PROJECT_MAP.md`。

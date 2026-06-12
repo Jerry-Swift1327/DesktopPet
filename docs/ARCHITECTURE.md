@@ -31,7 +31,7 @@ electron-app/package.json
 - Windows 自启动偏好和注册表写入。
 - IPC 事件处理。
 
-如果要降低未来维护成本，可考虑在后续独立需求中逐步拆分 `main.cjs`，但当前文档优化不改动业务结构。
+如果要降低未来维护成本，可考虑在独立需求中逐步拆分 `main.cjs`。
 
 ## 渲染层职责
 
@@ -58,11 +58,14 @@ electron-app/package.json
 
 变体配置集中在 `electron-app/electron/pet-variants.cjs`：
 
-| 变体 | 动画前缀 | 默认缩放 | 自启动 | 窗口漫游 |
-| --- | --- | --- | --- | --- |
-| `dog` | `dog` | `1.1` | 支持 | 支持 |
-| `cat` | `cat` | `1` | 支持 | 支持 |
-| `shorthair` | `shorthair` | `1.1` | 不支持 | 不支持 |
+| 变体 | 动画前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
+| --- | --- | --- | --- | --- | --- |
+| `dog` | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `cat` | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `shorthair` | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
+| `tabby` | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `brit` | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pomeranian` | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
 
 渠道配置：
 
@@ -106,7 +109,7 @@ macOS 适配建议分阶段推进：
 
 1. 基础运行版：启动、透明窗口、动画播放、拖拽、右键菜单、悬停面板、气泡、缩放和退出。
 2. 系统能力版：窗口枚举、窗口吸附/跟随、Dock 避让、自启动、权限申请。
-3. 交付能力版：`.app/.dmg` 打包、签名、公证、Gatekeeper 和客户机器冒烟测试。
+3. 分发能力版：`.app/.dmg` 打包、签名、公证、Gatekeeper 和目标机器冒烟测试。
 
 ## 状态数据
 
