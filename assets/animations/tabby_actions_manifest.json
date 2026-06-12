@@ -19,19 +19,20 @@
   {
     "action": "tabby_walk",
     "video": "tabby_walk.mp4",
-    "frameCount": 86,
+    "frameCount": 125,
     "frameMs": 30,
     "loopStart": 0,
-    "loopEnd": 85,
-    "sourceLoopStart": 65,
-    "sourceLoopEnd": 150,
+    "loopEnd": 124,
+    "sourceLoopStart": 23,
+    "sourceLoopEnd": 147,
+    "sourceFrameCount": 167,
     "sourceFrameSize": 128,
     "frameSize": 256,
     "qualityProfile": "enhanced_2x_conservative",
-    "score": 0.040785,
+    "score": 0.012214,
     "loopSelection": "long",
-    "qualityScore": 0.021508,
-    "targetLength": 166
+    "qualityScore": 0.011589,
+    "targetLength": 120
   },
   {
     "action": "tabby_feed",
