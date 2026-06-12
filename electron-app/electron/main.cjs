@@ -205,6 +205,9 @@ const INTERACTION_INTIMACY_GAIN_MIN = 5;
 const INTERACTION_INTIMACY_GAIN_MAX = 10;
 const FEED_FULLNESS_GAIN_MIN = 10;
 const FEED_FULLNESS_GAIN_MAX = 15;
+const LIE_HEALTH_GAIN = 2;
+const LICK_HEALTH_GAIN = 1;
+const BELLY_FULLNESS_COST = 1;
 const HEALTH_RECOVERY_THRESHOLD = 80;
 const HUNGER_WARNING_THRESHOLD = 44;
 const HUNGER_CRITICAL_THRESHOLD = 24;
@@ -2442,6 +2445,15 @@ function applyActionStats(stateId) {
   if (stateId === STATE_FEED) {
     petStats.fullness = clampStat(petStats.fullness + randomStatDelta(FEED_FULLNESS_GAIN_MIN, FEED_FULLNESS_GAIN_MAX));
   }
+  if (stateId === STATE_LIE) {
+    petStats.health = clampStat(petStats.health + LIE_HEALTH_GAIN);
+  }
+  if (stateId === STATE_LICK) {
+    petStats.health = clampStat(petStats.health + LICK_HEALTH_GAIN);
+  }
+  if (stateId === STATE_BELLY) {
+    petStats.fullness = clampStat(petStats.fullness - BELLY_FULLNESS_COST);
+  }
 
   const messages = [];
   if (stateId === STATE_FEED && petStats.fullness >= FULL_PROMPT_THRESHOLD && !petStats.fullPrompted) {
@@ -2456,7 +2468,7 @@ function applyActionStats(stateId) {
 }
 
 function shouldDelayActionStats(stateId) {
-  return stateId === STATE_FEED || stateId === STATE_BALL;
+  return stateId === STATE_FEED || stateId === STATE_BALL || stateId === STATE_LIE || stateId === STATE_LICK || stateId === STATE_BELLY;
 }
 
 function showStatMessages(messages) {
