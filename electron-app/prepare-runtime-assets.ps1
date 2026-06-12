@@ -14,7 +14,7 @@ $runtimeRoot = Join-Path $appRoot ".runtime-assets"
 $runtimeAnimations = Join-Path $runtimeRoot "animations"
 $animationFolders = @("${PetVariant}_squat", "${PetVariant}_walk", "${PetVariant}_feed", "${PetVariant}_ball")
 if ($PetVariant -eq "tabby") {
-  $animationFolders += @("${PetVariant}_lie", "${PetVariant}_lick", "${PetVariant}_belly", "${PetVariant}_look")
+  $animationFolders += @("${PetVariant}_lie", "${PetVariant}_lick", "${PetVariant}_belly", "${PetVariant}_stretch", "${PetVariant}_look")
 }
 $variantConfigPath = Join-Path $runtimeRoot "pet_variant.json"
 

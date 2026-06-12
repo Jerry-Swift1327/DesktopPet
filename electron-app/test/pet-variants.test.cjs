@@ -26,7 +26,8 @@ test("pet runtime config defaults to dog release", () => {
     ball: "petBall",
     lie: "petLie",
     lick: "petLick",
-    belly: "petBelly"
+    belly: "petBelly",
+    stretch: "petStretch"
   });
   assert.deepEqual(config.actionOrder, ["petSquat", "petWalk", "petFeed", "petBall"]);
   assert.equal(config.channelConfig.showDebugTimers, true);
@@ -65,7 +66,8 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
     "petBall",
     "petLie",
     "petLick",
-    "petBelly"
+    "petBelly",
+    "petStretch"
   ]);
   assert.equal(tabbyConfig.channelConfig.hoverPanelHeight, 225);
   assert.equal(britConfig.features.autoStart, true);
@@ -170,6 +172,7 @@ test("variant assets follow the existing animation folder convention", () => {
     "tabby_lie",
     "tabby_lick",
     "tabby_belly",
+    "tabby_stretch",
     "tabby_look"
   ]);
   assert.deepEqual(getVariantAnimationFolders("brit"), [

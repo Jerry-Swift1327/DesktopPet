@@ -63,6 +63,7 @@ const STATE_BALL = petActionIds.ball;
 const STATE_LIE = petActionIds.lie;
 const STATE_LICK = petActionIds.lick;
 const STATE_BELLY = petActionIds.belly;
+const STATE_STRETCH = petActionIds.stretch;
 
 const BASE_PET_WINDOW_WIDTH = 180;
 const BASE_PET_WINDOW_HEIGHT = 180;
@@ -208,6 +209,8 @@ const FEED_FULLNESS_GAIN_MAX = 15;
 const LIE_HEALTH_GAIN = 2;
 const LICK_HEALTH_GAIN = 1;
 const BELLY_FULLNESS_COST = 1;
+const STRETCH_HEALTH_GAIN = 2;
+const STRETCH_FULLNESS_COST = 1;
 const HEALTH_RECOVERY_THRESHOLD = 80;
 const HUNGER_WARNING_THRESHOLD = 44;
 const HUNGER_CRITICAL_THRESHOLD = 24;
@@ -224,7 +227,7 @@ const DAILY_DECAY_FULLNESS = 0;
 const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY, STATE_STRETCH]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const sharedGreetings = [
@@ -353,7 +356,8 @@ const states = [
 states.push(
   { id: STATE_LIE, label: "趴下", folder: getActionFrameFolder("lie"), metadata: getActionMetadataPath("lie"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_LICK, label: "舔爪", folder: getActionFrameFolder("lick"), metadata: getActionMetadataPath("lick"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_BELLY, label: "翻肚", folder: getActionFrameFolder("belly"), metadata: getActionMetadataPath("belly"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
+  { id: STATE_BELLY, label: "翻肚", folder: getActionFrameFolder("belly"), metadata: getActionMetadataPath("belly"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_STRETCH, label: "伸展", folder: getActionFrameFolder("stretch"), metadata: getActionMetadataPath("stretch"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
 );
 
 const statMessages = {
@@ -2479,6 +2483,10 @@ function applyActionStats(stateId) {
   if (stateId === STATE_BELLY) {
     petStats.fullness = clampStat(petStats.fullness - BELLY_FULLNESS_COST);
   }
+  if (stateId === STATE_STRETCH) {
+    petStats.health = clampStat(petStats.health + STRETCH_HEALTH_GAIN);
+    petStats.fullness = clampStat(petStats.fullness - STRETCH_FULLNESS_COST);
+  }
 
   const messages = [];
   if (stateId === STATE_FEED && petStats.fullness >= FULL_PROMPT_THRESHOLD && !petStats.fullPrompted) {
@@ -2493,7 +2501,7 @@ function applyActionStats(stateId) {
 }
 
 function shouldDelayActionStats(stateId) {
-  return stateId === STATE_FEED || stateId === STATE_BALL || stateId === STATE_LIE || stateId === STATE_LICK || stateId === STATE_BELLY;
+  return stateId === STATE_FEED || stateId === STATE_BALL || stateId === STATE_LIE || stateId === STATE_LICK || stateId === STATE_BELLY || stateId === STATE_STRETCH;
 }
 
 function showStatMessages(messages) {
