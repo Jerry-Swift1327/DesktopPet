@@ -54,7 +54,7 @@ async function renderPetWindow() {
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
   const EYE_LOOK_STEP_MS = 120;
-  const SQUAT_SOUND_CHANCE = 0.9;
+  const SQUAT_SOUND_CHANCE = 0.25;
   const eyeTrackingFrames = config.eyeTrackingFrames || {};
   const directionEyeLooks = Object.keys(eyeTrackingFrames)
     .filter((look) => /^frame_\d+$/.test(look))
