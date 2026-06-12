@@ -241,10 +241,6 @@ async function renderPetWindow() {
   }
 
   function getNextEyeLook(current, target) {
-    if (target === "center" || current === "center") {
-      return target;
-    }
-
     const currentIndex = EYE_LOOK_ORDER.indexOf(current);
     const targetIndex = EYE_LOOK_ORDER.indexOf(target);
     if (currentIndex < 0 || targetIndex < 0) {
@@ -265,7 +261,7 @@ async function renderPetWindow() {
 
     const now = performance.now();
     if (currentEyeLook === "off" || !eyeTrackingFrames[currentEyeLook]) {
-      currentEyeLook = eyeTrackingFrames.center ? "center" : targetEyeLook;
+      currentEyeLook = targetEyeLook;
     }
     if (currentEyeLook !== targetEyeLook && now - lastEyeLookStepAt >= EYE_LOOK_STEP_MS) {
       currentEyeLook = getNextEyeLook(currentEyeLook, targetEyeLook);

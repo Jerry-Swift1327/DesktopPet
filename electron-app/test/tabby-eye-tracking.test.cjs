@@ -15,7 +15,7 @@ test("tabby eye tracking uses 32 sampled direction frames", () => {
   assert.equal(frames.length, 32);
   assert.equal(frames[0], "frame_000.png");
   assert.equal(frames.at(-1), "frame_031.png");
-  assert.equal(fs.existsSync(path.join(framesDir, "tabby_look_center.png")), true);
+  assert.equal(fs.existsSync(path.join(framesDir, "tabby_look_center.png")), false);
   assert.equal(fs.existsSync(path.join(lookDir, "tabby_look.mp4")), true);
 });
 
