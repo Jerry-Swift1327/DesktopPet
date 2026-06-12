@@ -54,6 +54,7 @@ async function renderPetWindow() {
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
   const EYE_LOOK_STEP_MS = 120;
+  const SQUAT_SOUND_CHANCE = 0.9;
   const eyeTrackingFrames = config.eyeTrackingFrames || {};
   const directionEyeLooks = Object.keys(eyeTrackingFrames)
     .filter((look) => /^frame_\d+$/.test(look))
@@ -252,7 +253,7 @@ async function renderPetWindow() {
   }
 
   function maybePlaySquatSound(previousState, nextState) {
-    if (nextState !== config.defaultState || previousState === nextState || squatSounds.length === 0 || Math.random() >= 0.25) {
+    if (nextState !== config.defaultState || previousState === nextState || squatSounds.length === 0 || Math.random() >= SQUAT_SOUND_CHANCE) {
       return;
     }
     stopSquatSound();

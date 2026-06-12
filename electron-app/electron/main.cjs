@@ -31,6 +31,7 @@ app.commandLine.appendSwitch("disable-gpu-compositing");
 app.commandLine.appendSwitch("disable-gpu-sandbox");
 app.commandLine.appendSwitch("disable-software-rasterizer");
 app.commandLine.appendSwitch("disable-features", "VizDisplayCompositor");
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 const petRuntimeConfig = readPetRuntimeConfig();
 if (process.platform === "win32") {
