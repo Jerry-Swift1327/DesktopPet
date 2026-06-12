@@ -132,8 +132,6 @@ const WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS = 2500;
 const WINDOW_ROAM_POLL_INTERVAL_MS = 900;
 const WINDOW_ROAM_MAX_MISSING_TICKS = 2;
 const EYE_TRACKING_POLL_INTERVAL_MS = 100;
-const EYE_TRACKING_DEAD_ZONE_PX = 18;
-const EYE_TRACKING_LOOKS = Object.freeze(["center", "left", "right", "up", "down", "up-left", "up-right", "down-left", "down-right"]);
 const EYE_TRACKING_FRAME_NAME_PATTERN = /^frame_(\d+)\.png$/i;
 const DARWIN_DISPLAY_METRICS_SETTLE_MS = 300;
 // Panel positioning knobs. Change these first when tuning visual spacing.
@@ -1978,7 +1976,7 @@ function updateWindowRoamPolling() {
 }
 
 function sendEyeTrackingLook(look) {
-  const nextLook = look || "center";
+  const nextLook = look || "off";
   if (nextLook === lastEyeTrackingLook) {
     return;
   }
@@ -1988,24 +1986,15 @@ function sendEyeTrackingLook(look) {
 
 function getEyeTrackingLookForCursor(point) {
   const rect = getRenderedFrameHeadRectFromBounds(petWindow.getBounds()) || getRenderedFrameVisibleRect() || getVisiblePetRect();
-  if (!rect) {
-    return "center";
+  if (!rect || eyeTrackingLookFrameCount <= 0) {
+    return "off";
   }
 
   const dx = point.x - (rect.x + rect.width / 2);
   const dy = point.y - (rect.y + rect.height / 2);
-  if (Math.abs(dx) < EYE_TRACKING_DEAD_ZONE_PX && Math.abs(dy) < EYE_TRACKING_DEAD_ZONE_PX) {
-    return "center";
-  }
-  if (eyeTrackingLookFrameCount > 0) {
-    const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
-    const index = Math.round(((angle - Math.PI + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * eyeTrackingLookFrameCount) % eyeTrackingLookFrameCount;
-    return `frame_${String(index).padStart(3, "0")}`;
-  }
-
-  const horizontal = Math.abs(dx) >= EYE_TRACKING_DEAD_ZONE_PX ? (dx < 0 ? "left" : "right") : "";
-  const vertical = Math.abs(dy) >= EYE_TRACKING_DEAD_ZONE_PX ? (dy < 0 ? "up" : "down") : "";
-  return vertical && horizontal ? `${vertical}-${horizontal}` : vertical || horizontal || "center";
+  const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
+  const index = Math.round(((angle - Math.PI + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * eyeTrackingLookFrameCount) % eyeTrackingLookFrameCount;
+  return `frame_${String(index).padStart(3, "0")}`;
 }
 
 function tickEyeTracking() {
@@ -2556,13 +2545,7 @@ function listEyeTrackingFrames() {
     return {};
   }
 
-  const frames = EYE_TRACKING_LOOKS.reduce((result, look) => {
-    const filePath = path.join(folder, `${petAnimationPrefix}_look_${look}.png`);
-    if (fs.existsSync(filePath)) {
-      result[look] = toFileUrl(filePath);
-    }
-    return result;
-  }, {});
+  const frames = {};
   const directionFrames = fs
     .readdirSync(folder)
     .map((name) => name.match(EYE_TRACKING_FRAME_NAME_PATTERN))
