@@ -29,8 +29,10 @@ test("tabby eye tracking metadata matches sampled frames", () => {
   assert.equal(loop.directionFrameCount, 64);
   assert.equal(loop.sourceSampling, "visual-motion-even");
   assert.equal(loop.sourceStartPolicy, "tail-matched-first-frame");
+  assert.deepEqual(loop.sourceExcludedFrames, [0, 1, 2, 3, 4, 5]);
   assert.equal(loop.sourceFrames.length, 64);
   assert.equal(loop.sourceFrames[0], 167);
+  assert.ok(loop.sourceFrames.every((index) => index === 167 || index > 5));
   assert.deepEqual(entry, loop);
 });
 
