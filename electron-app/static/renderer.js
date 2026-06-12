@@ -54,8 +54,13 @@ async function renderPetWindow() {
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
   const EYE_LOOK_STEP_MS = 120;
-  const EYE_LOOK_ORDER = ["left", "up-left", "up", "up-right", "right", "down-right", "down", "down-left"];
   const eyeTrackingFrames = config.eyeTrackingFrames || {};
+  const directionEyeLooks = Object.keys(eyeTrackingFrames)
+    .filter((look) => /^frame_\d+$/.test(look))
+    .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
+  const EYE_LOOK_ORDER = directionEyeLooks.length > 0
+    ? directionEyeLooks
+    : ["left", "up-left", "up", "up-right", "right", "down-right", "down", "down-left"];
   let targetEyeLook = "off";
   let currentEyeLook = "off";
   let lastEyeLookStepAt = 0;

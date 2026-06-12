@@ -134,6 +134,7 @@ const WINDOW_ROAM_MAX_MISSING_TICKS = 2;
 const EYE_TRACKING_POLL_INTERVAL_MS = 100;
 const EYE_TRACKING_DEAD_ZONE_PX = 18;
 const EYE_TRACKING_LOOKS = Object.freeze(["center", "left", "right", "up", "down", "up-left", "up-right", "down-left", "down-right"]);
+const EYE_TRACKING_FRAME_NAME_PATTERN = /^frame_(\d+)\.png$/i;
 const DARWIN_DISPLAY_METRICS_SETTLE_MS = 300;
 // Panel positioning knobs. Change these first when tuning visual spacing.
 const OVERLAY_BASE_GAP = 25; 
@@ -451,6 +452,7 @@ let windowRoamMissingTicks = 0;
 let eyeTrackingEnabledCache = false;
 let eyeTrackingPollTimer = null;
 let lastEyeTrackingLook = "off";
+let eyeTrackingLookFrameCount = 0;
 const statsFile = path.join(userDataRoot, "pet-stats.json");
 const autoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
 const windowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
@@ -1995,6 +1997,11 @@ function getEyeTrackingLookForCursor(point) {
   if (Math.abs(dx) < EYE_TRACKING_DEAD_ZONE_PX && Math.abs(dy) < EYE_TRACKING_DEAD_ZONE_PX) {
     return "center";
   }
+  if (eyeTrackingLookFrameCount > 0) {
+    const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
+    const index = Math.round(((angle - Math.PI + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * eyeTrackingLookFrameCount) % eyeTrackingLookFrameCount;
+    return `frame_${String(index).padStart(3, "0")}`;
+  }
 
   const horizontal = Math.abs(dx) >= EYE_TRACKING_DEAD_ZONE_PX ? (dx < 0 ? "left" : "right") : "";
   const vertical = Math.abs(dy) >= EYE_TRACKING_DEAD_ZONE_PX ? (dy < 0 ? "up" : "down") : "";
@@ -2539,21 +2546,34 @@ function listFramePaths(folder) {
 
 function listEyeTrackingFrames() {
   if (!canToggleEyeTracking()) {
+    eyeTrackingLookFrameCount = 0;
     return {};
   }
 
   const folder = path.join(getAssetsRoot(), "animations", `${petAnimationPrefix}_look`, "transparent_frames");
   if (!fs.existsSync(folder)) {
+    eyeTrackingLookFrameCount = 0;
     return {};
   }
 
-  return EYE_TRACKING_LOOKS.reduce((frames, look) => {
+  const frames = EYE_TRACKING_LOOKS.reduce((result, look) => {
     const filePath = path.join(folder, `${petAnimationPrefix}_look_${look}.png`);
     if (fs.existsSync(filePath)) {
-      frames[look] = toFileUrl(filePath);
+      result[look] = toFileUrl(filePath);
     }
-    return frames;
+    return result;
   }, {});
+  const directionFrames = fs
+    .readdirSync(folder)
+    .map((name) => name.match(EYE_TRACKING_FRAME_NAME_PATTERN))
+    .filter(Boolean)
+    .sort((a, b) => Number(a[1]) - Number(b[1]));
+  for (const match of directionFrames) {
+    const name = `frame_${String(Number(match[1])).padStart(3, "0")}`;
+    frames[name] = toFileUrl(path.join(folder, `${name}.png`));
+  }
+  eyeTrackingLookFrameCount = directionFrames.length;
+  return frames;
 }
 
 function readMetadata(relativePath) {
