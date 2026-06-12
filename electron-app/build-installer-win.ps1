@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("dog", "cat", "shorthair", "tabby", "brit")]
+  [ValidateSet("dog", "cat", "shorthair", "tabby", "brit", "pomeranian")]
   [string]$PetVariant = "dog"
 )
 
@@ -10,7 +10,13 @@ $packageJsonPath = Join-Path $appRoot "package.json"
 $rceditExe = Join-Path $appRoot "node_modules\rcedit\bin\rcedit-x64.exe"
 $appIcon = Join-Path $appRoot "build\app_icon.ico"
 $installerVariantInclude = Join-Path $appRoot "build\installer-variant.nsh"
-$installerOutput = if ($PetVariant -in @("tabby", "brit")) { "deliverables/custom/cat/$PetVariant/installer" } elseif ($PetVariant -eq "dog") { "installer" } else { "${PetVariant}_installer" }
+$petVariantsModule = (Join-Path $appRoot "electron\pet-variants.cjs") -replace '\\', '/'
+$buildProfileJson = & node -e "const { getWindowsBuildProfile } = require(process.argv[1]); process.stdout.write(JSON.stringify(getWindowsBuildProfile(process.argv[2], 'installer')));" $petVariantsModule $PetVariant
+if ($LASTEXITCODE -ne 0) {
+  throw "Could not read Windows build profile for $PetVariant."
+}
+$buildProfile = $buildProfileJson | ConvertFrom-Json
+$installerOutput = $buildProfile.output
 $installerRoot = Join-Path $appRoot ($installerOutput -replace '/', '\')
 $packagedOutputRelative = ".tmp/installer-prepackaged-$([guid]::NewGuid().ToString('N'))"
 $packagedRoot = Join-Path $appRoot ($packagedOutputRelative -replace '/', '\')
@@ -18,15 +24,8 @@ $unpackedRoot = Join-Path $packagedRoot "win-unpacked"
 $displayName = [string]::Concat([char]0x5BA0, [char]0x4F34)
 $appVersion = "1.0.0"
 $internalName = "Chongban"
-$variantIdentity = @{
-  dog = @{ suffix = "1.1"; guid = "9f5b91c8-e03a-58e9-a3bd-5ca74a95e2f1" }
-  cat = @{ suffix = "1.2"; guid = "0793c0d4-f31d-5e02-b7d8-23331f7f85b0" }
-  shorthair = @{ suffix = "1.3"; guid = "497f37d9-3152-5d4e-a62f-b41d7f247b1e" }
-  tabby = @{ suffix = "1.0"; guid = "521bbcee-864b-4f43-8854-25d0948a2b2c" }
-  brit = @{ suffix = "1.0"; guid = "c5230690-90c2-463f-992a-58f5f3cef2df" }
-}[$PetVariant]
-$exeDisplayName = "$displayName $($variantIdentity.suffix)"
-$installDirName = "$internalName $($variantIdentity.suffix)"
+$exeDisplayName = "$displayName $($buildProfile.deliveryVersion)"
+$installDirName = "$internalName $($buildProfile.deliveryVersion)"
 $unpackedExe = Join-Path $unpackedRoot "$exeDisplayName.exe"
 $builderCache = Join-Path $appRoot ".electron-builder-cache"
 $tmpRoot = Join-Path $appRoot ".tmp"
@@ -80,8 +79,8 @@ function Write-InstallerVariantInclude {
   $lines = @("!define PET_VARIANT `"$Variant`"")
   $lines += "!define PET_INSTALL_DIR_NAME `"$InstallDirName`""
   $lines += "!define PET_EXE_DISPLAY_NAME `"$exeDisplayName`""
-  if ($Variant -in @("dog", "cat", "tabby", "brit")) {
-    $lines += "!define PET_AUTO_START_REGISTRY_KEY `"ChongbanDesktopPet-$Variant`""
+  if ($buildProfile.autoStartAvailable) {
+    $lines += "!define PET_AUTO_START_REGISTRY_KEY `"$($buildProfile.autoStartRegistryKey)`""
     $lines += "!define PET_AUTO_START_AVAILABLE"
   }
 
@@ -95,7 +94,7 @@ function Get-InstallerPackageJson {
   )
 
   $package = $PackageJsonContent | ConvertFrom-Json
-  $package.build.appId = "com.chongban.desktoppet.$PetVariant"
+  $package.build.appId = $buildProfile.appId
   $package.build.productName = $exeDisplayName
   $package.build.executableName = $exeDisplayName
   $package.build.directories.output = $Output
@@ -103,7 +102,7 @@ function Get-InstallerPackageJson {
   $package.build.nsis.artifactName = "$exeDisplayName.`${ext}"
   $package.build.nsis.shortcutName = $exeDisplayName
   $package.build.nsis.uninstallDisplayName = $exeDisplayName
-  $package.build.nsis | Add-Member -NotePropertyName guid -NotePropertyValue $variantIdentity.guid -Force
+  $package.build.nsis | Add-Member -NotePropertyName guid -NotePropertyValue $buildProfile.installerGuid -Force
   return $package | ConvertTo-Json -Depth 20
 }
 

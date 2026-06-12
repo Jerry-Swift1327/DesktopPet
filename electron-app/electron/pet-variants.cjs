@@ -16,18 +16,19 @@ const PET_ACTIONS = Object.freeze({
 
 const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
 const TABBY_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
-const PET_VARIANT_ACTION_ORDERS = Object.freeze({
-  tabby: TABBY_ACTION_ORDER
-});
-const PET_VARIANT_EXTRA_ANIMATION_ASSETS = Object.freeze({
-  tabby: Object.freeze(["look"])
-});
 
 const PET_VARIANT_PROFILES = Object.freeze({
   dog: Object.freeze({
     id: "dog",
+    species: "dog",
+    audience: "internal",
+    platforms: Object.freeze(["win32", "darwin"]),
+    deliveryPathSegments: Object.freeze(["internal", "dog"]),
+    deliveryVersion: "1.0",
     animationPrefix: "dog",
+    actions: PET_ACTION_ORDER,
     defaultScale: 1.1,
+    installerGuid: "9f5b91c8-e03a-58e9-a3bd-5ca74a95e2f1",
     autoStartRegistryKey: "ChongbanDesktopPet-dog",
     singleInstanceKey: "com.chongban.desktoppet.dog",
     features: Object.freeze({
@@ -37,8 +38,15 @@ const PET_VARIANT_PROFILES = Object.freeze({
   }),
   cat: Object.freeze({
     id: "cat",
+    species: "cat",
+    audience: "internal",
+    platforms: Object.freeze(["win32", "darwin"]),
+    deliveryPathSegments: Object.freeze(["internal", "cat"]),
+    deliveryVersion: "2.0",
     animationPrefix: "cat",
+    actions: PET_ACTION_ORDER,
     defaultScale: 1,
+    installerGuid: "0793c0d4-f31d-5e02-b7d8-23331f7f85b0",
     autoStartRegistryKey: "ChongbanDesktopPet-cat",
     singleInstanceKey: "com.chongban.desktoppet.cat",
     features: Object.freeze({
@@ -48,8 +56,18 @@ const PET_VARIANT_PROFILES = Object.freeze({
   }),
   shorthair: Object.freeze({
     id: "shorthair",
+    species: "cat",
+    audience: "custom",
+    baseVariant: "cat",
+    breedGroup: "bsh",
+    coatPattern: "blue-fold",
+    platforms: Object.freeze(["win32"]),
+    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "blue-fold"]),
+    deliveryVersion: "1.0",
     animationPrefix: "shorthair",
+    actions: PET_ACTION_ORDER,
     defaultScale: 1.1,
+    installerGuid: "497f37d9-3152-5d4e-a62f-b41d7f247b1e",
     autoStartRegistryKey: "ChongbanDesktopPet-shorthair",
     singleInstanceKey: "com.chongban.desktoppet.shorthair",
     features: Object.freeze({
@@ -59,8 +77,18 @@ const PET_VARIANT_PROFILES = Object.freeze({
   }),
   tabby: Object.freeze({
     id: "tabby",
+    species: "cat",
+    audience: "custom",
+    baseVariant: "cat",
+    breedGroup: "tabby",
+    platforms: Object.freeze(["win32"]),
+    deliveryPathSegments: Object.freeze(["custom", "cat", "tabby"]),
+    deliveryVersion: "1.0",
     animationPrefix: "tabby",
+    actions: TABBY_ACTION_ORDER,
+    extraAnimationAssets: Object.freeze(["look"]),
     defaultScale: 1.1,
+    installerGuid: "521bbcee-864b-4f43-8854-25d0948a2b2c",
     autoStartRegistryKey: "ChongbanDesktopPet-tabby",
     singleInstanceKey: "com.chongban.desktoppet.tabby",
     features: Object.freeze({
@@ -71,8 +99,18 @@ const PET_VARIANT_PROFILES = Object.freeze({
   }),
   brit: Object.freeze({
     id: "brit",
+    species: "cat",
+    audience: "custom",
+    baseVariant: "cat",
+    breedGroup: "bsh",
+    coatPattern: "blue-bicolor",
+    platforms: Object.freeze(["win32"]),
+    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "blue-bicolor"]),
+    deliveryVersion: "1.0",
     animationPrefix: "brit",
+    actions: PET_ACTION_ORDER,
     defaultScale: 1.1,
+    installerGuid: "c5230690-90c2-463f-992a-58f5f3cef2df",
     autoStartRegistryKey: "ChongbanDesktopPet-brit",
     singleInstanceKey: "com.chongban.desktoppet.brit",
     features: Object.freeze({
@@ -82,7 +120,15 @@ const PET_VARIANT_PROFILES = Object.freeze({
   }),
   pomeranian: Object.freeze({
     id: "pomeranian",
+    species: "dog",
+    audience: "custom",
+    baseVariant: "dog",
+    breedGroup: "pomeranian",
+    platforms: Object.freeze(["darwin"]),
+    deliveryPathSegments: Object.freeze(["custom", "dog", "pomeranian"]),
+    deliveryVersion: "1.0",
     animationPrefix: "pomeranian",
+    actions: PET_ACTION_ORDER,
     defaultScale: 1.1,
     autoStartRegistryKey: "ChongbanDesktopPet-pomeranian",
     singleInstanceKey: "com.chongban.desktoppet.pomeranian",
@@ -134,7 +180,7 @@ function getPetActionIds() {
 }
 
 function getPetActionOrder(value) {
-  const order = PET_VARIANT_ACTION_ORDERS[normalizePetVariant(value)] || PET_ACTION_ORDER;
+  const order = getPetVariantProfile(value).actions || PET_ACTION_ORDER;
   return order.map((key) => PET_ACTIONS[key].id);
 }
 
@@ -187,10 +233,8 @@ function getPetPlatformFeatures(config = {}) {
 
 function getVariantAnimationFolders(value) {
   const profile = getPetVariantProfile(value);
-  const variant = normalizePetVariant(value);
-  const order = PET_VARIANT_ACTION_ORDERS[variant] || PET_ACTION_ORDER;
-  const extras = PET_VARIANT_EXTRA_ANIMATION_ASSETS[variant] || [];
-  return order
+  const extras = profile.extraAnimationAssets || [];
+  return (profile.actions || PET_ACTION_ORDER)
     .map((key) => PET_ACTIONS[key].asset)
     .concat(extras)
     .map((asset) => `${profile.animationPrefix}_${asset}`);
@@ -199,6 +243,27 @@ function getVariantAnimationFolders(value) {
 function getVariantManifestName(value) {
   const profile = getPetVariantProfile(value);
   return `${profile.animationPrefix}_actions_manifest.json`;
+}
+
+function getWindowsBuildProfile(value, channel) {
+  const variant = normalizePetVariant(value);
+  const channelId = normalizePetChannel(channel);
+  const profile = getPetVariantProfile(variant);
+  if (!profile.platforms.includes("win32")) {
+    throw new Error(`Pet variant ${variant} does not support Windows packaging.`);
+  }
+  return {
+    variant,
+    channel: channelId,
+    output: ["deliverables"].concat(profile.deliveryPathSegments, channelId).join("/"),
+    deliveryVersion: profile.deliveryVersion,
+    appId: profile.singleInstanceKey,
+    installerGuid: profile.installerGuid,
+    autoStartRegistryKey: profile.autoStartRegistryKey,
+    autoStartAvailable: Boolean(profile.features.autoStart),
+    animationFolders: getVariantAnimationFolders(variant),
+    manifestName: getVariantManifestName(variant)
+  };
 }
 
 module.exports = {
@@ -220,5 +285,6 @@ module.exports = {
   getPetUserDataFolder,
   getPetPlatformFeatures,
   getVariantAnimationFolders,
-  getVariantManifestName
+  getVariantManifestName,
+  getWindowsBuildProfile
 };
