@@ -1,4 +1,4 @@
-﻿# OS/editor noise
+# OS/editor noise
 .DS_Store
 Thumbs.db
 .idea/
@@ -68,5 +68,7 @@ electron-app/mac_installer/**/builder-debug.yml
 electron-app/mac_installer/**/*.app/
 electron-app/mac_installer/**/mac/
 
-# Resource replacement scratch output
+# Resource processing intermediate and regeneratable outputs
 assets/animations/*/_replacement_work/
+assets/animations/*/processed_frames/
+assets/animations/*/raw_frames/
