@@ -51,17 +51,17 @@
 示例：
 
 ```powershell
-# 处理 tabby 变体的 look 动作（自动检测亮度异常）
-python tools\process_pet_actions.py process --variant tabby --actions look --direction-count 64
+# 使用外部视频处理 tabby 变体的 look 动作
+python tools\process_pet_actions.py process --variant tabby --actions look --video path\to\look.mp4 --direction-count 64
 
-# 处理 dog 变体的全部动作
+# 使用动作目录内的视频处理 dog 变体（需要目录下有 .mp4 文件）
 python tools\process_pet_actions.py process --variant dog --actions squat walk feed ball
 
 # 只生成素材池，不选取循环
-python tools\process_pet_actions.py process --variant tabby --actions look --no-loop
+python tools\process_pet_actions.py process --variant tabby --actions look --video path\to\look.mp4 --no-loop
 
 # 手动指定排除前 6 帧
-python tools\process_pet_actions.py process --variant tabby --actions look --skip-frames 6 --direction-count 64
+python tools\process_pet_actions.py process --variant tabby --actions look --video path\to\look.mp4 --skip-frames 6 --direction-count 64
 ```
 
 常用参数：
@@ -70,6 +70,7 @@ python tools\process_pet_actions.py process --variant tabby --actions look --ski
 | --- | --- |
 | `--variant` | 宠物变体名，如 `tabby`、`dog`、`cat` |
 | `--actions` | 要处理的动作名列表（不含变体前缀） |
+| `--video` | 源视频路径。省略时从动作目录内查找 `.mp4` 文件 |
 | `--ffmpeg` | 指定 ffmpeg 路径 |
 | `--fps` | 抽帧帧率，默认 `100/3` |
 | `--no-loop` | 跳过循环选取，只生成素材池 |

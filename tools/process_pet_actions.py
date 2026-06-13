@@ -818,7 +818,13 @@ def process_action_core(
         if not video_path.exists():
             raise FileNotFoundError(f"Missing video: {video_path}")
     else:
-        video_path = find_video(action_dir)
+        try:
+            video_path = find_video(action_dir)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"No .mp4 found in {action_dir}. "
+                f"Use --video to specify an external video path."
+            )
 
     raw_dir = action_dir / "raw_frames"
     processed_dir = action_dir / "processed_frames"
@@ -974,6 +980,9 @@ def cmd_process(args: argparse.Namespace) -> None:
     # Derive manifest name from variant
     manifest_name = f"{args.variant}_actions_manifest.json"
 
+    # Resolve video path
+    video_path = Path(args.video) if args.video else None
+
     results = []
     for action in args.actions:
         action_name = f"{args.variant}_{action}"
@@ -981,6 +990,7 @@ def cmd_process(args: argparse.Namespace) -> None:
             action=action_name,
             ffmpeg=ffmpeg,
             fps=args.fps,
+            video_path=video_path,
             manifest_name=manifest_name,
             no_loop=args.no_loop,
             skip_frames=args.skip_frames,
@@ -1079,6 +1089,7 @@ def main() -> None:
     process_parser = subparsers.add_parser("process", help="Process actions for a pet variant.")
     process_parser.add_argument("--variant", required=True, help="Pet variant name, e.g. tabby, dog, cat.")
     process_parser.add_argument("--actions", nargs="*", default=["squat", "walk", "feed", "ball"], help="Action names to process (without variant prefix).")
+    process_parser.add_argument("--video", default=None, help="Source .mp4 path. If omitted, looks for <action>.mp4 inside the action directory.")
     add_common_args(process_parser)
 
     # replace subcommand
