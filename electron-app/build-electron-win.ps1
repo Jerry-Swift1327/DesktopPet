@@ -163,7 +163,7 @@ foreach ($folder in $animationFolders) {
   $loopMetadata = Join-Path $source "loop.json"
 
   if (!(Test-Path $transparentFrames)) {
-    throw "Missing transparent frames for $folder. Run tools\process_pet_videos.py first."
+    throw "Missing transparent frames for $folder. Run tools\process_pet_actions.py first."
   }
 
   New-Item -ItemType Directory -Force -Path $target | Out-Null

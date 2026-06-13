@@ -72,9 +72,10 @@ npm.cmd run pack:win
 
 | 文件 | 作用 |
 | --- | --- |
-| `tools/process_pet_videos.py` | 批量抽帧、绿幕抠像、统一尺寸、选择循环段、写 manifest |
-| `tools/replace_action_video.py` | 替换单个动作视频并生成透明帧 |
+| `tools/process_pet_actions.py` | 统一资源处理脚本：抽帧、抠像、增强、循环选取、方向采样 |
 | `tools/build_quality_previews.py` | 生成当前/候选/对比预览视频 |
+| `tools/process_pet_videos.py` | （已弃用）旧版批量处理脚本，功能已合并到 `process_pet_actions.py` |
+| `tools/replace_action_video.py` | （已弃用）旧版替换单个动作脚本，功能已合并到 `process_pet_actions.py` |
 
 ## 生成产物和本地目录
 
@@ -98,3 +99,5 @@ npm.cmd run pack:win
 - `quality_previews`
 - `tools/__pycache__`
 - `assets/animations/*/_replacement_work`
+- `assets/animations/*/processed_frames`
+- `assets/animations/*/raw_frames`

@@ -20,7 +20,7 @@ ACTIONS = ("dog_squat", "dog_walk", "dog_feed", "dog_ball")
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 
-from process_pet_videos import (  # noqa: E402
+from process_pet_actions import (  # noqa: E402
     chroma_key_green_image,
     clear_frame_dir,
     find_ffmpeg,
