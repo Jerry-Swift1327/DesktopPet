@@ -72,3 +72,4 @@ electron-app/mac_installer/**/mac/
 assets/animations/*/_replacement_work/
 assets/animations/*/processed_frames/
 assets/animations/*/raw_frames/
+assets/animations/*/*.mp4
