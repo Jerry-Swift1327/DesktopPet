@@ -5,6 +5,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if (-not $IsWindows) {
+  throw "Windows package must be built on Windows."
+}
+
 $appRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $appRoot
 $electronDist = Join-Path $appRoot "node_modules\electron\dist"

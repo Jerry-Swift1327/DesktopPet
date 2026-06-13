@@ -5,6 +5,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if (-not $IsWindows) {
+  throw "Windows package must be built on Windows."
+}
+
 $appRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $packageJsonPath = Join-Path $appRoot "package.json"
 $rceditExe = Join-Path $appRoot "node_modules\rcedit\bin\rcedit-x64.exe"

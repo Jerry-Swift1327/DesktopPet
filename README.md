@@ -84,7 +84,7 @@ npm install
 npm run installer:mac -- --pet-variant=pomeranian
 ```
 
-Windows 脚本可通过 `-PetVariant` 指定 `dog`、`cat`、`shorthair`、`tabby` 或 `brit`。macOS 打包说明见 `docs/MAC_BUILD.md`。
+Windows 打包脚本只能在 Windows 上执行，可通过 `-PetVariant` 指定 `dog`、`cat`、`shorthair`、`tabby` 或 `brit`。`PET_VARIANT` 本地启动调试不受打包平台限制。macOS 打包说明见 `docs/MAC_BUILD.md`。
 
 ## 安装和产物
 

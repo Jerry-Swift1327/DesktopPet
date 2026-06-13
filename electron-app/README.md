@@ -59,6 +59,8 @@ powershell -ExecutionPolicy Bypass -File build-electron-win.ps1 -PetVariant tabb
 powershell -ExecutionPolicy Bypass -File build-installer-win.ps1 -PetVariant brit
 ```
 
+Windows 打包脚本只能在 Windows 上执行；`PET_VARIANT` 本地启动调试不受打包平台限制。
+
 可选 Windows 变体：
 
 - `dog`

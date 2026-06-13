@@ -118,8 +118,9 @@ test("variant metadata describes delivery and supported platforms", () => {
 
 test("Windows build profile centralizes paths and package names", () => {
   assert.equal(getWindowsBuildProfile("dog", "release").output, "deliverables/internal/dog/release");
+  assert.equal(getWindowsBuildProfile("dog", "release").deliveryVersion, "1.1");
   assert.equal(getWindowsBuildProfile("cat", "installer").output, "deliverables/internal/cat/installer");
-  assert.equal(getWindowsBuildProfile("cat", "installer").deliveryVersion, "2.0");
+  assert.equal(getWindowsBuildProfile("cat", "installer").deliveryVersion, "1.2");
   assert.equal(getWindowsBuildProfile("brit", "installer").output, "deliverables/custom/cat/bsh/blue-bicolor/installer");
   assert.equal(getWindowsBuildProfile("shorthair", "release").output, "deliverables/custom/cat/bsh/blue-fold/release");
   assert.equal(getWindowsBuildProfile("tabby", "release").deliveryVersion, "1.0");
