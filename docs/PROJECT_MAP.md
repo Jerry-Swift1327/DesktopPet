@@ -36,8 +36,8 @@
 | --- | --- |
 | `electron-app/prepare-runtime-assets.cjs` | 将指定变体资源复制到 `.runtime-assets`，供 electron-builder 使用 |
 | `electron-app/prepare-runtime-assets.ps1` | PowerShell 包装脚本 |
-| `electron-app/build-electron-win.ps1` | 组装 Windows 便携版目录包 |
-| `electron-app/build-installer-win.ps1` | 构建 Windows NSIS 安装向导 |
+| `electron-app/build-electron-win.ps1` | 在 Windows 上组装 Windows 便携版目录包 |
+| `electron-app/build-installer-win.ps1` | 在 Windows 上构建 Windows NSIS 安装向导 |
 | `electron-app/build-installer-mac.cjs` | 在 macOS 上构建 `.app` 和 `.dmg` |
 
 常用 npm 命令：
