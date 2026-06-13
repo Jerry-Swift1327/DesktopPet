@@ -954,11 +954,13 @@ def process_action_core(
     if manifest_name:
         update_manifest(action, metadata, manifest_name)
 
-    # Step 6: Replace video file (for replace subcommand)
-    if is_replace:
-        official_video = action_dir / f"{action}.mp4"
+    # Step 6: Copy video file to action directory
+    official_video = action_dir / f"{action}.mp4"
+    if video_path.resolve() != official_video.resolve():
         shutil.copy2(video_path, official_video)
-        print(f"[{action}] video replaced: {official_video.name}")
+        print(f"[{action}] video copied: {official_video.name}")
+    else:
+        print(f"[{action}] video already in place: {official_video.name}")
 
     # Step 7: Clean up raw_frames
     if not keep_raw and raw_dir.exists():
