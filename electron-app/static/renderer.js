@@ -53,7 +53,7 @@ async function renderPetWindow() {
   const decodedStates = new Set();
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
-  const EYE_LOOK_STEP_MS = 120;
+  const EYE_LOOK_STEP_MS = 40;
   const SQUAT_SOUND_CHANCE = 0.25;
   const eyeTrackingFrames = config.eyeTrackingFrames || {};
   const directionEyeLooks = Object.keys(eyeTrackingFrames)
@@ -270,8 +270,10 @@ async function renderPetWindow() {
 
     const forward = (targetIndex - currentIndex + EYE_LOOK_ORDER.length) % EYE_LOOK_ORDER.length;
     const backward = (currentIndex - targetIndex + EYE_LOOK_ORDER.length) % EYE_LOOK_ORDER.length;
-    const step = forward <= backward ? 1 : -1;
-    return EYE_LOOK_ORDER[(currentIndex + step + EYE_LOOK_ORDER.length) % EYE_LOOK_ORDER.length];
+    const direction = forward <= backward ? 1 : -1;
+    const distance = Math.min(forward, backward);
+    const step = Math.min(distance, 3);
+    return EYE_LOOK_ORDER[(currentIndex + direction * step + EYE_LOOK_ORDER.length) % EYE_LOOK_ORDER.length];
   }
 
   function getEyeTrackingFrame(state) {
