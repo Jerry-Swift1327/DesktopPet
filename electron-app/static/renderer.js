@@ -853,7 +853,7 @@ async function renderHoverWindow() {
         <span class="hover-panel__value" data-value="health">100</span>
       </div>
       <div class="hover-panel__timers" data-debug-timers ${config.channelConfig?.showDebugTimers === false ? "hidden" : ""}>
-        <span data-timer="idle">Idle 10:00</span>
+        <span data-timer="idle">Idle 01:00</span>
         <span data-timer="intimacy">Love 30:00</span>
         <span data-timer="walk">Walk 00:00</span>
       </div>
