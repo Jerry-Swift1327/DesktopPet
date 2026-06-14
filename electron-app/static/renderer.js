@@ -664,7 +664,7 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
 
   function reportMenuHeight() {
     window.requestAnimationFrame(() => {
-      const height = Math.ceil(menuElement.scrollHeight);
+      const height = Math.ceil(menuElement.offsetHeight);
       window.desktopPet.resizeMenu(height);
     });
   }

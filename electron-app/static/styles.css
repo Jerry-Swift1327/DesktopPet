@@ -284,7 +284,7 @@ button {
   max-width: 196px;
   height: auto;
   min-height: 0;
-  max-height: 320px;
+  overflow: visible;
   padding: 0;
   background: transparent;
   user-select: none;
