@@ -377,7 +377,7 @@ button {
 }
 
 .quick-menu__chevron.is-open {
-  transform: rotate(90deg);
+  transform: rotate(180deg);
 }
 
 .quick-menu__check {
