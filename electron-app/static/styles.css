@@ -296,8 +296,8 @@ button {
   max-width: 196px;
   height: auto;
   min-height: 0;
-  max-height: 320px;
-  overflow: hidden;
+  max-height: 400px;
+  overflow-y: auto;
   border: 1px solid rgba(219, 219, 219, 0.95);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.98);

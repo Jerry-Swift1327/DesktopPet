@@ -179,6 +179,41 @@ if (Test-Path $manifest) {
   Copy-Item -LiteralPath $manifest -Destination (Join-Path $assetsOut "animations\$manifestName") -Force
 }
 
+$switchableVariants = @("dog", "cat")
+if ($switchableVariants -contains $PetVariant) {
+  $otherVariants = $switchableVariants | Where-Object { $_ -ne $PetVariant }
+  foreach ($otherVariant in $otherVariants) {
+    $otherProfileJson = & node -e "const { getWindowsBuildProfile } = require(process.argv[1]); process.stdout.write(JSON.stringify(getWindowsBuildProfile(process.argv[2], 'release')));" $petVariantsModule $otherVariant
+    if ($LASTEXITCODE -ne 0) {
+      throw "Could not read Windows build profile for $otherVariant."
+    }
+    $otherProfile = $otherProfileJson | ConvertFrom-Json
+    $otherFolders = @($otherProfile.animationFolders)
+    foreach ($folder in $otherFolders) {
+      $source = Join-Path $assetsRoot "animations\$folder"
+      $target = Join-Path $assetsOut "animations\$folder"
+      $transparentFrames = Join-Path $source "transparent_frames"
+      $loopMetadata = Join-Path $source "loop.json"
+
+      if (!(Test-Path $transparentFrames)) {
+        throw "Missing transparent frames for $folder. Run tools\process_pet_actions.py first."
+      }
+
+      New-Item -ItemType Directory -Force -Path $target | Out-Null
+      Copy-Item -LiteralPath $transparentFrames -Destination $target -Recurse -Force
+      if (Test-Path $loopMetadata) {
+        Copy-Item -LiteralPath $loopMetadata -Destination (Join-Path $target "loop.json") -Force
+      }
+    }
+
+    $otherManifestName = $otherProfile.manifestName
+    $otherManifest = Join-Path $assetsRoot "animations\$otherManifestName"
+    if (Test-Path $otherManifest) {
+      Copy-Item -LiteralPath $otherManifest -Destination (Join-Path $assetsOut "animations\$otherManifestName") -Force
+    }
+  }
+}
+
 $variantSounds = Join-Path $assetsRoot "sounds\$PetVariant"
 if (Test-Path $variantSounds) {
   New-Item -ItemType Directory -Force -Path $soundsOut | Out-Null
