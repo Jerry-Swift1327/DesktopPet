@@ -157,32 +157,38 @@ test("platform features hide Windows-only menu items on macOS", () => {
   assert.deepEqual(getPetPlatformFeatures({ variant: "dog", platform: "darwin" }), {
     autoStart: false,
     windowRoam: false,
-    eyeTracking: false
+    eyeTracking: false,
+    customization: true
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "cat", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
-    eyeTracking: false
+    eyeTracking: false,
+    customization: true
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "tabby", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
-    eyeTracking: true
+    eyeTracking: true,
+    customization: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "brit", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
-    eyeTracking: false
+    eyeTracking: false,
+    customization: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "van", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
-    eyeTracking: false
+    eyeTracking: false,
+    customization: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "pomeranian", platform: "win32" }), {
     autoStart: false,
     windowRoam: false,
-    eyeTracking: false
+    eyeTracking: false,
+    customization: false
   });
 });
 

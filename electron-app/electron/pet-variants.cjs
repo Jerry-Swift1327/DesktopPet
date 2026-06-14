@@ -251,7 +251,8 @@ function getPetPlatformFeatures(config = {}) {
   return {
     autoStart: Boolean(variantProfile.features.autoStart) && isWindows,
     windowRoam: Boolean(variantProfile.features.windowRoam) && isWindows,
-    eyeTracking: Boolean(variantProfile.features.eyeTracking)
+    eyeTracking: Boolean(variantProfile.features.eyeTracking),
+    customization: Boolean(variantProfile.features.customization)
   };
 }
 
