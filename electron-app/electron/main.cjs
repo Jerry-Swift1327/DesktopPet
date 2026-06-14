@@ -15,7 +15,8 @@ const {
   getPetActionIds,
   buildPetRuntimeConfig,
   getPetUserDataFolder,
-  getPetPlatformFeatures
+  getPetPlatformFeatures,
+  getPetVariantProfile
 } = require("./pet-variants.cjs");
 const {
   isLikelyDesktopOrSystemWindow
@@ -2672,6 +2673,13 @@ function sanitizeFrameSequence(sequence, maxFrame) {
 function buildPetConfig() {
   const actionOrder = petRuntimeConfig.actionOrder;
   const visibleActionIds = new Set(actionOrder);
+  const variantProfile = getPetVariantProfile(petRuntimeConfig.variant);
+  const extraAssets = variantProfile.extraAnimationAssets || [];
+  for (const asset of extraAssets) {
+    if (petActionIds[asset]) {
+      visibleActionIds.add(petActionIds[asset]);
+    }
+  }
   return {
     variant: petRuntimeConfig.variant,
     channel: petRuntimeConfig.channel,
