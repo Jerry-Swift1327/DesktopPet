@@ -753,6 +753,9 @@ function getQuickMenuItemCount() {
   if (features.eyeTracking) {
     itemCount += 1;
   }
+  if (features.customization) {
+    itemCount += 1;
+  }
   return itemCount;
 }
 

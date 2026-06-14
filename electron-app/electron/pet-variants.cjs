@@ -34,7 +34,8 @@ const PET_VARIANT_PROFILES = Object.freeze({
     singleInstanceKey: "com.chongban.desktoppet.dog",
     features: Object.freeze({
       autoStart: true,
-      windowRoam: true
+      windowRoam: true,
+      customization: true
     })
   }),
   cat: Object.freeze({
@@ -52,7 +53,8 @@ const PET_VARIANT_PROFILES = Object.freeze({
     singleInstanceKey: "com.chongban.desktoppet.cat",
     features: Object.freeze({
       autoStart: true,
-      windowRoam: true
+      windowRoam: true,
+      customization: true
     })
   }),
   shorthair: Object.freeze({
