@@ -3,6 +3,7 @@ const path = require("path");
 const {
   PET_VARIANT_IDS,
   PET_CHANNEL_IDS,
+  SWITCHABLE_VARIANTS,
   getVariantAnimationFolders,
   getVariantManifestName
 } = require("./electron/pet-variants.cjs");
@@ -75,6 +76,33 @@ const manifestName = getVariantManifestName(variant);
 const manifest = path.join(sourceRoot, manifestName);
 if (fs.existsSync(manifest)) {
   fs.copyFileSync(manifest, path.join(runtimeAnimations, manifestName));
+}
+
+if (SWITCHABLE_VARIANTS.includes(variant)) {
+  const otherVariants = SWITCHABLE_VARIANTS.filter((v) => v !== variant);
+  for (const otherVariant of otherVariants) {
+    for (const folder of getVariantAnimationFolders(otherVariant)) {
+      const sourceAction = path.join(sourceRoot, folder);
+      const sourceFrames = path.join(sourceAction, "transparent_frames");
+      const sourceLoop = path.join(sourceAction, "loop.json");
+      const targetAction = path.join(runtimeAnimations, folder);
+
+      if (!fs.existsSync(sourceFrames)) {
+        throw new Error(`Missing runtime transparent frames: ${sourceFrames}`);
+      }
+
+      copyDirectory(sourceFrames, path.join(targetAction, "transparent_frames"));
+      if (fs.existsSync(sourceLoop)) {
+        fs.copyFileSync(sourceLoop, path.join(targetAction, "loop.json"));
+      }
+    }
+
+    const otherManifestName = getVariantManifestName(otherVariant);
+    const otherManifest = path.join(sourceRoot, otherManifestName);
+    if (fs.existsSync(otherManifest)) {
+      fs.copyFileSync(otherManifest, path.join(runtimeAnimations, otherManifestName));
+    }
+  }
 }
 
 console.log("Prepared runtime assets:");

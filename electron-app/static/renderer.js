@@ -572,6 +572,10 @@ async function renderQuickMenuWindow() {
   const showAutoStart = Boolean(config.features?.autoStart);
   const showEyeTracking = Boolean(config.features?.eyeTracking);
   const showCustomization = Boolean(config.features?.customization);
+  const showSwitchPet = Boolean(config.features?.switchPet);
+  const currentVariant = config.variant || "dog";
+  const switchableVariants = Array.isArray(config.switchableVariants) ? config.switchableVariants : [];
+  const VARIANT_LABELS = { dog: "狗狗", cat: "猫咪" };
   const windowRoamButton = showWindowRoam ? `
       <button type="button" class="quick-menu__item" data-command="window-roam" data-window-roam>
         <span class="quick-menu__icon" aria-hidden="true">
@@ -619,6 +623,18 @@ ${windowRoamButton}
         </span>
         <span>重置大小</span>
       </button>
+${showSwitchPet ? `      <button type="button" class="quick-menu__item" data-command="switch-pet" data-switch-pet>
+        <span class="quick-menu__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M16 3h5v5"></path><path d="M4 20 21 3"></path><path d="M21 16v5h-5"></path><path d="M15 15l6 6"></path><path d="M4 4l5 5"></path></svg>
+        </span>
+        <span>切换宠物</span>
+        <span class="quick-menu__chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg>
+        </span>
+      </button>
+      <div class="quick-menu__pet-list" data-pet-list>
+${switchableVariants.map((v) => `        <button type="button" class="quick-menu__action${v === currentVariant ? " is-active" : ""}" data-variant="${v}">${VARIANT_LABELS[v] || v}</button>`).join("\n")}
+      </div>` : ""}
 ${autoStartButton}
 ${eyeTrackingButton}
       <button type="button" class="quick-menu__item quick-menu__item--danger" data-command="quit">
@@ -708,6 +724,38 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
     if (target.dataset.command === "reset-scale" || target.dataset.command === "top") {
       window.desktopPet.resetScale();
       window.desktopPet.hideMenu();
+      return;
+    }
+
+    if (target.dataset.command === "switch-pet") {
+      const petList = app.querySelector("[data-pet-list]");
+      const chevron = target.querySelector(".quick-menu__chevron");
+      if (petList) {
+        const isOpen = petList.classList.toggle("is-visible");
+        if (chevron) {
+          chevron.classList.toggle("is-open", isOpen);
+        }
+        reportMenuHeight();
+      }
+      return;
+    }
+
+    if (target.dataset.variant) {
+      const selectedVariant = target.dataset.variant;
+      if (selectedVariant === currentVariant) {
+        window.desktopPet.hideMenu();
+        return;
+      }
+      const petList = app.querySelector("[data-pet-list]");
+      if (petList) {
+        for (const btn of petList.querySelectorAll(".quick-menu__action")) {
+          btn.classList.toggle("is-active", btn.dataset.variant === selectedVariant);
+        }
+      }
+      window.setTimeout(() => {
+        window.desktopPet.hideMenu();
+        window.desktopPet.switchVariant(selectedVariant);
+      }, 1000);
       return;
     }
 

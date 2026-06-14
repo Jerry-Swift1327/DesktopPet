@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
+  SWITCHABLE_VARIANTS,
   normalizePetVariant,
   normalizePetChannel,
   buildPetRuntimeConfig,
@@ -158,38 +159,48 @@ test("platform features hide Windows-only menu items on macOS", () => {
     autoStart: false,
     windowRoam: false,
     eyeTracking: false,
-    customization: true
+    customization: true,
+    switchPet: true
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "cat", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
     eyeTracking: false,
-    customization: true
+    customization: true,
+    switchPet: true
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "tabby", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
     eyeTracking: true,
-    customization: false
+    customization: false,
+    switchPet: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "brit", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
     eyeTracking: false,
-    customization: false
+    customization: false,
+    switchPet: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "van", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
     eyeTracking: false,
-    customization: false
+    customization: false,
+    switchPet: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "pomeranian", platform: "win32" }), {
     autoStart: false,
     windowRoam: false,
     eyeTracking: false,
-    customization: false
+    customization: false,
+    switchPet: false
   });
+});
+
+test("switchable variants include dog and cat", () => {
+  assert.deepEqual(SWITCHABLE_VARIANTS, ["dog", "cat"]);
 });
 
 test("variant assets follow the existing animation folder convention", () => {

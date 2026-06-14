@@ -1,7 +1,9 @@
 const PET_VARIANT_CONFIG_FILE = "pet_variant.json";
+const PREFERRED_VARIANT_FILE = "preferred-variant.json";
 const DEFAULT_PET_VARIANT = "dog";
 const DEFAULT_PET_CHANNEL = "release";
 const MAC_USER_DATA_PARENT = "Chongban 1.0";
+const SWITCHABLE_VARIANTS = Object.freeze(["dog", "cat"]);
 
 const PET_ACTIONS = Object.freeze({
   squat: Object.freeze({ id: "petSquat", asset: "squat" }),
@@ -35,7 +37,8 @@ const PET_VARIANT_PROFILES = Object.freeze({
     features: Object.freeze({
       autoStart: true,
       windowRoam: true,
-      customization: true
+      customization: true,
+      switchPet: true
     })
   }),
   cat: Object.freeze({
@@ -54,7 +57,8 @@ const PET_VARIANT_PROFILES = Object.freeze({
     features: Object.freeze({
       autoStart: true,
       windowRoam: true,
-      customization: true
+      customization: true,
+      switchPet: true
     })
   }),
   shorthair: Object.freeze({
@@ -252,7 +256,8 @@ function getPetPlatformFeatures(config = {}) {
     autoStart: Boolean(variantProfile.features.autoStart) && isWindows,
     windowRoam: Boolean(variantProfile.features.windowRoam) && isWindows,
     eyeTracking: Boolean(variantProfile.features.eyeTracking),
-    customization: Boolean(variantProfile.features.customization)
+    customization: Boolean(variantProfile.features.customization),
+    switchPet: Boolean(variantProfile.features.switchPet)
   };
 }
 
@@ -293,9 +298,11 @@ function getWindowsBuildProfile(value, channel) {
 
 module.exports = {
   PET_VARIANT_CONFIG_FILE,
+  PREFERRED_VARIANT_FILE,
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
   MAC_USER_DATA_PARENT,
+  SWITCHABLE_VARIANTS,
   PET_VARIANT_IDS: Object.freeze(Object.keys(PET_VARIANT_PROFILES)),
   PET_CHANNEL_IDS: Object.freeze(Object.keys(PET_CHANNEL_PROFILES)),
   PET_ACTION_ORDER,

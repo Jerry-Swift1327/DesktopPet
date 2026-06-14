@@ -445,3 +445,16 @@ button {
   cursor: default;
   opacity: 0.62;
 }
+
+.quick-menu__pet-list {
+  display: none;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 5px 0 8px;
+  border-bottom: 1px solid #eeeeee;
+  margin-bottom: 3px;
+}
+
+.quick-menu__pet-list.is-visible {
+  display: grid;
+}

@@ -10,8 +10,10 @@ const {
 } = require("./walk-clock.cjs");
 const {
   PET_VARIANT_CONFIG_FILE,
+  PREFERRED_VARIANT_FILE,
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
+  SWITCHABLE_VARIANTS,
   getPetActionIds,
   buildPetRuntimeConfig,
   getPetUserDataFolder,
@@ -277,6 +279,43 @@ function getPackagedPetRuntimeConfigPaths() {
   ];
 }
 
+function getPreferredVariantFilePath() {
+  if (!app.isPackaged) {
+    return path.join(__dirname, "..", ".user-data", PREFERRED_VARIANT_FILE);
+  }
+  if (process.platform === "darwin") {
+    return path.join(app.getPath("appData"), MAC_USER_DATA_PARENT, PREFERRED_VARIANT_FILE);
+  }
+  return path.join(app.getPath("appData"), "Chongban", PREFERRED_VARIANT_FILE);
+}
+
+function readPreferredVariant() {
+  try {
+    const filePath = getPreferredVariantFilePath();
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    const content = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
+    const data = JSON.parse(content);
+    if (data && data.variant && SWITCHABLE_VARIANTS.includes(data.variant)) {
+      return data.variant;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function writePreferredVariant(variant) {
+  try {
+    const filePath = getPreferredVariantFilePath();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify({ variant }, null, 2), "utf8");
+  } catch (error) {
+    log(`failed to write preferred variant: ${error.stack || error.message}`);
+  }
+}
+
 function readPetRuntimeConfig() {
   const envVariant = process.env.PET_VARIANT || process.env.DESKTOP_PET_VARIANT;
   const envChannel = process.env.PET_CHANNEL || process.env.DESKTOP_PET_CHANNEL;
@@ -286,6 +325,11 @@ function readPetRuntimeConfig() {
   }
   if (envChannel) {
     envConfig.channel = envChannel;
+  }
+
+  const preferredVariant = readPreferredVariant();
+  if (preferredVariant && !envVariant) {
+    envConfig.variant = preferredVariant;
   }
 
   if (!app.isPackaged) {
@@ -732,7 +776,8 @@ function buildMenuFeatures() {
     autoStart: features.autoStart,
     windowRoam: features.windowRoam && ENABLE_WINDOW_DOCKING,
     eyeTracking: Boolean(features.eyeTracking),
-    customization: Boolean(features.customization)
+    customization: Boolean(features.customization),
+    switchPet: Boolean(features.switchPet)
   };
 }
 
@@ -755,6 +800,9 @@ function getQuickMenuItemCount() {
     itemCount += 1;
   }
   if (features.customization) {
+    itemCount += 1;
+  }
+  if (features.switchPet) {
     itemCount += 1;
   }
   return itemCount;
@@ -2687,6 +2735,7 @@ function buildPetConfig() {
   return {
     variant: petRuntimeConfig.variant,
     channel: petRuntimeConfig.channel,
+    switchableVariants: SWITCHABLE_VARIANTS,
     features: buildMenuFeatures(),
     autoStart: buildAutoStartSummary(),
     windowRoam: buildWindowRoamSummary(),
@@ -6610,6 +6659,16 @@ ipcMain.handle("pet:set-auto-start", (_event, enabled) => setAutoStartPreference
 ipcMain.handle("pet:toggle-auto-start", () => toggleAutoStart());
 ipcMain.handle("pet:set-window-roam", (_event, enabled) => setWindowRoamPreference(enabled));
 ipcMain.handle("pet:set-eye-tracking", (_event, enabled) => setEyeTrackingPreference(enabled));
+ipcMain.handle("pet:switch-variant", (_event, variant) => {
+  if (!SWITCHABLE_VARIANTS.includes(variant)) {
+    return { success: false, error: `Cannot switch to variant: ${variant}` };
+  }
+  writePreferredVariant(variant);
+  log(`switching variant to ${variant}, restarting app`);
+  app.relaunch();
+  app.exit();
+  return { success: true };
+});
 ipcMain.handle("pet:advance-walk-step", (_event, frameStep, elapsedMs) => advanceWalkStep(frameStep, elapsedMs));
 ipcMain.on("pet:show-menu", () => {
   recordUserOperation();

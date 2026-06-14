@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("desktopPet", {
   toggleAutoStart: () => ipcRenderer.invoke("pet:toggle-auto-start"),
   setWindowRoam: (enabled) => ipcRenderer.invoke("pet:set-window-roam", enabled),
   setEyeTracking: (enabled) => ipcRenderer.invoke("pet:set-eye-tracking", enabled),
+  switchVariant: (variant) => ipcRenderer.invoke("pet:switch-variant", variant),
   showPetMenu: () => ipcRenderer.send("pet:show-menu"),
   resizeMenu: (height) => ipcRenderer.send("pet:resize-menu", height),
   resizeBubble: (size) => ipcRenderer.send("pet:resize-bubble", size),
