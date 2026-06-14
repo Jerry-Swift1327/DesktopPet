@@ -11,6 +11,7 @@
 | `shorthair` | `shorthair_squat`、`shorthair_walk`、`shorthair_feed`、`shorthair_ball` |
 | `tabby` | `tabby_squat`、`tabby_walk`、`tabby_feed`、`tabby_ball`、`tabby_lie`、`tabby_lick`、`tabby_belly`、`tabby_stretch`、`tabby_look` |
 | `brit` | `brit_squat`、`brit_walk`、`brit_feed`、`brit_ball` |
+| `van` | `van_squat`、`van_walk`、`van_feed`、`van_ball` |
 | `pomeranian` | `pomeranian_squat`、`pomeranian_walk`、`pomeranian_feed`、`pomeranian_ball` |
 
 ## 单个动作目录
@@ -42,6 +43,7 @@
 - `shorthair_actions_manifest.json`
 - `tabby_actions_manifest.json`
 - `brit_actions_manifest.json`
+- `van_actions_manifest.json`
 - `pomeranian_actions_manifest.json`
 
 manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新。

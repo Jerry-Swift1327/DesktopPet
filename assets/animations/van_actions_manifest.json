@@ -1,0 +1,62 @@
+[
+  {
+    "action": "van_squat",
+    "video": "van_squat.mp4",
+    "frameMs": 30,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "sourceFrameCount": 167,
+    "frameCount": 108,
+    "loopStart": 0,
+    "loopEnd": 107,
+    "sourceLoopStart": 12,
+    "sourceLoopEnd": 119,
+    "score": 0.016975
+  },
+  {
+    "action": "van_walk",
+    "video": "van_walk.mp4",
+    "frameMs": 30,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "sourceFrameCount": 167,
+    "frameCount": 68,
+    "loopStart": 0,
+    "loopEnd": 67,
+    "sourceLoopStart": 55,
+    "sourceLoopEnd": 122,
+    "score": 0.028992
+  },
+  {
+    "action": "van_feed",
+    "video": "van_feed.mp4",
+    "frameMs": 30,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "sourceFrameCount": 167,
+    "frameCount": 61,
+    "loopStart": 0,
+    "loopEnd": 60,
+    "sourceLoopStart": 12,
+    "sourceLoopEnd": 72,
+    "score": 0.023554
+  },
+  {
+    "action": "van_ball",
+    "video": "van_ball.mp4",
+    "frameMs": 30,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "sourceFrameCount": 167,
+    "frameCount": 106,
+    "loopStart": 0,
+    "loopEnd": 105,
+    "sourceLoopStart": 59,
+    "sourceLoopEnd": 164,
+    "score": 0.033475
+  }
+]

@@ -118,6 +118,27 @@ const PET_VARIANT_PROFILES = Object.freeze({
       windowRoam: true
     })
   }),
+  van: Object.freeze({
+    id: "van",
+    species: "cat",
+    audience: "custom",
+    baseVariant: "cat",
+    breedGroup: "bsh",
+    coatPattern: "red-van",
+    platforms: Object.freeze(["win32"]),
+    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "red-van"]),
+    deliveryVersion: "1.0",
+    animationPrefix: "van",
+    actions: PET_ACTION_ORDER,
+    defaultScale: 1.1,
+    installerGuid: "a3d7e2f8-4b91-5c6a-9e0d-1f2a3b4c5d6e",
+    autoStartRegistryKey: "ChongbanDesktopPet-van",
+    singleInstanceKey: "com.chongban.desktoppet.van",
+    features: Object.freeze({
+      autoStart: true,
+      windowRoam: true
+    })
+  }),
   pomeranian: Object.freeze({
     id: "pomeranian",
     species: "dog",
