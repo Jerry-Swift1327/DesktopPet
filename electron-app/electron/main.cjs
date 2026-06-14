@@ -731,7 +731,8 @@ function buildMenuFeatures() {
   return {
     autoStart: features.autoStart,
     windowRoam: features.windowRoam && ENABLE_WINDOW_DOCKING,
-    eyeTracking: Boolean(features.eyeTracking)
+    eyeTracking: Boolean(features.eyeTracking),
+    customization: Boolean(features.customization)
   };
 }
 
