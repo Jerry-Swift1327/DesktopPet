@@ -11,5 +11,10 @@
   "loopEnd": 107,
   "sourceLoopStart": 12,
   "sourceLoopEnd": 119,
-  "score": 0.016975
+  "score": 0.030374,
+  "loopSelection": "long",
+  "qualityScore": 0.016398,
+  "targetLength": 166,
+  "trimGroundAlpha": 128,
+  "trimGroundPadding": 1
 }
