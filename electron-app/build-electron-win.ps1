@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not $IsWindows) {
+if (-not ($IsWindows -or $env:OS -eq "Windows_NT")) {
   throw "Windows package must be built on Windows."
 }
 
