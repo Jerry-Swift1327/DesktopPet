@@ -67,6 +67,7 @@ const STATE_LIE = petActionIds.lie;
 const STATE_LICK = petActionIds.lick;
 const STATE_BELLY = petActionIds.belly;
 const STATE_STRETCH = petActionIds.stretch;
+const STATE_SHAKE = petActionIds.shake;
 
 const BASE_PET_WINDOW_WIDTH = 180;
 const BASE_PET_WINDOW_HEIGHT = 180;
@@ -216,7 +217,7 @@ const DAILY_DECAY_FULLNESS = 0;
 const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY, STATE_STRETCH]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const sharedGreetings = [
@@ -346,7 +347,8 @@ states.push(
   { id: STATE_LIE, label: "趴下", folder: getActionFrameFolder("lie"), metadata: getActionMetadataPath("lie"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_LICK, label: "舔爪", folder: getActionFrameFolder("lick"), metadata: getActionMetadataPath("lick"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_BELLY, label: "翻肚", folder: getActionFrameFolder("belly"), metadata: getActionMetadataPath("belly"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_STRETCH, label: "伸展", folder: getActionFrameFolder("stretch"), metadata: getActionMetadataPath("stretch"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
+  { id: STATE_STRETCH, label: "伸展", folder: getActionFrameFolder("stretch"), metadata: getActionMetadataPath("stretch"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_SHAKE, label: "抖身", folder: getActionFrameFolder("shake"), metadata: getActionMetadataPath("shake"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
 );
 
 const statMessages = {
@@ -6324,6 +6326,9 @@ function finishWindowDockAfterDrag() {
   clearDragState({ notify: true });
   windowDockInProgress = false;
   refreshWindowSurfaceCandidatesAsync();
+  if (petRuntimeConfig.variant === "tabby" && activeState !== STATE_SHAKE) {
+    setState(STATE_SHAKE, false);
+  }
 }
 
 function dockPetAfterDrag({ retry = false } = {}) {
