@@ -981,7 +981,9 @@ function readPetStats() {
 
   if (fs.existsSync(statsFile)) {
     try {
-      const savedStats = JSON.parse(fs.readFileSync(statsFile, "utf8"));
+      const raw = fs.readFileSync(statsFile, "utf8").trim();
+      const decoded = decodeStatsPayload(raw);
+      const savedStats = decoded || JSON.parse(raw);
       hasStatsActiveAt = Number.isFinite(savedStats.lastStatsActiveAt);
       stats = { ...stats, ...savedStats };
     } catch (error) {
@@ -2302,12 +2304,26 @@ function sendScaleState() {
   petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
 }
 
+function encodeStatsPayload(data) {
+  return Buffer.from(JSON.stringify(data), "utf8").toString("base64");
+}
+
+function decodeStatsPayload(raw) {
+  if (!raw || typeof raw !== "string") { return null; }
+  try {
+    const json = Buffer.from(raw, "base64").toString("utf8");
+    return JSON.parse(json);
+  } catch (_) {
+    return null;
+  }
+}
+
 function writePetStats() {
   if (!petStats) {
     return;
   }
   petStats.lastStatsActiveAt = Date.now();
-  fs.writeFileSync(statsFile, JSON.stringify(petStats, null, 2), "utf8");
+  fs.writeFileSync(statsFile, encodeStatsPayload(petStats), "utf8");
 }
 
 function buildTimerSummary(now = Date.now()) {
@@ -2334,7 +2350,7 @@ function buildStatsSummary() {
   const today = getLocalDateKey();
 
   return {
-    companionshipDays: Math.max(0, daysBetween(petStats.firstRunDate, today) - 1),
+    companionshipDays: daysBetween(petStats.firstRunDate, today),
     todayInteractions: petStats.todayInteractions,
     intimacy: petStats.intimacy,
     fullness: petStats.fullness,
