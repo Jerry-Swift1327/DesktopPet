@@ -6756,7 +6756,6 @@ ipcMain.on("pet:hide", () => {
   petWindow?.hide();
 });
 ipcMain.on("pet:quit", () => app.quit());
-ipcMain.on("pet:interact", () => setState(STATE_FEED));
 ipcMain.on("pet:hide-menu", hidePetMenu);
 ipcMain.on("pet:adjust-scale", (_event, deltaY) => {
   if (Number.isFinite(deltaY)) {

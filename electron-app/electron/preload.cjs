@@ -26,7 +26,6 @@ contextBridge.exposeInMainWorld("desktopPet", {
   hideMenu: () => ipcRenderer.send("pet:hide-menu"),
   showPet: () => ipcRenderer.send("pet:show"),
   hidePet: () => ipcRenderer.send("pet:hide"),
-  interact: () => ipcRenderer.send("pet:interact"),
   quit: () => ipcRenderer.send("pet:quit"),
   dragStart: (point) => ipcRenderer.send("pet:drag-start", point),
   dragEnd: () => ipcRenderer.send("pet:drag-end"),

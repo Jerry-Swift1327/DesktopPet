@@ -211,10 +211,6 @@ async function renderPetWindow() {
     window.desktopPet.dragEnd();
   });
 
-  app.addEventListener("dblclick", () => {
-    window.desktopPet.interact();
-  });
-
   app.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     window.desktopPet.showPetMenu();
