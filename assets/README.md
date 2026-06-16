@@ -35,6 +35,7 @@
 | `shorthair` | 英短资源 |
 | `tabby` | 虎斑猫资源，包含额外动作 |
 | `brit` | 英短双色资源 |
+| `bshmitted` | 英短蓝色手套资源 |
 | `van` | 英短红梵资源 |
 | `pomeranian` | 博美资源，当前用于 macOS 打包 |
 

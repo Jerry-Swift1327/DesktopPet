@@ -128,6 +128,27 @@ const PET_VARIANT_PROFILES = Object.freeze({
       windowRoam: true
     })
   }),
+  bshmitted: Object.freeze({
+    id: "bshmitted",
+    species: "cat",
+    audience: "custom",
+    baseVariant: "cat",
+    breedGroup: "bsh",
+    coatPattern: "blue-mitted",
+    platforms: Object.freeze(["win32"]),
+    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "blue-mitted"]),
+    deliveryVersion: "1.0",
+    animationPrefix: "bshmitted",
+    actions: PET_ACTION_ORDER,
+    defaultScale: 1.1,
+    installerGuid: "9ed7a479-a281-4d87-95fa-88e348789297",
+    autoStartRegistryKey: "ChongbanDesktopPet-bshmitted",
+    singleInstanceKey: "com.chongban.desktoppet.bshmitted",
+    features: Object.freeze({
+      autoStart: true,
+      windowRoam: true
+    })
+  }),
   van: Object.freeze({
     id: "van",
     species: "cat",

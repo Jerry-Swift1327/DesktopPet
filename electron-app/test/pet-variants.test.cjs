@@ -47,6 +47,7 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   const shorthairConfig = buildPetRuntimeConfig({ variant: "shorthair" });
   const tabbyConfig = buildPetRuntimeConfig({ variant: "tabby" });
   const britConfig = buildPetRuntimeConfig({ variant: "brit" });
+  const bshmittedConfig = buildPetRuntimeConfig({ variant: "bshmitted" });
   const vanConfig = buildPetRuntimeConfig({ variant: "van" });
   const pomeranianConfig = buildPetRuntimeConfig({ variant: "pomeranian" });
 
@@ -82,6 +83,10 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   assert.equal(britConfig.features.windowRoam, true);
   assert.equal(britConfig.defaultScale, 1.1);
   assert.equal(britConfig.autoStartRegistryKey, "ChongbanDesktopPet-brit");
+  assert.equal(bshmittedConfig.features.autoStart, true);
+  assert.equal(bshmittedConfig.features.windowRoam, true);
+  assert.equal(bshmittedConfig.defaultScale, 1.1);
+  assert.equal(bshmittedConfig.autoStartRegistryKey, "ChongbanDesktopPet-bshmitted");
   assert.equal(vanConfig.features.autoStart, true);
   assert.equal(vanConfig.features.windowRoam, true);
   assert.equal(vanConfig.defaultScale, 1.1);
@@ -122,6 +127,7 @@ test("variant metadata describes delivery and supported platforms", () => {
   assert.deepEqual(getPetVariantProfile("cat").platforms, ["win32", "darwin"]);
   assert.deepEqual(getPetVariantProfile("shorthair").deliveryPathSegments, ["custom", "cat", "bsh", "blue-fold"]);
   assert.deepEqual(getPetVariantProfile("brit").deliveryPathSegments, ["custom", "cat", "bsh", "blue-bicolor"]);
+  assert.deepEqual(getPetVariantProfile("bshmitted").deliveryPathSegments, ["custom", "cat", "bsh", "blue-mitted"]);
   assert.deepEqual(getPetVariantProfile("van").deliveryPathSegments, ["custom", "cat", "bsh", "red-van"]);
   assert.deepEqual(getPetVariantProfile("tabby").actions, ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
   assert.deepEqual(getPetVariantProfile("pomeranian").platforms, ["darwin"]);
@@ -133,6 +139,7 @@ test("Windows build profile centralizes paths and package names", () => {
   assert.equal(getWindowsBuildProfile("cat", "installer").output, "deliverables/internal/cat/installer");
   assert.equal(getWindowsBuildProfile("cat", "installer").deliveryVersion, "1.2");
   assert.equal(getWindowsBuildProfile("brit", "installer").output, "deliverables/custom/cat/bsh/blue-bicolor/installer");
+  assert.equal(getWindowsBuildProfile("bshmitted", "release").output, "deliverables/custom/cat/bsh/blue-mitted/release");
   assert.equal(getWindowsBuildProfile("shorthair", "release").output, "deliverables/custom/cat/bsh/blue-fold/release");
   assert.equal(getWindowsBuildProfile("van", "release").output, "deliverables/custom/cat/bsh/red-van/release");
   assert.equal(getWindowsBuildProfile("van", "release").deliveryVersion, "1.0");
@@ -180,6 +187,13 @@ test("platform features hide Windows-only menu items on macOS", () => {
     switchPet: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "brit", platform: "win32" }), {
+    autoStart: true,
+    windowRoam: true,
+    eyeTracking: false,
+    customization: false,
+    switchPet: false
+  });
+  assert.deepEqual(getPetPlatformFeatures({ variant: "bshmitted", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
     eyeTracking: false,
@@ -240,6 +254,12 @@ test("variant assets follow the existing animation folder convention", () => {
     "brit_feed",
     "brit_ball"
   ]);
+  assert.deepEqual(getVariantAnimationFolders("bshmitted"), [
+    "bshmitted_squat",
+    "bshmitted_walk",
+    "bshmitted_feed",
+    "bshmitted_ball"
+  ]);
   assert.deepEqual(getVariantAnimationFolders("van"), [
     "van_squat",
     "van_walk",
@@ -249,6 +269,7 @@ test("variant assets follow the existing animation folder convention", () => {
   assert.equal(getVariantManifestName("cat"), "cat_actions_manifest.json");
   assert.equal(getVariantManifestName("tabby"), "tabby_actions_manifest.json");
   assert.equal(getVariantManifestName("brit"), "brit_actions_manifest.json");
+  assert.equal(getVariantManifestName("bshmitted"), "bshmitted_actions_manifest.json");
   assert.equal(getVariantManifestName("van"), "van_actions_manifest.json");
   assert.equal(getVariantManifestName("pomeranian"), "pomeranian_actions_manifest.json");
 });

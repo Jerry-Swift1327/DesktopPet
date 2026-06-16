@@ -65,6 +65,8 @@ electron-app/package.json
 | `shorthair` | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
 | `tabby` | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 | `brit` | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `bshmitted` | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `van` | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 | `pomeranian` | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
 
 渠道配置：

@@ -60,6 +60,8 @@ npm.cmd run pack:win
 | `shorthair` | Windows | `squat`、`walk`、`feed`、`ball` |
 | `tabby` | Windows | `squat`、`walk`、`feed`、`ball`、`lie`、`lick`、`belly`、`stretch`，额外资源 `look`、`shake`、`yawn`、`hiss`、`sleep` |
 | `brit` | Windows | `squat`、`walk`、`feed`、`ball` |
+| `bshmitted` | Windows | `squat`、`walk`、`feed`、`ball` |
+| `van` | Windows | `squat`、`walk`、`feed`、`ball` |
 | `pomeranian` | macOS | `squat`、`walk`、`feed`、`ball` |
 
 资源目录命名为 `assets/animations/<variant>_<action>`，运行时主要使用：

@@ -11,6 +11,7 @@
 | `shorthair` | `shorthair_squat`、`shorthair_walk`、`shorthair_feed`、`shorthair_ball` |
 | `tabby` | `tabby_squat`、`tabby_walk`、`tabby_feed`、`tabby_ball`、`tabby_lie`、`tabby_lick`、`tabby_belly`、`tabby_stretch`、`tabby_look`、`tabby_shake`、`tabby_yawn`、`tabby_hiss`、`tabby_sleep` |
 | `brit` | `brit_squat`、`brit_walk`、`brit_feed`、`brit_ball` |
+| `bshmitted` | `bshmitted_squat`、`bshmitted_walk`、`bshmitted_feed`、`bshmitted_ball` |
 | `van` | `van_squat`、`van_walk`、`van_feed`、`van_ball` |
 | `pomeranian` | `pomeranian_squat`、`pomeranian_walk`、`pomeranian_feed`、`pomeranian_ball` |
 
@@ -43,6 +44,7 @@
 - `shorthair_actions_manifest.json`
 - `tabby_actions_manifest.json`
 - `brit_actions_manifest.json`
+- `bshmitted_actions_manifest.json`
 - `van_actions_manifest.json`
 - `pomeranian_actions_manifest.json`
 
