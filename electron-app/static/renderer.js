@@ -54,7 +54,7 @@ async function renderPetWindow() {
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
   const EYE_LOOK_STEP_MS = 40;
-  const SQUAT_SOUND_CHANCE = 0.25;
+  const SQUAT_SOUND_CHANCE = 0.5;
   const eyeTrackingFrames = config.eyeTrackingFrames || {};
   const directionEyeLooks = Object.keys(eyeTrackingFrames)
     .filter((look) => /^frame_\d+$/.test(look))
@@ -66,7 +66,9 @@ async function renderPetWindow() {
   let currentEyeLook = "off";
   let lastEyeLookStepAt = 0;
   let squatSound = null;
+  let sleepSound = null;
   const squatSounds = Array.isArray(config.squatSounds) ? config.squatSounds : [];
+  const sleepSounds = Array.isArray(config.sleepSounds) ? config.sleepSounds : [];
 
   function getStateFrameSequence(state) {
     if (!state) {
@@ -224,6 +226,13 @@ async function renderPetWindow() {
     window.desktopPet.adjustScale(event.deltaY);
   }, { passive: false });
 
+  app.addEventListener("dblclick", (event) => {
+    if (event.button === 0 && event.target.closest(".pet-sprite") && activeState === config.actionIds?.sleep) {
+      event.preventDefault();
+      window.desktopPet.wakeSleepingPet();
+    }
+  });
+
   img.addEventListener("mouseenter", () => {
     if (localDragging || isDragging) {
       return;
@@ -248,6 +257,15 @@ async function renderPetWindow() {
     squatSound = null;
   }
 
+  function stopSleepSound() {
+    if (!sleepSound) {
+      return;
+    }
+    sleepSound.pause();
+    sleepSound.currentTime = 0;
+    sleepSound = null;
+  }
+
   function maybePlaySquatSound(previousState, nextState) {
     if (nextState !== config.defaultState || previousState === nextState || squatSounds.length === 0 || Math.random() >= SQUAT_SOUND_CHANCE) {
       return;
@@ -255,6 +273,16 @@ async function renderPetWindow() {
     stopSquatSound();
     squatSound = new Audio(squatSounds[Math.floor(Math.random() * squatSounds.length)]);
     squatSound.play().catch(() => {});
+  }
+
+  function playSleepSound() {
+    stopSleepSound();
+    if (sleepSounds.length === 0) {
+      return;
+    }
+    sleepSound = new Audio(sleepSounds[Math.floor(Math.random() * sleepSounds.length)]);
+    sleepSound.loop = true;
+    sleepSound.play().catch(() => {});
   }
 
   function getNextEyeLook(current, target) {
@@ -467,7 +495,13 @@ async function renderPetWindow() {
   window.desktopPet.onStateChanged((state) => {
     const previousState = activeState;
     activeState = state;
-    if (state !== config.defaultState) {
+    if (previousState === config.actionIds?.sleep && state !== previousState) {
+      stopSleepSound();
+    }
+    if (state === config.actionIds?.sleep && previousState !== state) {
+      stopSquatSound();
+      playSleepSound();
+    } else if (state !== config.defaultState) {
       stopSquatSound();
     } else {
       maybePlaySquatSound(previousState, state);

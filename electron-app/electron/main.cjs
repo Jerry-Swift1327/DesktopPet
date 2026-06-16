@@ -71,6 +71,9 @@ const STATE_LICK = petActionIds.lick;
 const STATE_BELLY = petActionIds.belly;
 const STATE_STRETCH = petActionIds.stretch;
 const STATE_SHAKE = petActionIds.shake;
+const STATE_YAWN = petActionIds.yawn;
+const STATE_HISS = petActionIds.hiss;
+const STATE_SLEEP = petActionIds.sleep;
 
 const BASE_PET_WINDOW_WIDTH = 180;
 const BASE_PET_WINDOW_HEIGHT = 180;
@@ -164,6 +167,8 @@ const RANDOM_GREETING_MIN_MS = 1 * 60 * 1000;
 const RANDOM_GREETING_MAX_MS = 1 * 60 * 1000;
 const RANDOM_GREETING_RETRY_MS = 2 * 60 * 1000;
 const IDLE_GREETING_DELAY_MS = RANDOM_GREETING_MIN_MS;
+const TABBY_YAWN_IDLE_MS = 3 * 60 * 1000;
+const TABBY_SLEEP_AFTER_YAWN_MS = 1 * 60 * 1000;
 const INTIMACY_DECAY_INTERVAL_MS = 10 * 60 * 1000;
 const FULLNESS_DECAY_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_DECAY_INTERVAL_MS = 10 * 60 * 1000;
@@ -220,7 +225,8 @@ const DAILY_DECAY_FULLNESS = 0;
 const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_YAWN, STATE_HISS]);
+const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const sharedGreetings = [
@@ -393,7 +399,10 @@ states.push(
   { id: STATE_LICK, label: "舔爪", folder: getActionFrameFolder("lick"), metadata: getActionMetadataPath("lick"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_BELLY, label: "翻肚", folder: getActionFrameFolder("belly"), metadata: getActionMetadataPath("belly"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_STRETCH, label: "伸展", folder: getActionFrameFolder("stretch"), metadata: getActionMetadataPath("stretch"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_SHAKE, label: "抖身", folder: getActionFrameFolder("shake"), metadata: getActionMetadataPath("shake"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
+  { id: STATE_SHAKE, label: "抖身", folder: getActionFrameFolder("shake"), metadata: getActionMetadataPath("shake"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_YAWN, label: "打哈欠", folder: getActionFrameFolder("yawn"), metadata: getActionMetadataPath("yawn"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_HISS, label: "哈气", folder: getActionFrameFolder("hiss"), metadata: getActionMetadataPath("hiss"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_SLEEP, label: "睡觉", folder: getActionFrameFolder("sleep"), metadata: getActionMetadataPath("sleep"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
 );
 
 const statMessages = {
@@ -460,9 +469,12 @@ let petStats = null;
 let petScale = DEFAULT_PET_SCALE;
 let preferredPetScale = DEFAULT_PET_SCALE;
 let randomGreetingTimer = null;
+let tabbyIdleTimer = null;
+let tabbySleepTimer = null;
 let idleGreetingPool = [];
 let intimacyDecayTimer = null;
 let lastUserOperationAt = Date.now();
+let lastTabbyUserOperationAt = Date.now();
 let lastIntimacyDecayAt = Date.now();
 let lastFullnessDecayAt = Date.now();
 let lastHealthDecayAt = Date.now();
@@ -2374,11 +2386,39 @@ function scheduleIdleGreeting(delayMs = IDLE_GREETING_DELAY_MS) {
   scheduleRandomGreeting(delayMs);
 }
 
+function clearTabbyIdleTimers() {
+  if (tabbyIdleTimer) {
+    clearTimeout(tabbyIdleTimer);
+    tabbyIdleTimer = null;
+  }
+  if (tabbySleepTimer) {
+    clearTimeout(tabbySleepTimer);
+    tabbySleepTimer = null;
+  }
+}
+
+function scheduleTabbyIdleActions() {
+  clearTabbyIdleTimers();
+  if (petRuntimeConfig.variant !== "tabby" || activeState !== DEFAULT_STATE) {
+    return;
+  }
+  const delay = Math.max(0, TABBY_YAWN_IDLE_MS - (Date.now() - lastTabbyUserOperationAt));
+  tabbyIdleTimer = setTimeout(() => {
+    tabbyIdleTimer = null;
+    if (activeState === DEFAULT_STATE && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
+      setState(STATE_YAWN, false);
+    }
+  }, delay);
+}
+
 function recordUserOperation({ scheduleGreeting = true } = {}) {
   lastUserOperationAt = Date.now();
+  lastTabbyUserOperationAt = lastUserOperationAt;
+  clearTabbyIdleTimers();
   if (scheduleGreeting) {
     scheduleIdleGreeting();
   }
+  scheduleTabbyIdleActions();
   sendStats();
 }
 
@@ -2645,7 +2685,7 @@ function listEyeTrackingFrames() {
   return frames;
 }
 
-function listSquatSounds() {
+function listTabbySounds(pattern) {
   if (petRuntimeConfig.variant !== "tabby") {
     return [];
   }
@@ -2657,7 +2697,7 @@ function listSquatSounds() {
 
   return fs
     .readdirSync(folder)
-    .filter((name) => /^cat_(?:meow|purr)_.*\.mp3$/i.test(name))
+    .filter((name) => pattern.test(name))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
     .map((name) => toFileUrl(path.join(folder, name)));
 }
@@ -2757,7 +2797,8 @@ function buildPetConfig() {
     windowRoam: buildWindowRoamSummary(),
     eyeTracking: buildEyeTrackingSummary(),
     eyeTrackingFrames: listEyeTrackingFrames(),
-    squatSounds: listSquatSounds(),
+    squatSounds: listTabbySounds(/^cat_meow_.*\.mp3$/i),
+    sleepSounds: listTabbySounds(/^cat_purr_.*\.mp3$/i),
     actionIds: petRuntimeConfig.actions,
     actionOrder,
     channelConfig: petRuntimeConfig.channelConfig,
@@ -5161,6 +5202,9 @@ function setState(state, shouldRecordInteraction = true) {
     return;
   }
 
+  if (shouldRecordInteraction && TABBY_IDLE_STATES.has(state)) {
+    return;
+  }
   const previousState = activeState;
   const nextState = getState(state);
   const transitionAnchor = previousState !== state && !nextState?.moving
@@ -5194,6 +5238,7 @@ function setState(state, shouldRecordInteraction = true) {
       }
     }
   }
+  clearTabbyIdleTimers();
   selectedState = state;
   activeState = state;
   if (getState(activeState)?.moving) {
@@ -5209,6 +5254,9 @@ function setState(state, shouldRecordInteraction = true) {
   }
   sendPetState();
   showStatMessages(statMessagesToShow);
+  if (activeState === DEFAULT_STATE) {
+    scheduleTabbyIdleActions();
+  }
 }
 
 function completeOneShotState(state) {
@@ -5217,6 +5265,16 @@ function completeOneShotState(state) {
   }
   const shouldApplyPendingStats = pendingActionStatsState === state;
   setState(DEFAULT_STATE, false);
+  if (petRuntimeConfig.variant === "tabby" && state === STATE_YAWN && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
+    clearTimeout(tabbyIdleTimer);
+    tabbyIdleTimer = null;
+    tabbySleepTimer = setTimeout(() => {
+      tabbySleepTimer = null;
+      if (activeState === DEFAULT_STATE && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS + TABBY_SLEEP_AFTER_YAWN_MS) {
+        setState(STATE_SLEEP, false);
+      }
+    }, TABBY_SLEEP_AFTER_YAWN_MS);
+  }
   if (shouldApplyPendingStats) {
     pendingActionStatsState = null;
     showStatMessages(applyActionStats(state));
@@ -6617,6 +6675,7 @@ if (!gotSingleInstanceLock) {
     updateEyeTrackingPolling();
     startIntimacyDecayTimer();
     scheduleIdleGreeting();
+    scheduleTabbyIdleActions();
     if (process.platform === "darwin") {
       screen.on("display-metrics-changed", (_event, _display, metrics) => {
         if (metrics.includes("workArea")) {
@@ -6752,6 +6811,13 @@ ipcMain.on("pet:set-state", (_event, state) => {
   if (typeof state === "string") {
     setState(state);
   }
+});
+ipcMain.on("pet:wake-sleeping-pet", () => {
+  if (petRuntimeConfig.variant !== "tabby" || activeState !== STATE_SLEEP) {
+    return;
+  }
+  recordUserOperation();
+  setState(STATE_HISS, false);
 });
 ipcMain.on("pet:complete-one-shot", (_event, state) => {
   if (typeof state === "string") {
