@@ -167,8 +167,7 @@ const RANDOM_GREETING_MIN_MS = 1 * 60 * 1000;
 const RANDOM_GREETING_MAX_MS = 1 * 60 * 1000;
 const RANDOM_GREETING_RETRY_MS = 2 * 60 * 1000;
 const IDLE_GREETING_DELAY_MS = RANDOM_GREETING_MIN_MS;
-const TABBY_YAWN_IDLE_MS = 3 * 60 * 1000;
-const TABBY_SLEEP_AFTER_YAWN_MS = 1 * 60 * 1000;
+const TABBY_YAWN_IDLE_MS = 2 * 60 * 1000;
 const INTIMACY_DECAY_INTERVAL_MS = 10 * 60 * 1000;
 const FULLNESS_DECAY_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_DECAY_INTERVAL_MS = 10 * 60 * 1000;
@@ -477,7 +476,6 @@ let petStats = null;
 let petScale = DEFAULT_PET_SCALE;
 let preferredPetScale = DEFAULT_PET_SCALE;
 let randomGreetingTimer = null;
-let tabbySleepTimer = null;
 let tabbyIdlePollTimer = null;
 let idleGreetingPool = [];
 let intimacyDecayTimer = null;
@@ -2395,13 +2393,6 @@ function scheduleIdleGreeting(delayMs = IDLE_GREETING_DELAY_MS) {
   scheduleRandomGreeting(delayMs);
 }
 
-function clearTabbyIdleSleepTimer() {
-  if (tabbySleepTimer) {
-    clearTimeout(tabbySleepTimer);
-    tabbySleepTimer = null;
-  }
-}
-
 function startTabbyIdlePolling() {
   if (petRuntimeConfig.variant !== "tabby" || tabbyIdlePollTimer) {
     return;
@@ -2411,7 +2402,7 @@ function startTabbyIdlePolling() {
 }
 
 function updateTabbyIdleActions() {
-  if (petRuntimeConfig.variant !== "tabby" || activeState !== DEFAULT_STATE || tabbySleepTimer) {
+  if (petRuntimeConfig.variant !== "tabby" || activeState !== DEFAULT_STATE) {
     return;
   }
   if (Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
@@ -2423,7 +2414,6 @@ function updateTabbyIdleActions() {
 function recordUserOperation({ scheduleGreeting = true } = {}) {
   lastUserOperationAt = Date.now();
   lastTabbyUserOperationAt = lastUserOperationAt;
-  clearTabbyIdleSleepTimer();
   if (scheduleGreeting) {
     scheduleIdleGreeting();
   }
@@ -5265,7 +5255,6 @@ function setState(state, shouldRecordInteraction = true) {
       }
     }
   }
-  clearTabbyIdleSleepTimer();
   selectedState = state;
   activeState = state;
   if (petRuntimeConfig.variant === "tabby" && activeState === STATE_SLEEP) {
@@ -5291,16 +5280,7 @@ function completeOneShotState(state) {
     return;
   }
   const shouldApplyPendingStats = pendingActionStatsState === state;
-  setState(DEFAULT_STATE, false);
-  if (petRuntimeConfig.variant === "tabby" && state === STATE_YAWN && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
-    tabbySleepTimer = setTimeout(() => {
-      tabbySleepTimer = null;
-      if (activeState === DEFAULT_STATE && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS + TABBY_SLEEP_AFTER_YAWN_MS) {
-        log("tabby idle -> sleep");
-        setState(STATE_SLEEP, false);
-      }
-    }, TABBY_SLEEP_AFTER_YAWN_MS);
-  }
+  setState(petRuntimeConfig.variant === "tabby" && state === STATE_YAWN ? STATE_SLEEP : DEFAULT_STATE, false);
   if (shouldApplyPendingStats) {
     pendingActionStatsState = null;
     showStatMessages(applyActionStats(state));

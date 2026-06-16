@@ -24,8 +24,11 @@ test("tabby extra actions update hover panel stats", () => {
 
 test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /tabbyIdlePollTimer = setInterval\(updateTabbyIdleActions, 1000\)/);
+  assert.match(mainSource, /const TABBY_YAWN_IDLE_MS = 2 \* 60 \* 1000/);
   assert.match(mainSource, /setState\(STATE_YAWN, false\)/);
-  assert.match(mainSource, /setState\(STATE_SLEEP, false\)/);
+  assert.match(mainSource, /state === STATE_YAWN \? STATE_SLEEP : DEFAULT_STATE/);
+  assert.doesNotMatch(mainSource, /TABBY_SLEEP_AFTER_YAWN_MS/);
+  assert.doesNotMatch(mainSource, /tabbySleepTimer/);
 });
 
 test("packaged runtime validates the external assets root first", () => {
