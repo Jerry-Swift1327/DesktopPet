@@ -43,24 +43,6 @@
     "frameSize": 256,
     "qualityProfile": "enhanced_2x_conservative",
     "sourceFrameCount": 168,
-    "frameCount": 124,
-    "loopStart": 0,
-    "loopEnd": 123,
-    "sourceLoopStart": 27,
-    "sourceLoopEnd": 150,
-    "score": 0.060193,
-    "loopSelection": "long",
-    "qualityScore": 0.057478,
-    "targetLength": 105
-  },
-  {
-    "action": "bshmitted_ball",
-    "video": "bshmitted_ball.mp4",
-    "frameMs": 30,
-    "sourceFrameSize": 128,
-    "frameSize": 256,
-    "qualityProfile": "enhanced_2x_conservative",
-    "sourceFrameCount": 168,
     "frameCount": 125,
     "loopStart": 0,
     "loopEnd": 124,
@@ -70,5 +52,23 @@
     "loopSelection": "long",
     "qualityScore": 0.044541,
     "targetLength": 135
+  },
+  {
+    "action": "bshmitted_ball",
+    "video": "bshmitted_ball.mp4",
+    "frameMs": 30,
+    "sourceFrameSize": 128,
+    "frameSize": 256,
+    "qualityProfile": "enhanced_2x_conservative",
+    "sourceFrameCount": 168,
+    "frameCount": 124,
+    "loopStart": 0,
+    "loopEnd": 123,
+    "sourceLoopStart": 27,
+    "sourceLoopEnd": 150,
+    "score": 0.060193,
+    "loopSelection": "long",
+    "qualityScore": 0.057478,
+    "targetLength": 105
   }
 ]
