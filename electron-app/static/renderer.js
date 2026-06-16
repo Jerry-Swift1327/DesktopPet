@@ -40,6 +40,7 @@ async function renderPetWindow() {
   let isDragging = false;
   let isInteractionPaused = false;
   let localDragging = false;
+  let pointerDown = null;
   let completedOneShotState = "";
   let animationEpoch = 0;
   let walkStepInFlight = false;
@@ -54,6 +55,8 @@ async function renderPetWindow() {
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
   const EYE_LOOK_STEP_MS = 40;
+  const SLEEP_WAKE_CLICK_MAX_MS = 350;
+  const SLEEP_WAKE_CLICK_MAX_DISTANCE = 6;
   const SQUAT_SOUND_CHANCE = 0.5;
   const eyeTrackingFrames = config.eyeTrackingFrames || {};
   const directionEyeLooks = Object.keys(eyeTrackingFrames)
@@ -186,6 +189,17 @@ async function renderPetWindow() {
       return;
     }
     event.preventDefault();
+    pointerDown = {
+      at: performance.now(),
+      screenX: event.screenX,
+      screenY: event.screenY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      sleep: activeState === config.actionIds?.sleep
+    };
+    if (pointerDown.sleep) {
+      return;
+    }
     localDragging = true;
     window.desktopPet.dragStart({
       screenX: event.screenX,
@@ -196,17 +210,36 @@ async function renderPetWindow() {
   });
 
   window.addEventListener("mousemove", (event) => {
-    if (!localDragging) {
+    if (!localDragging && !pointerDown?.sleep) {
       return;
     }
+    if (!localDragging && pointerDown?.sleep) {
+      if (Math.hypot(event.screenX - pointerDown.screenX, event.screenY - pointerDown.screenY) <= SLEEP_WAKE_CLICK_MAX_DISTANCE) {
+        return;
+      }
+      localDragging = true;
+      window.desktopPet.dragStart(pointerDown);
+    }
     if ((event.buttons & 1) === 0) {
+      pointerDown = null;
       localDragging = false;
       window.desktopPet.dragEnd();
     }
   });
 
-  window.addEventListener("mouseup", () => {
+  window.addEventListener("mouseup", (event) => {
+    const down = pointerDown;
+    pointerDown = null;
     if (!localDragging) {
+      if (
+        down?.sleep
+        && event.target.closest(".pet-sprite")
+        && performance.now() - down.at <= SLEEP_WAKE_CLICK_MAX_MS
+        && Math.hypot(event.screenX - down.screenX, event.screenY - down.screenY) <= SLEEP_WAKE_CLICK_MAX_DISTANCE
+      ) {
+        event.preventDefault();
+        window.desktopPet.wakeSleepingPet();
+      }
       return;
     }
     localDragging = false;
@@ -225,13 +258,6 @@ async function renderPetWindow() {
     event.preventDefault();
     window.desktopPet.adjustScale(event.deltaY);
   }, { passive: false });
-
-  app.addEventListener("dblclick", (event) => {
-    if (event.button === 0 && event.target.closest(".pet-sprite") && activeState === config.actionIds?.sleep) {
-      event.preventDefault();
-      window.desktopPet.wakeSleepingPet();
-    }
-  });
 
   img.addEventListener("mouseenter", () => {
     if (localDragging || isDragging) {

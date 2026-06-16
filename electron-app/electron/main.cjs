@@ -469,8 +469,8 @@ let petStats = null;
 let petScale = DEFAULT_PET_SCALE;
 let preferredPetScale = DEFAULT_PET_SCALE;
 let randomGreetingTimer = null;
-let tabbyIdleTimer = null;
 let tabbySleepTimer = null;
+let tabbyIdlePollTimer = null;
 let idleGreetingPool = [];
 let intimacyDecayTimer = null;
 let lastUserOperationAt = Date.now();
@@ -507,6 +507,7 @@ let eyeTrackingEnabledCache = false;
 let eyeTrackingPollTimer = null;
 let lastEyeTrackingLook = "off";
 let eyeTrackingLookFrameCount = 0;
+let assetsRootCache = "";
 const statsFile = path.join(userDataRoot, "pet-stats.json");
 const autoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
 const windowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
@@ -2386,39 +2387,38 @@ function scheduleIdleGreeting(delayMs = IDLE_GREETING_DELAY_MS) {
   scheduleRandomGreeting(delayMs);
 }
 
-function clearTabbyIdleTimers() {
-  if (tabbyIdleTimer) {
-    clearTimeout(tabbyIdleTimer);
-    tabbyIdleTimer = null;
-  }
+function clearTabbyIdleSleepTimer() {
   if (tabbySleepTimer) {
     clearTimeout(tabbySleepTimer);
     tabbySleepTimer = null;
   }
 }
 
-function scheduleTabbyIdleActions() {
-  clearTabbyIdleTimers();
-  if (petRuntimeConfig.variant !== "tabby" || activeState !== DEFAULT_STATE) {
+function startTabbyIdlePolling() {
+  if (petRuntimeConfig.variant !== "tabby" || tabbyIdlePollTimer) {
     return;
   }
-  const delay = Math.max(0, TABBY_YAWN_IDLE_MS - (Date.now() - lastTabbyUserOperationAt));
-  tabbyIdleTimer = setTimeout(() => {
-    tabbyIdleTimer = null;
-    if (activeState === DEFAULT_STATE && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
-      setState(STATE_YAWN, false);
-    }
-  }, delay);
+  tabbyIdlePollTimer = setInterval(updateTabbyIdleActions, 1000);
+  updateTabbyIdleActions();
+}
+
+function updateTabbyIdleActions() {
+  if (petRuntimeConfig.variant !== "tabby" || activeState !== DEFAULT_STATE || tabbySleepTimer) {
+    return;
+  }
+  if (Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
+    log("tabby idle -> yawn");
+    setState(STATE_YAWN, false);
+  }
 }
 
 function recordUserOperation({ scheduleGreeting = true } = {}) {
   lastUserOperationAt = Date.now();
   lastTabbyUserOperationAt = lastUserOperationAt;
-  clearTabbyIdleTimers();
+  clearTabbyIdleSleepTimer();
   if (scheduleGreeting) {
     scheduleIdleGreeting();
   }
-  scheduleTabbyIdleActions();
   sendStats();
 }
 
@@ -2616,14 +2616,29 @@ function applyCompletedWalkStats() {
 }
 
 function getAssetsRoot() {
-  if (app.isPackaged) {
-    const asarAssetsRoot = path.join(process.resourcesPath, "app.asar", ".runtime-assets");
-    if (fs.existsSync(asarAssetsRoot)) {
-      return asarAssetsRoot;
-    }
-    return path.join(process.resourcesPath, "assets");
+  if (assetsRootCache) {
+    return assetsRootCache;
   }
-  return path.resolve(__dirname, "..", "..", "assets");
+  if (app.isPackaged) {
+    const candidates = [
+      path.join(process.resourcesPath, "assets"),
+      path.join(process.resourcesPath, "app", ".runtime-assets"),
+      path.join(process.resourcesPath, "app.asar", ".runtime-assets")
+    ];
+    for (const candidate of candidates) {
+      const probe = path.join(candidate, "animations", `${petAnimationPrefix}_squat`, "transparent_frames", "frame_000.png");
+      if (fs.existsSync(probe)) {
+        assetsRootCache = candidate;
+        log(`assets root: ${assetsRootCache}`);
+        return assetsRootCache;
+      }
+    }
+    log(`missing packaged assets for ${petRuntimeConfig.variant}: ${candidates.join("; ")}`);
+    assetsRootCache = candidates[0];
+    return assetsRootCache;
+  }
+  assetsRootCache = path.resolve(__dirname, "..", "..", "assets");
+  return assetsRootCache;
 }
 
 function toFileUrl(filePath) {
@@ -5238,7 +5253,7 @@ function setState(state, shouldRecordInteraction = true) {
       }
     }
   }
-  clearTabbyIdleTimers();
+  clearTabbyIdleSleepTimer();
   selectedState = state;
   activeState = state;
   if (getState(activeState)?.moving) {
@@ -5254,9 +5269,6 @@ function setState(state, shouldRecordInteraction = true) {
   }
   sendPetState();
   showStatMessages(statMessagesToShow);
-  if (activeState === DEFAULT_STATE) {
-    scheduleTabbyIdleActions();
-  }
 }
 
 function completeOneShotState(state) {
@@ -5266,11 +5278,10 @@ function completeOneShotState(state) {
   const shouldApplyPendingStats = pendingActionStatsState === state;
   setState(DEFAULT_STATE, false);
   if (petRuntimeConfig.variant === "tabby" && state === STATE_YAWN && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
-    clearTimeout(tabbyIdleTimer);
-    tabbyIdleTimer = null;
     tabbySleepTimer = setTimeout(() => {
       tabbySleepTimer = null;
       if (activeState === DEFAULT_STATE && Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS + TABBY_SLEEP_AFTER_YAWN_MS) {
+        log("tabby idle -> sleep");
         setState(STATE_SLEEP, false);
       }
     }, TABBY_SLEEP_AFTER_YAWN_MS);
@@ -6675,7 +6686,7 @@ if (!gotSingleInstanceLock) {
     updateEyeTrackingPolling();
     startIntimacyDecayTimer();
     scheduleIdleGreeting();
-    scheduleTabbyIdleActions();
+    startTabbyIdlePolling();
     if (process.platform === "darwin") {
       screen.on("display-metrics-changed", (_event, _display, metrics) => {
         if (metrics.includes("workArea")) {
