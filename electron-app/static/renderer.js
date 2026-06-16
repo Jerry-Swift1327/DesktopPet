@@ -260,7 +260,7 @@ async function renderPetWindow() {
   }, { passive: false });
 
   img.addEventListener("mouseenter", () => {
-    if (localDragging || isDragging) {
+    if (localDragging || isDragging || activeState === config.actionIds?.sleep) {
       return;
     }
     window.desktopPet.hoverEnter();

@@ -333,12 +333,11 @@ function readPetRuntimeConfig() {
     envConfig.channel = envChannel;
   }
 
-  const preferredVariant = readPreferredVariant();
-  if (preferredVariant && !envVariant) {
-    envConfig.variant = preferredVariant;
-  }
-
   if (!app.isPackaged) {
+    const preferredVariant = !envVariant ? readPreferredVariant() : null;
+    if (preferredVariant) {
+      envConfig.variant = preferredVariant;
+    }
     return buildPetRuntimeConfig(envConfig);
   }
 
@@ -348,13 +347,22 @@ function readPetRuntimeConfig() {
     }
     const fileConfig = readPetRuntimeConfigFile(configPath);
     if (fileConfig) {
-      return buildPetRuntimeConfig({ ...fileConfig, ...envConfig });
+      const preferredVariant = !envVariant && SWITCHABLE_VARIANTS.includes(fileConfig.variant)
+        ? readPreferredVariant()
+        : null;
+      return buildPetRuntimeConfig({
+        ...fileConfig,
+        ...envConfig,
+        ...(preferredVariant ? { variant: preferredVariant } : {})
+      });
     }
   }
 
+  const preferredVariant = !envVariant ? readPreferredVariant() : null;
   return buildPetRuntimeConfig({
     variant: DEFAULT_PET_VARIANT,
     channel: DEFAULT_PET_CHANNEL,
+    ...(preferredVariant ? { variant: preferredVariant } : {}),
     ...envConfig
   });
 }
@@ -4125,7 +4133,11 @@ function getWindowDockHoverSuppressionMs() {
 }
 
 function shouldSuppressHoverPanel() {
-  return isStartupBubbleVisible() || windowDockInProgress || getBubbleHoverSuppressionMs() > 0 || getWindowDockHoverSuppressionMs() > 0;
+  return isStartupBubbleVisible()
+    || windowDockInProgress
+    || getBubbleHoverSuppressionMs() > 0
+    || getWindowDockHoverSuppressionMs() > 0
+    || (petRuntimeConfig.variant === "tabby" && activeState === STATE_SLEEP);
 }
 
 function scheduleRandomGreeting(delayMs = null) {
@@ -5256,6 +5268,9 @@ function setState(state, shouldRecordInteraction = true) {
   clearTabbyIdleSleepTimer();
   selectedState = state;
   activeState = state;
+  if (petRuntimeConfig.variant === "tabby" && activeState === STATE_SLEEP) {
+    hideHoverPanel();
+  }
   if (getState(activeState)?.moving) {
     hideStartupBubble();
     hidePetMenu();
@@ -6828,6 +6843,7 @@ ipcMain.on("pet:wake-sleeping-pet", () => {
     return;
   }
   recordUserOperation();
+  hideHoverPanel();
   setState(STATE_HISS, false);
 });
 ipcMain.on("pet:complete-one-shot", (_event, state) => {

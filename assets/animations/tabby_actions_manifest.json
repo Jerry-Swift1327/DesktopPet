@@ -289,6 +289,8 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0.0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   }
 ]

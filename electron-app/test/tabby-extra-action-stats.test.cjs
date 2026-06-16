@@ -36,8 +36,21 @@ test("packaged runtime validates the external assets root first", () => {
   assert.match(getAssetsRootBody, /assets root:/);
 });
 
+test("packaged custom variants are not overridden by dog or cat preference", () => {
+  const runtimeConfigBody = mainSource.match(/function readPetRuntimeConfig\(\) \{([\s\S]*?)function getActionAssetFolder/)?.[1] || "";
+
+  assert.match(runtimeConfigBody, /SWITCHABLE_VARIANTS\.includes\(fileConfig\.variant\)/);
+  assert.match(runtimeConfigBody, /\.\.\.\(preferredVariant \? \{ variant: preferredVariant \} : \{\}\)/);
+});
+
 test("sleeping tabby wakes from a short left click instead of double click", () => {
   assert.match(rendererSource, /SLEEP_WAKE_CLICK_MAX_MS/);
   assert.match(rendererSource, /window\.desktopPet\.wakeSleepingPet\(\)/);
   assert.doesNotMatch(rendererSource, /addEventListener\("dblclick"/);
+});
+
+test("sleeping tabby does not open the hover panel before hissing", () => {
+  assert.match(mainSource, /petRuntimeConfig\.variant === "tabby" && activeState === STATE_SLEEP/);
+  assert.match(mainSource, /hideHoverPanel\(\);\s*setState\(STATE_HISS, false\)/);
+  assert.match(rendererSource, /activeState === config\.actionIds\?\.sleep/);
 });
