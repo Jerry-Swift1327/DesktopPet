@@ -25,6 +25,7 @@ test("tabby extra actions update hover panel stats", () => {
 test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /tabbyIdlePollTimer = setInterval\(updateTabbyIdleActions, 1000\)/);
   assert.match(mainSource, /const TABBY_YAWN_IDLE_MS = 2 \* 60 \* 1000/);
+  assert.match(mainSource, /nextTabbyYawnInMs: Math\.max\(0, TABBY_YAWN_IDLE_MS - \(now - lastTabbyUserOperationAt\)\)/);
   assert.match(mainSource, /setState\(STATE_YAWN, false\)/);
   assert.match(mainSource, /state === STATE_YAWN \? STATE_SLEEP : DEFAULT_STATE/);
   assert.doesNotMatch(mainSource, /TABBY_SLEEP_AFTER_YAWN_MS/);
@@ -59,4 +60,9 @@ test("sleeping tabby hover pauses sleep instead of hissing", () => {
   assert.match(mainSource, /clearHoverIntent\(\);\s*hideHoverPanel\(\);\s*setState\(STATE_HISS, false\)/);
   assert.doesNotMatch(mouseEnterBody, /activeState === config\.actionIds\?\.sleep/);
   assert.match(rendererSource, /activeState === config\.actionIds\?\.sleep && sleepSound/);
+});
+
+test("tabby release hover panel shows the yawn timer", () => {
+  assert.match(rendererSource, /data-timer="yawn"/);
+  assert.match(rendererSource, /Yawn\\n\$\{formatTimer\(\(timers\.nextTabbyYawnInMs \|\| 0\) - elapsedSinceSnapshot\)\}/);
 });

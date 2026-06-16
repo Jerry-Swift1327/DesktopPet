@@ -971,9 +971,14 @@ async function renderHoverWindow() {
         <span class="hover-panel__value" data-value="health">100</span>
       </div>
       <div class="hover-panel__timers" data-debug-timers ${config.channelConfig?.showDebugTimers === false ? "hidden" : ""}>
-        <span data-timer="idle">Idle 01:00</span>
-        <span data-timer="intimacy">Love 30:00</span>
-        <span data-timer="walk">Walk 00:00</span>
+        <span data-timer="idle">Idle
+01:00</span>
+        <span data-timer="intimacy">Love
+30:00</span>
+        <span data-timer="walk">Walk
+00:00</span>
+        ${config.channelConfig?.showYawnTimer ? `<span data-timer="yawn">Yawn
+02:00</span>` : ""}
       </div>
       <div class="hover-panel__actions" data-hover-actions></div>
     </section>
@@ -1059,18 +1064,22 @@ async function renderHoverWindow() {
     const idleTimer = app.querySelector("[data-timer='idle']");
     const intimacyTimer = app.querySelector("[data-timer='intimacy']");
     const walkTimer = app.querySelector("[data-timer='walk']");
+    const yawnTimer = app.querySelector("[data-timer='yawn']");
     if (idleTimer) {
-      idleTimer.textContent = `Idle ${formatTimer((timers.nextIdleGreetingInMs || 0) - elapsedSinceSnapshot)}`;
+      idleTimer.textContent = `Idle\n${formatTimer((timers.nextIdleGreetingInMs || 0) - elapsedSinceSnapshot)}`;
     }
     if (intimacyTimer) {
-      intimacyTimer.textContent = `Love ${formatTimer((timers.nextIntimacyDecayInMs || 0) - elapsedSinceSnapshot)}`;
+      intimacyTimer.textContent = `Love\n${formatTimer((timers.nextIntimacyDecayInMs || 0) - elapsedSinceSnapshot)}`;
     }
     if (walkTimer) {
       const walkElapsedSinceSnapshot = timers.walkLoopPaused ? 0 : elapsedSinceSnapshot;
       const remainingMs = activeState === actionIds.walk
         ? (timers.walkLoopRemainingMs || 0) - walkElapsedSinceSnapshot
         : 0;
-      walkTimer.textContent = `Walk ${formatTimer(remainingMs)}`;
+      walkTimer.textContent = `Walk\n${formatTimer(remainingMs)}`;
+    }
+    if (yawnTimer) {
+      yawnTimer.textContent = `Yawn\n${formatTimer((timers.nextTabbyYawnInMs || 0) - elapsedSinceSnapshot)}`;
     }
   }
 

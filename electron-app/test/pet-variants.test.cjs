@@ -38,6 +38,7 @@ test("pet runtime config defaults to dog release", () => {
   });
   assert.deepEqual(config.actionOrder, ["petSquat", "petWalk", "petFeed", "petBall"]);
   assert.equal(config.channelConfig.showDebugTimers, true);
+  assert.equal(config.channelConfig.showYawnTimer, false);
   assert.equal(config.channelConfig.hoverPanelHeight, 180);
 });
 
@@ -68,6 +69,7 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   assert.equal(tabbyConfig.features.eyeTracking, true);
   assert.equal(tabbyConfig.defaultScale, 1.1);
   assert.equal(tabbyConfig.autoStartRegistryKey, "ChongbanDesktopPet-tabby");
+  assert.equal(tabbyConfig.channelConfig.showYawnTimer, true);
   assert.deepEqual(tabbyConfig.actionOrder, [
     "petSquat",
     "petWalk",
@@ -104,6 +106,7 @@ test("installer channel hides debug timers and uses compact panel height", () =>
   assert.equal(config.channel, "installer");
   assert.equal(config.animationPrefix, "cat");
   assert.equal(config.channelConfig.showDebugTimers, false);
+  assert.equal(config.channelConfig.showYawnTimer, false);
   assert.equal(config.channelConfig.hoverPanelHeight, 150);
 });
 

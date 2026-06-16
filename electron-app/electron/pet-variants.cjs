@@ -263,6 +263,7 @@ function buildPetRuntimeConfig(config = {}) {
     actionOrder,
     channelConfig: {
       showDebugTimers: channelProfile.showDebugTimers,
+      showYawnTimer: channelProfile.showDebugTimers && variant === "tabby",
       hoverPanelHeight: channelProfile.hoverPanelHeight + Math.max(0, Math.ceil(actionOrder.length / 4) - 1) * 45
     }
   };

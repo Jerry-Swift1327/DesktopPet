@@ -2354,6 +2354,7 @@ function buildTimerSummary(now = Date.now()) {
     lastOperationElapsedMs: Math.max(0, now - lastUserOperationAt),
     lastInteractionElapsedMs: Math.max(0, now - (petStats?.lastInteractionAt || now)),
     nextIdleGreetingInMs: Math.max(0, IDLE_GREETING_DELAY_MS - (now - lastUserOperationAt)),
+    nextTabbyYawnInMs: Math.max(0, TABBY_YAWN_IDLE_MS - (now - lastTabbyUserOperationAt)),
     nextIntimacyDecayInMs: Math.max(0, INTIMACY_DECAY_INTERVAL_MS - (now - lastIntimacyDecayAt)),
     walkLoopRemainingMs,
     walkLoopPaused: Boolean(walkLoop?.endsAt && walkPausedAt)
