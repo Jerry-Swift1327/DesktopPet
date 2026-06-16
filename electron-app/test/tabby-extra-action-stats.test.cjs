@@ -49,8 +49,11 @@ test("sleeping tabby wakes from a short left click instead of double click", () 
   assert.doesNotMatch(rendererSource, /addEventListener\("dblclick"/);
 });
 
-test("sleeping tabby does not open the hover panel before hissing", () => {
-  assert.match(mainSource, /petRuntimeConfig\.variant === "tabby" && activeState === STATE_SLEEP/);
-  assert.match(mainSource, /hideHoverPanel\(\);\s*setState\(STATE_HISS, false\)/);
-  assert.match(rendererSource, /activeState === config\.actionIds\?\.sleep/);
+test("sleeping tabby hover pauses sleep instead of hissing", () => {
+  const mouseEnterBody = rendererSource.match(/img\.addEventListener\("mouseenter", \(\) => \{([\s\S]*?)\n  \}\);/)?.[1] || "";
+
+  assert.match(mainSource, /petRuntimeConfig\.variant === "tabby" && activeState === STATE_HISS/);
+  assert.match(mainSource, /clearHoverIntent\(\);\s*hideHoverPanel\(\);\s*setState\(STATE_HISS, false\)/);
+  assert.doesNotMatch(mouseEnterBody, /activeState === config\.actionIds\?\.sleep/);
+  assert.match(rendererSource, /activeState === config\.actionIds\?\.sleep && sleepSound/);
 });

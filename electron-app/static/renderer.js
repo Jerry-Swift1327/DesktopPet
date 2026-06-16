@@ -260,7 +260,7 @@ async function renderPetWindow() {
   }, { passive: false });
 
   img.addEventListener("mouseenter", () => {
-    if (localDragging || isDragging || activeState === config.actionIds?.sleep) {
+    if (localDragging || isDragging) {
       return;
     }
     window.desktopPet.hoverEnter();
@@ -565,6 +565,13 @@ async function renderPetWindow() {
 
   window.desktopPet.onPauseStateChanged((nextIsPaused) => {
     isInteractionPaused = Boolean(nextIsPaused);
+    if (activeState === config.actionIds?.sleep && sleepSound) {
+      if (isInteractionPaused) {
+        sleepSound.pause();
+      } else {
+        sleepSound.play().catch(() => {});
+      }
+    }
     if (!isInteractionPaused) {
       tickAccumulator = 0;
       lastTickAt = performance.now();

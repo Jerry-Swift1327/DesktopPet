@@ -4137,7 +4137,7 @@ function shouldSuppressHoverPanel() {
     || windowDockInProgress
     || getBubbleHoverSuppressionMs() > 0
     || getWindowDockHoverSuppressionMs() > 0
-    || (petRuntimeConfig.variant === "tabby" && activeState === STATE_SLEEP);
+    || (petRuntimeConfig.variant === "tabby" && activeState === STATE_HISS);
 }
 
 function scheduleRandomGreeting(delayMs = null) {
@@ -6843,6 +6843,7 @@ ipcMain.on("pet:wake-sleeping-pet", () => {
     return;
   }
   recordUserOperation();
+  clearHoverIntent();
   hideHoverPanel();
   setState(STATE_HISS, false);
 });
