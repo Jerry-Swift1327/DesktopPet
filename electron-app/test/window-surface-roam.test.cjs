@@ -8,11 +8,16 @@ const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.
 test("window roam keeps the current window target when enabled from a window surface", () => {
   const setRoamBody = mainSource.match(/function setWindowRoamPreference\(enabled\) \{([\s\S]*?)function setEyeTrackingPreference/)?.[1] || "";
   const tickBody = mainSource.match(/function tickWindowRoam\(\) \{([\s\S]*?)function startWindowRoamPolling/)?.[1] || "";
+  const dockBody = mainSource.match(/function dockPetAfterDrag\(\{ retry = false \} = \{\}\) \{([\s\S]*?)function validateCurrentWindowSurface/)?.[1] || "";
 
   assert.match(setRoamBody, /if \(windowRoamEnabledCache && currentSurface\?\.type === "window"\) \{[\s\S]*windowRoamPreferredTargetId = parseWindowHwnd\(currentSurface\.sourceWindowId\);[\s\S]*windowRoamLastTargetId = windowRoamPreferredTargetId;/);
+  assert.match(setRoamBody, /windowRoamDragFallbackSuppressedUntil = 0;/);
+  assert.match(tickBody, /if \(Date\.now\(\) < windowRoamDragFallbackSuppressedUntil\) \{[\s\S]*return;[\s\S]*\}/);
   assert.match(tickBody, /const preferredSurface = windowRoamPreferredTargetId[\s\S]*\? getWindowRoamSurfaceById\(windowRoamPreferredTargetId\)[\s\S]*: null;/);
   assert.match(tickBody, /const surface = preferredSurface \|\| getTopWindowRoamSurface\(\);/);
   assert.match(tickBody, /if \(targetId === windowRoamLastTargetId && getCurrentSurface\(\)\.type === "window"\) \{[\s\S]*setCurrentSurface\(surface\);[\s\S]*groundPetToSurface\(activeState, walkDirection, getCurrentSurface\(\)\);/);
+  assert.match(dockBody, /windowRoamLastTargetId = parseWindowHwnd\(nextSurface\.sourceWindowId\);[\s\S]*windowRoamPreferredTargetId = windowRoamLastTargetId;[\s\S]*windowRoamDragFallbackSuppressedUntil = 0;/);
+  assert.match(dockBody, /windowRoamDragFallbackSuppressedUntil = Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS;/);
 });
 
 test("window surface polling falls back when a non-roaming pet is no longer docked", () => {

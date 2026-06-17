@@ -137,6 +137,7 @@ const WINDOW_DOCK_DRAG_RETRY_DELAY_MS = 260;
 const WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS = 2500;
 const WINDOW_ROAM_POLL_INTERVAL_MS = 900;
 const WINDOW_ROAM_MAX_MISSING_TICKS = 2;
+const WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS = WINDOW_ROAM_POLL_INTERVAL_MS * 2;
 const EYE_TRACKING_POLL_INTERVAL_MS = 50;
 const EYE_TRACKING_FRAME_NAME_PATTERN = /^frame_(\d+)\.png$/i;
 const DARWIN_DISPLAY_METRICS_SETTLE_MS = 300;
@@ -543,6 +544,7 @@ let windowRoamPollTimer = null;
 let windowRoamLastTargetId = "";
 let windowRoamPreferredTargetId = "";
 let windowRoamSuppressedWindowId = "";
+let windowRoamDragFallbackSuppressedUntil = 0;
 let windowRoamMissingTicks = 0;
 let eyeTrackingEnabledCache = false;
 let eyeTrackingPollTimer = null;
@@ -1001,6 +1003,7 @@ function setWindowRoamPreference(enabled) {
     windowRoamLastTargetId = windowRoamPreferredTargetId;
   }
   windowRoamSuppressedWindowId = "";
+  windowRoamDragFallbackSuppressedUntil = 0;
   windowRoamMissingTicks = 0;
   updateWindowRoamPolling();
   sendMenuConfig();
@@ -2140,6 +2143,9 @@ function fallbackWindowRoamToTaskbar(reason = "window-roam-no-target") {
 
 function tickWindowRoam() {
   if (!windowRoamEnabledCache || dragState || windowDockInProgress || !petWindow || petWindow.isDestroyed()) {
+    return;
+  }
+  if (Date.now() < windowRoamDragFallbackSuppressedUntil) {
     return;
   }
 
@@ -6699,11 +6705,19 @@ function dockPetAfterDrag({ retry = false } = {}) {
     }
 
     if (surface && applySurfaceScale(surface, activeState, walkDirection)) {
-      applyDockSurfaceAfterDrag(surface, draggedX);
+      const nextSurface = applyDockSurfaceAfterDrag(surface, draggedX);
+      if (windowRoamEnabledCache && nextSurface.type === "window") {
+        windowRoamLastTargetId = parseWindowHwnd(nextSurface.sourceWindowId);
+        windowRoamPreferredTargetId = windowRoamLastTargetId;
+        windowRoamDragFallbackSuppressedUntil = 0;
+      }
       windowRoamSuppressedWindowId = "";
     } else {
       if (windowRoamEnabledCache && previousWindowId) {
         windowRoamSuppressedWindowId = previousWindowId;
+      }
+      if (windowRoamEnabledCache) {
+        windowRoamDragFallbackSuppressedUntil = Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS;
       }
       fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
     }
