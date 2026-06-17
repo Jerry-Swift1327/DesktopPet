@@ -6811,8 +6811,7 @@ function startWindowSurfacePolling() {
         return;
       }
     }
-    if (!windowRoamEnabledCache
-      && (!validateCurrentWindowSurface({ useCache: false }) || !isPetStillDockedOnWindowSurface(currentSurface))) {
+    if (!windowRoamEnabledCache && !isPetStillDockedOnWindowSurface(currentSurface)) {
       fallbackCurrentSurfaceToTaskbar("window-surface-detached");
       return;
     }

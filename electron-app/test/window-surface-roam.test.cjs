@@ -18,14 +18,15 @@ test("window roam keeps the current window target when enabled from a window sur
 test("window surface polling falls back when a non-roaming pet is no longer docked", () => {
   const dockedBody = mainSource.match(/function isPetStillDockedOnWindowSurface\(surface = currentSurface\) \{([\s\S]*?)function fallbackCurrentSurfaceToTaskbar/)?.[1] || "";
   const pollingBody = mainSource.match(/function startWindowSurfacePolling\(\) \{([\s\S]*?)function stopWindowSurfacePolling/)?.[1] || "";
+  const detachedBranch = pollingBody.match(/if \(!windowRoamEnabledCache && !isPetStillDockedOnWindowSurface\(currentSurface\)\) \{([\s\S]*?)\n    \}/)?.[1] || "";
 
   assert.match(dockedBody, /centerX >= surface\.left/);
   assert.match(dockedBody, /centerX <= surface\.right/);
   assert.match(dockedBody, /Math\.abs\(bottomY - surface\.groundY\) <= WINDOW_DOCK_COARSE_CORRECTION_LIMIT/);
   assert.match(pollingBody, /!windowRoamEnabledCache/);
-  assert.match(pollingBody, /!validateCurrentWindowSurface\(\{ useCache: false \}\)/);
   assert.match(pollingBody, /!isPetStillDockedOnWindowSurface\(currentSurface\)/);
   assert.match(pollingBody, /fallbackCurrentSurfaceToTaskbar\("window-surface-detached"\);[\s\S]*return;/);
+  assert.doesNotMatch(detachedBranch, /validateCurrentWindowSurface/);
   assert.ok(
     pollingBody.indexOf('fallbackCurrentSurfaceToTaskbar("window-surface-detached")') < pollingBody.indexOf("const now = Date.now();"),
     "detached window fallback should run before the heavy-check throttle can return"
