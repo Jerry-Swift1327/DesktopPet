@@ -40,6 +40,7 @@ app.commandLine.appendSwitch("disable-features", "VizDisplayCompositor");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 const petRuntimeConfig = readPetRuntimeConfig();
+const basePetVariant = getBasePetVariant();
 if (process.platform === "win32") {
   app.setAppUserModelId(petRuntimeConfig.singleInstanceKey);
 }
@@ -57,12 +58,11 @@ function getUserDataRoot() {
   if (process.platform === "darwin") {
     return path.join(app.getPath("appData"), getPetUserDataFolder({ ...petRuntimeConfig, platform: process.platform }));
   }
-  return path.join(process.env.LOCALAPPDATA || path.join(path.dirname(process.execPath), "user-data"), APP_INTERNAL_NAME, petRuntimeConfig.variant);
+  return path.join(process.env.LOCALAPPDATA || path.join(path.dirname(process.execPath), "user-data"), APP_INTERNAL_NAME, basePetVariant);
 }
 
 const petActionIds = getPetActionIds();
 const petAnimationPrefix = petRuntimeConfig.animationPrefix;
-const basePetVariant = getBasePetVariant();
 const STATE_SQUAT = petActionIds.squat;
 const STATE_WALK = petActionIds.walk;
 const STATE_FEED = petActionIds.feed;

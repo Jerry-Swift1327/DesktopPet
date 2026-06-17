@@ -10,6 +10,13 @@ test("pet scale preference is stored per variant", () => {
   assert.match(mainSource, /JSON\.stringify\(\{ scale: preferredPetScale \}/);
 });
 
+test("packaged user data root follows the base variant", () => {
+  const userDataRootBody = mainSource.match(/function getUserDataRoot\(\) \{([\s\S]*?)const petActionIds/)?.[1] || "";
+
+  assert.match(userDataRootBody, /APP_INTERNAL_NAME, basePetVariant/);
+  assert.doesNotMatch(userDataRootBody, /APP_INTERNAL_NAME, petRuntimeConfig\.variant/);
+});
+
 test("pet scale preference is loaded before the pet window is created", () => {
   const readyBlock = mainSource.match(/app\.whenReady\(\)\.then\(\(\) => \{([\s\S]*?)createPetWindow\(\);/)?.[1] || "";
 
