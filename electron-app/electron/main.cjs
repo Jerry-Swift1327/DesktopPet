@@ -427,6 +427,7 @@ let startupBubbleWindow;
 let startupBubbleWindowReady = false;
 let startupBubbleTimer = null;
 let startupBubbleHideAt = 0;
+let pendingWalkBubbleMessage = null;
 let menuWindow;
 let menuWindowReady = false;
 let menuHideTimer = null;
@@ -2180,6 +2181,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
       petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
       refreshMenuAnchorAfterScale();
       refreshHoverAnchorAfterScale();
+      repositionStartupBubbleWindow();
     }
     return true;
   }
@@ -2213,6 +2215,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
     petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
     refreshMenuAnchorAfterScale();
     refreshHoverAnchorAfterScale();
+    repositionStartupBubbleWindow();
     return true;
   }
   taskbarWalkRunway = null;
@@ -2232,6 +2235,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
   petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
   refreshMenuAnchorAfterScale();
   refreshHoverAnchorAfterScale();
+  repositionStartupBubbleWindow();
   return true;
 }
 
@@ -3813,6 +3817,7 @@ function setPetWindowPosition(x, y) {
     width: getPetWindowWidth(),
     height: getPetWindowHeight()
   }, false);
+  repositionStartupBubbleWindow();
 }
 
 function clampPetWindowPosition(x, y) {
@@ -4031,9 +4036,21 @@ function resizeStartupBubble(width, height = STARTUP_BUBBLE_HEIGHT) {
     return;
   }
 
+  startupBubbleWindow.__lastWidth = width;
+  startupBubbleWindow.__lastHeight = height;
   const bubbleBounds = getStartupBubblePosition(width, height);
   startupBubbleWindow.setBounds(bubbleBounds, false);
   log(`startup-bubble resize target=${bubbleBounds.x},${bubbleBounds.y},${bubbleBounds.width},${bubbleBounds.height}`);
+}
+
+function repositionStartupBubbleWindow() {
+  if (!startupBubbleWindow || startupBubbleWindow.isDestroyed() || !startupBubbleWindow.isVisible()) {
+    return;
+  }
+  const width = startupBubbleWindow.__lastWidth || startupBubbleWindow.getBounds().width;
+  const height = startupBubbleWindow.__lastHeight || startupBubbleWindow.getBounds().height;
+  const bubbleBounds = getStartupBubblePosition(width, height);
+  startupBubbleWindow.setBounds(bubbleBounds, false);
 }
 
 function showStartupBubble() {
@@ -4043,6 +4060,10 @@ function showStartupBubble() {
 function showBubbleMessage(message = null, durationMs = STARTUP_BUBBLE_DURATION_MS, options = {}) {
   if (!petWindow || petWindow.isDestroyed()) {
     return false;
+  }
+  if (isWalkingState()) {
+    pendingWalkBubbleMessage = { message, durationMs, options };
+    return true;
   }
   const isMenuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
   const isHoverVisible = hoverWindow && !hoverWindow.isDestroyed() && hoverWindow.isVisible();
@@ -4086,6 +4107,9 @@ function showBubbleMessage(message = null, durationMs = STARTUP_BUBBLE_DURATION_
 }
 
 function hideStartupBubble(options = {}) {
+  if (options.force) {
+    pendingWalkBubbleMessage = null;
+  }
   if (!options.force && startupBubbleTimer && Date.now() < startupBubbleHideAt) {
     return;
   }
@@ -4098,6 +4122,15 @@ function hideStartupBubble(options = {}) {
     return;
   }
   startupBubbleWindow.hide();
+}
+
+function showPendingWalkBubbleMessage() {
+  if (!pendingWalkBubbleMessage || activeState !== DEFAULT_STATE) {
+    return;
+  }
+  const next = pendingWalkBubbleMessage;
+  pendingWalkBubbleMessage = null;
+  showBubbleMessage(next.message, next.durationMs, next.options);
 }
 
 function isStartupBubbleVisible() {
@@ -4514,6 +4547,7 @@ function repositionHoverWindow() {
 function repositionOverlays() {
   repositionMenuWindow();
   repositionHoverWindow();
+  repositionStartupBubbleWindow();
 }
 
 function refreshHoverAnchorAfterScale() {
@@ -5145,6 +5179,7 @@ function setPetScale(nextScale) {
     petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
     refreshMenuAnchorAfterScale();
     refreshHoverAnchorAfterScale();
+    repositionStartupBubbleWindow();
     syncWalkTrackX();
     updatePetWindowMousePassthrough();
     scheduleWalkLoopTimeout();
@@ -5174,6 +5209,7 @@ function setPetScale(nextScale) {
   petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
   refreshMenuAnchorAfterScale();
   refreshHoverAnchorAfterScale();
+  repositionStartupBubbleWindow();
   if (isWalkingState()) {
     syncWalkTrackX();
     scheduleWalkLoopTimeout();
@@ -5258,11 +5294,14 @@ function setState(state, shouldRecordInteraction = true) {
   }
   selectedState = state;
   activeState = state;
+  if (previousState === STATE_WALK && activeState !== DEFAULT_STATE) {
+    pendingWalkBubbleMessage = null;
+  }
   if (petRuntimeConfig.variant === "tabby" && activeState === STATE_SLEEP) {
     hideHoverPanel();
   }
   if (getState(activeState)?.moving) {
-    hideStartupBubble();
+    hideStartupBubble({ force: true });
     hidePetMenu();
     hideHoverPanel();
     resetWalkRuntime();
@@ -5274,6 +5313,7 @@ function setState(state, shouldRecordInteraction = true) {
   }
   sendPetState();
   showStatMessages(statMessagesToShow);
+  showPendingWalkBubbleMessage();
 }
 
 function completeOneShotState(state) {
