@@ -12,11 +12,14 @@ test("startup bubble freezes its anchor while visible", () => {
 
   const resizeBody = mainSource.match(/function resizeStartupBubble\(width, height = STARTUP_BUBBLE_HEIGHT\) \{([\s\S]*?)function repositionStartupBubbleWindow/)?.[1] || "";
   const repositionBody = mainSource.match(/function repositionStartupBubbleWindow\(\{ refreshAnchor = false \} = \{\}\) \{([\s\S]*?)function showStartupBubble/)?.[1] || "";
+  const moveBody = mainSource.match(/function setPetWindowPosition\(x, y\) \{([\s\S]*?)function clampPetWindowPosition/)?.[1] || "";
   const showBody = mainSource.match(/function showBubbleMessage\(message = null, durationMs = STARTUP_BUBBLE_DURATION_MS, options = \{\}\) \{([\s\S]*?)function hideStartupBubble/)?.[1] || "";
   const hideBody = mainSource.match(/function hideStartupBubble\(options = \{\}\) \{([\s\S]*?)function showPendingWalkBubbleMessage/)?.[1] || "";
 
   assert.doesNotMatch(resizeBody, /refreshStartupBubbleAnchor\(\)/);
   assert.match(repositionBody, /if \(refreshAnchor \|\| !startupBubbleAnchorRect\) \{[\s\S]*refreshStartupBubbleAnchor\(\);/);
+  assert.match(moveBody, /repositionStartupBubbleWindow\(\);/);
+  assert.doesNotMatch(moveBody, /refreshAnchor: true/);
   assert.match(showBody, /refreshStartupBubbleAnchor\(\);/);
   assert.match(hideBody, /startupBubbleAnchorRect = null;/);
 });

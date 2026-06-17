@@ -3966,7 +3966,7 @@ function setPetWindowPosition(x, y) {
     width: getPetWindowWidth(),
     height: getPetWindowHeight()
   }, false);
-  repositionStartupBubbleWindow({ refreshAnchor: true });
+  repositionStartupBubbleWindow();
 }
 
 function clampPetWindowPosition(x, y) {
