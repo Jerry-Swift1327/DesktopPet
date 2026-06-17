@@ -6,8 +6,14 @@ const path = require("node:path");
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 
 test("pet scale preference is stored per variant", () => {
-  assert.match(mainSource, /const scalePreferenceFile = path\.join\(userDataRoot, `scale-\$\{petRuntimeConfig\.variant\}\.json`\);/);
+  assert.match(mainSource, /const variantDataRoot = path\.join\(userDataRoot, "variants", petRuntimeConfig\.variant\);/);
+  assert.match(mainSource, /const scalePreferenceFile = path\.join\(variantDataRoot, `scale-\$\{petRuntimeConfig\.variant\}\.json`\);/);
   assert.match(mainSource, /JSON\.stringify\(\{ scale: preferredPetScale \}/);
+});
+
+test("pet stats are stored in the current variant data folder", () => {
+  assert.match(mainSource, /const statsFile = path\.join\(variantDataRoot, "pet-stats\.json"\);/);
+  assert.match(mainSource, /petRuntimeConfig\.variant === basePetVariant \? path\.join\(userDataRoot, "pet-stats\.json"\) : ""/);
 });
 
 test("packaged user data root follows the base variant", () => {

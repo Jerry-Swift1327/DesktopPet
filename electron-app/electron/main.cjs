@@ -46,7 +46,9 @@ if (process.platform === "win32") {
 }
 
 const userDataRoot = getUserDataRoot();
+const variantDataRoot = path.join(userDataRoot, "variants", petRuntimeConfig.variant);
 fs.mkdirSync(userDataRoot, { recursive: true });
+fs.mkdirSync(variantDataRoot, { recursive: true });
 fs.mkdirSync(path.join(userDataRoot, "session"), { recursive: true });
 app.setPath("userData", userDataRoot);
 app.setPath("sessionData", path.join(userDataRoot, "session"));
@@ -540,11 +542,16 @@ let eyeTrackingPollTimer = null;
 let lastEyeTrackingLook = "off";
 let eyeTrackingLookFrameCount = 0;
 let assetsRootCache = "";
-const statsFile = path.join(userDataRoot, "pet-stats.json");
-const autoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
-const windowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
-const eyeTrackingPreferenceFile = path.join(userDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
-const scalePreferenceFile = path.join(userDataRoot, `scale-${petRuntimeConfig.variant}.json`);
+const statsFile = path.join(variantDataRoot, "pet-stats.json");
+const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
+const autoStartPreferenceFile = path.join(variantDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
+const windowRoamPreferenceFile = path.join(variantDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
+const eyeTrackingPreferenceFile = path.join(variantDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
+const scalePreferenceFile = path.join(variantDataRoot, `scale-${petRuntimeConfig.variant}.json`);
+const legacyAutoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
+const legacyWindowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
+const legacyEyeTrackingPreferenceFile = path.join(userDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
+const legacyScalePreferenceFile = path.join(userDataRoot, `scale-${petRuntimeConfig.variant}.json`);
 const logDir = path.join(userDataRoot, "logs");
 const logFile = path.join(logDir, "main.log");
 const visibleBoundsCache = new Map();
@@ -632,12 +639,13 @@ function readAutoStartEnabledAsync(callback) {
 }
 
 function readAutoStartPreference() {
-  if (!fs.existsSync(autoStartPreferenceFile)) {
+  const filePath = fs.existsSync(autoStartPreferenceFile) ? autoStartPreferenceFile : legacyAutoStartPreferenceFile;
+  if (!fs.existsSync(filePath)) {
     return;
   }
 
   try {
-    const preference = JSON.parse(fs.readFileSync(autoStartPreferenceFile, "utf8"));
+    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (typeof preference.enabled === "boolean") {
       autoStartEnabledCache = preference.enabled;
       autoStartPreferenceLoaded = true;
@@ -724,12 +732,13 @@ function canToggleWindowRoam() {
 }
 
 function readWindowRoamPreference() {
-  if (!fs.existsSync(windowRoamPreferenceFile)) {
+  const filePath = fs.existsSync(windowRoamPreferenceFile) ? windowRoamPreferenceFile : legacyWindowRoamPreferenceFile;
+  if (!fs.existsSync(filePath)) {
     return;
   }
 
   try {
-    const preference = JSON.parse(fs.readFileSync(windowRoamPreferenceFile, "utf8"));
+    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (typeof preference.enabled === "boolean") {
       windowRoamEnabledCache = preference.enabled;
     }
@@ -760,12 +769,13 @@ function canToggleEyeTracking() {
 }
 
 function readEyeTrackingPreference() {
-  if (!fs.existsSync(eyeTrackingPreferenceFile)) {
+  const filePath = fs.existsSync(eyeTrackingPreferenceFile) ? eyeTrackingPreferenceFile : legacyEyeTrackingPreferenceFile;
+  if (!fs.existsSync(filePath)) {
     return;
   }
 
   try {
-    const preference = JSON.parse(fs.readFileSync(eyeTrackingPreferenceFile, "utf8"));
+    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (typeof preference.enabled === "boolean") {
       eyeTrackingEnabledCache = preference.enabled;
     }
@@ -792,12 +802,13 @@ function buildEyeTrackingSummary(error = "") {
 }
 
 function readPetScalePreference() {
-  if (!fs.existsSync(scalePreferenceFile)) {
+  const filePath = fs.existsSync(scalePreferenceFile) ? scalePreferenceFile : legacyScalePreferenceFile;
+  if (!fs.existsSync(filePath)) {
     return;
   }
 
   try {
-    const preference = JSON.parse(fs.readFileSync(scalePreferenceFile, "utf8"));
+    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (Number.isFinite(preference.scale)) {
       preferredPetScale = clampPetScale(preference.scale);
       petScale = preferredPetScale;
@@ -1024,9 +1035,10 @@ function readPetStats() {
     lastStatsActiveAt: now
   };
 
-  if (fs.existsSync(statsFile)) {
+  const savedStatsFile = fs.existsSync(statsFile) ? statsFile : legacyStatsFile;
+  if (savedStatsFile && fs.existsSync(savedStatsFile)) {
     try {
-      const raw = fs.readFileSync(statsFile, "utf8").trim();
+      const raw = fs.readFileSync(savedStatsFile, "utf8").trim();
       const decoded = decodeStatsPayload(raw);
       const savedStats = decoded || JSON.parse(raw);
       hasStatsActiveAt = Number.isFinite(savedStats.lastStatsActiveAt);

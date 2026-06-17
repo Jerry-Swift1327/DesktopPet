@@ -115,11 +115,11 @@ macOS 适配建议分阶段推进：
 
 ## 状态数据
 
-运行状态存储在 Electron `userData` 下，主要包括：
+运行状态存储在 Electron `userData` 下，打包后的 Windows 数据根目录按基础安装包变体隔离，当前显示变体的数据位于 `variants/<variant>`，主要包括：
 
-- `pet-stats.json`
-- `auto-start-<variant>.json`
-- `window-roam-<variant>.json`
+- `variants/<variant>/pet-stats.json`
+- `variants/<variant>/auto-start-<variant>.json`
+- `variants/<variant>/window-roam-<variant>.json`
 - `logs/main.log`
 
 开发模式通常位于 `electron-app/.user-data/<variant>`；打包后通常位于用户本机 LocalAppData 下。
