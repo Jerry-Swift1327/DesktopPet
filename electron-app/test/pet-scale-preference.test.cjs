@@ -5,10 +5,14 @@ const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 
-test("pet scale preference is stored per variant", () => {
+test("pet preferences are stored per variant in an encrypted file", () => {
   assert.match(mainSource, /const variantDataRoot = path\.join\(userDataRoot, "variants", petRuntimeConfig\.variant\);/);
-  assert.match(mainSource, /const scalePreferenceFile = path\.join\(variantDataRoot, `scale-\$\{petRuntimeConfig\.variant\}\.json`\);/);
-  assert.match(mainSource, /JSON\.stringify\(\{ scale: preferredPetScale \}/);
+  assert.match(mainSource, /const PREFERENCES_FILE = "preferences\.dat";/);
+  assert.match(mainSource, /const preferencesFile = path\.join\(variantDataRoot, PREFERENCES_FILE\);/);
+  assert.match(mainSource, /const PREFERENCES_CIPHER = "aes-256-gcm";/);
+  assert.match(mainSource, /crypto\.createCipheriv\(PREFERENCES_CIPHER, getPreferencesKey\(\), iv\)/);
+  assert.match(mainSource, /writePreference\(\{ scale: preferredPetScale \}\);/);
+  assert.doesNotMatch(mainSource, /fs\.writeFileSync\([^)]*`scale-\$\{petRuntimeConfig\.variant\}\.json`/);
 });
 
 test("pet stats are stored in the current variant data folder", () => {
@@ -27,6 +31,15 @@ test("pet scale preference is loaded before the pet window is created", () => {
   const readyBlock = mainSource.match(/app\.whenReady\(\)\.then\(\(\) => \{([\s\S]*?)createPetWindow\(\);/)?.[1] || "";
 
   assert.match(readyBlock, /readPetScalePreference\(\);/);
+});
+
+test("split legacy preference files can migrate into preferences", () => {
+  const scalePreferenceBody = mainSource.match(/function readPetScalePreference\(\) \{([\s\S]*?)function writePetScalePreference/)?.[1] || "";
+
+  assert.match(scalePreferenceBody, /legacyVariantScalePreferenceFile/);
+  assert.match(scalePreferenceBody, /legacyScalePreferenceFile/);
+  assert.match(scalePreferenceBody, /readLegacyPreference\(/);
+  assert.match(scalePreferenceBody, /writePreference\(\{ scale: preferredPetScale \}\);/);
 });
 
 test("pet scale changes persist the preferred scale", () => {

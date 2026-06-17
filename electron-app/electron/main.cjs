@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, nativeImage, screen } = require("electron");
 const { execFile, execFileSync } = require("child_process");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -28,6 +29,10 @@ const APP_INTERNAL_NAME = "Chongban";
 const APP_DISPLAY_NAME = "宠伴";
 const APP_ICON_FILE = "app_icon.ico";
 const WINDOWS_STARTUP_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+const PREFERENCES_FILE = "preferences.dat";
+const PREFERENCES_VERSION = 1;
+const PREFERENCES_MAGIC = "CBPREF1";
+const PREFERENCES_CIPHER = "aes-256-gcm";
 
 app.setName(APP_INTERNAL_NAME);
 app.disableHardwareAcceleration();
@@ -544,10 +549,11 @@ let eyeTrackingLookFrameCount = 0;
 let assetsRootCache = "";
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
-const autoStartPreferenceFile = path.join(variantDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
-const windowRoamPreferenceFile = path.join(variantDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
-const eyeTrackingPreferenceFile = path.join(variantDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
-const scalePreferenceFile = path.join(variantDataRoot, `scale-${petRuntimeConfig.variant}.json`);
+const preferencesFile = path.join(variantDataRoot, PREFERENCES_FILE);
+const legacyVariantAutoStartPreferenceFile = path.join(variantDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
+const legacyVariantWindowRoamPreferenceFile = path.join(variantDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
+const legacyVariantEyeTrackingPreferenceFile = path.join(variantDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
+const legacyVariantScalePreferenceFile = path.join(variantDataRoot, `scale-${petRuntimeConfig.variant}.json`);
 const legacyAutoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
 const legacyWindowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
 const legacyEyeTrackingPreferenceFile = path.join(userDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
@@ -558,6 +564,7 @@ const visibleBoundsCache = new Map();
 const headBoundsCache = new Map();
 const framePathsCache = new Map();
 const framePixelCache = new Map();
+let preferencesCache = null;
 
 function log(message) {
   try {
@@ -584,6 +591,75 @@ function isAutoStartSupported() {
 
 function canToggleAutoStart() {
   return Boolean(petRuntimeConfig.features?.autoStart) && isAutoStartSupported();
+}
+
+function getPreferencesKey() {
+  return crypto.createHash("sha256")
+    .update([APP_INTERNAL_NAME, basePetVariant, petRuntimeConfig.variant, app.getPath("home")].join("|"))
+    .digest();
+}
+
+function readPreferences() {
+  if (preferencesCache) {
+    return preferencesCache;
+  }
+  preferencesCache = {};
+  if (!fs.existsSync(preferencesFile)) {
+    return preferencesCache;
+  }
+
+  try {
+    const [magic, ivText, tagText, encryptedText] = fs.readFileSync(preferencesFile, "utf8").trim().split(".");
+    if (magic !== PREFERENCES_MAGIC || !ivText || !tagText || !encryptedText) {
+      return preferencesCache;
+    }
+    const decipher = crypto.createDecipheriv(PREFERENCES_CIPHER, getPreferencesKey(), Buffer.from(ivText, "base64"));
+    decipher.setAuthTag(Buffer.from(tagText, "base64"));
+    const raw = Buffer.concat([
+      decipher.update(Buffer.from(encryptedText, "base64")),
+      decipher.final()
+    ]).toString("utf8");
+    const data = JSON.parse(raw);
+    if (data && typeof data === "object") {
+      preferencesCache = data;
+    }
+  } catch (error) {
+    log(`failed to read preferences: ${error.stack || error.message}`);
+  }
+  return preferencesCache;
+}
+
+function writePreference(values) {
+  try {
+    preferencesCache = { ...readPreferences(), ...values, version: PREFERENCES_VERSION };
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(PREFERENCES_CIPHER, getPreferencesKey(), iv);
+    const encrypted = Buffer.concat([
+      cipher.update(JSON.stringify(preferencesCache), "utf8"),
+      cipher.final()
+    ]);
+    fs.writeFileSync(preferencesFile, [
+      PREFERENCES_MAGIC,
+      iv.toString("base64"),
+      cipher.getAuthTag().toString("base64"),
+      encrypted.toString("base64")
+    ].join("."), "utf8");
+  } catch (error) {
+    log(`failed to write preferences: ${error.stack || error.message}`);
+  }
+}
+
+function readLegacyPreference(filePaths, key, label) {
+  const filePath = filePaths.find((candidate) => fs.existsSync(candidate));
+  if (!filePath) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"))?.[key];
+  } catch (error) {
+    log(`failed to read ${label}: ${error.stack || error.message}`);
+    return undefined;
+  }
 }
 
 function readAutoStartEnabledSync() {
@@ -639,29 +715,28 @@ function readAutoStartEnabledAsync(callback) {
 }
 
 function readAutoStartPreference() {
-  const filePath = fs.existsSync(autoStartPreferenceFile) ? autoStartPreferenceFile : legacyAutoStartPreferenceFile;
-  if (!fs.existsSync(filePath)) {
-    return;
+  const preferences = readPreferences();
+  let enabled = preferences.autoStartEnabled;
+  let shouldMigrate = false;
+  if (typeof enabled !== "boolean") {
+    enabled = readLegacyPreference([
+      legacyVariantAutoStartPreferenceFile,
+      legacyAutoStartPreferenceFile
+    ], "enabled", "auto start preference");
+    shouldMigrate = typeof enabled === "boolean";
   }
-
-  try {
-    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (typeof preference.enabled === "boolean") {
-      autoStartEnabledCache = preference.enabled;
-      autoStartPreferenceLoaded = true;
+  if (typeof enabled === "boolean") {
+    autoStartEnabledCache = enabled;
+    autoStartPreferenceLoaded = true;
+    if (shouldMigrate) {
+      writePreference({ autoStartEnabled: enabled });
     }
-  } catch (error) {
-    log(`failed to read auto start preference: ${error.stack || error.message}`);
   }
 }
 
 function writeAutoStartPreference(enabled) {
-  try {
-    fs.writeFileSync(autoStartPreferenceFile, JSON.stringify({ enabled: Boolean(enabled) }, null, 2), "utf8");
-    autoStartPreferenceLoaded = true;
-  } catch (error) {
-    log(`failed to write auto start preference: ${error.stack || error.message}`);
-  }
+  writePreference({ autoStartEnabled: Boolean(enabled) });
+  autoStartPreferenceLoaded = true;
 }
 
 function refreshAutoStartCacheAsync() {
@@ -732,27 +807,26 @@ function canToggleWindowRoam() {
 }
 
 function readWindowRoamPreference() {
-  const filePath = fs.existsSync(windowRoamPreferenceFile) ? windowRoamPreferenceFile : legacyWindowRoamPreferenceFile;
-  if (!fs.existsSync(filePath)) {
-    return;
+  const preferences = readPreferences();
+  let enabled = preferences.windowRoamEnabled;
+  let shouldMigrate = false;
+  if (typeof enabled !== "boolean") {
+    enabled = readLegacyPreference([
+      legacyVariantWindowRoamPreferenceFile,
+      legacyWindowRoamPreferenceFile
+    ], "enabled", "window roam preference");
+    shouldMigrate = typeof enabled === "boolean";
   }
-
-  try {
-    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (typeof preference.enabled === "boolean") {
-      windowRoamEnabledCache = preference.enabled;
+  if (typeof enabled === "boolean") {
+    windowRoamEnabledCache = enabled;
+    if (shouldMigrate) {
+      writePreference({ windowRoamEnabled: enabled });
     }
-  } catch (error) {
-    log(`failed to read window roam preference: ${error.stack || error.message}`);
   }
 }
 
 function writeWindowRoamPreference(enabled) {
-  try {
-    fs.writeFileSync(windowRoamPreferenceFile, JSON.stringify({ enabled: Boolean(enabled) }, null, 2), "utf8");
-  } catch (error) {
-    log(`failed to write window roam preference: ${error.stack || error.message}`);
-  }
+  writePreference({ windowRoamEnabled: Boolean(enabled) });
 }
 
 function buildWindowRoamSummary(error = "") {
@@ -769,27 +843,26 @@ function canToggleEyeTracking() {
 }
 
 function readEyeTrackingPreference() {
-  const filePath = fs.existsSync(eyeTrackingPreferenceFile) ? eyeTrackingPreferenceFile : legacyEyeTrackingPreferenceFile;
-  if (!fs.existsSync(filePath)) {
-    return;
+  const preferences = readPreferences();
+  let enabled = preferences.eyeTrackingEnabled;
+  let shouldMigrate = false;
+  if (typeof enabled !== "boolean") {
+    enabled = readLegacyPreference([
+      legacyVariantEyeTrackingPreferenceFile,
+      legacyEyeTrackingPreferenceFile
+    ], "enabled", "eye tracking preference");
+    shouldMigrate = typeof enabled === "boolean";
   }
-
-  try {
-    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (typeof preference.enabled === "boolean") {
-      eyeTrackingEnabledCache = preference.enabled;
+  if (typeof enabled === "boolean") {
+    eyeTrackingEnabledCache = enabled;
+    if (shouldMigrate) {
+      writePreference({ eyeTrackingEnabled: enabled });
     }
-  } catch (error) {
-    log(`failed to read eye tracking preference: ${error.stack || error.message}`);
   }
 }
 
 function writeEyeTrackingPreference(enabled) {
-  try {
-    fs.writeFileSync(eyeTrackingPreferenceFile, JSON.stringify({ enabled: Boolean(enabled) }, null, 2), "utf8");
-  } catch (error) {
-    log(`failed to write eye tracking preference: ${error.stack || error.message}`);
-  }
+  writePreference({ eyeTrackingEnabled: Boolean(enabled) });
 }
 
 function buildEyeTrackingSummary(error = "") {
@@ -802,28 +875,27 @@ function buildEyeTrackingSummary(error = "") {
 }
 
 function readPetScalePreference() {
-  const filePath = fs.existsSync(scalePreferenceFile) ? scalePreferenceFile : legacyScalePreferenceFile;
-  if (!fs.existsSync(filePath)) {
-    return;
+  const preferences = readPreferences();
+  let scale = preferences.scale;
+  let shouldMigrate = false;
+  if (!Number.isFinite(scale)) {
+    scale = readLegacyPreference([
+      legacyVariantScalePreferenceFile,
+      legacyScalePreferenceFile
+    ], "scale", "scale preference");
+    shouldMigrate = Number.isFinite(scale);
   }
-
-  try {
-    const preference = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (Number.isFinite(preference.scale)) {
-      preferredPetScale = clampPetScale(preference.scale);
-      petScale = preferredPetScale;
+  if (Number.isFinite(scale)) {
+    preferredPetScale = clampPetScale(scale);
+    petScale = preferredPetScale;
+    if (shouldMigrate) {
+      writePreference({ scale: preferredPetScale });
     }
-  } catch (error) {
-    log(`failed to read scale preference: ${error.stack || error.message}`);
   }
 }
 
 function writePetScalePreference() {
-  try {
-    fs.writeFileSync(scalePreferenceFile, JSON.stringify({ scale: preferredPetScale }, null, 2), "utf8");
-  } catch (error) {
-    log(`failed to write scale preference: ${error.stack || error.message}`);
-  }
+  writePreference({ scale: preferredPetScale });
 }
 
 function buildMenuFeatures() {
