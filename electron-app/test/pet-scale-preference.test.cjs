@@ -28,3 +28,19 @@ test("window dock scale uses the surface-fitted scale", () => {
 
   assert.match(setScaleBody, /surface\?\.type === "window"[\s\S]*getScaleForSurface\(surface, preferredPetScale, activeState, walkDirection\)/);
 });
+
+test("preferred variant is stored under the base variant local data folder", () => {
+  const preferredPathBody = mainSource.match(/function getPreferredVariantFilePath\(baseVariant = DEFAULT_PET_VARIANT\) \{([\s\S]*?)function getLegacyPreferredVariantFilePath/)?.[1] || "";
+  const runtimeConfigBody = mainSource.match(/function readPetRuntimeConfig\(\) \{([\s\S]*?)function getBasePetVariant/)?.[1] || "";
+  const switchVariantBody = mainSource.match(/ipcMain\.handle\("pet:switch-variant"[\s\S]*?\n\}\);/)?.[0] || "";
+
+  assert.match(preferredPathBody, /process\.env\.LOCALAPPDATA[\s\S]*APP_INTERNAL_NAME, baseVariant, PREFERRED_VARIANT_FILE/);
+  assert.match(runtimeConfigBody, /readPreferredVariant\(fileConfig\.variant\)/);
+  assert.match(switchVariantBody, /writePreferredVariant\(variant, basePetVariant\)/);
+});
+
+test("packaged preferred variant still reads the legacy roaming file", () => {
+  const readPreferredBody = mainSource.match(/function readPreferredVariant\(baseVariant = DEFAULT_PET_VARIANT\) \{([\s\S]*?)function writePreferredVariant/)?.[1] || "";
+
+  assert.match(readPreferredBody, /if \(app\.isPackaged\) \{\s*filePaths\.push\(getLegacyPreferredVariantFilePath\(\)\);/);
+});

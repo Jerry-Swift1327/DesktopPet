@@ -62,6 +62,7 @@ function getUserDataRoot() {
 
 const petActionIds = getPetActionIds();
 const petAnimationPrefix = petRuntimeConfig.animationPrefix;
+const basePetVariant = getBasePetVariant();
 const STATE_SQUAT = petActionIds.squat;
 const STATE_WALK = petActionIds.walk;
 const STATE_FEED = petActionIds.feed;
@@ -284,20 +285,28 @@ function getPackagedPetRuntimeConfigPaths() {
   ];
 }
 
-function getPreferredVariantFilePath() {
+function getPreferredVariantFilePath(baseVariant = DEFAULT_PET_VARIANT) {
   if (!app.isPackaged) {
     return path.join(__dirname, "..", ".user-data", PREFERRED_VARIANT_FILE);
   }
   if (process.platform === "darwin") {
     return path.join(app.getPath("appData"), MAC_USER_DATA_PARENT, PREFERRED_VARIANT_FILE);
   }
-  return path.join(app.getPath("appData"), "Chongban", PREFERRED_VARIANT_FILE);
+  return path.join(process.env.LOCALAPPDATA || path.join(path.dirname(process.execPath), "user-data"), APP_INTERNAL_NAME, baseVariant, PREFERRED_VARIANT_FILE);
 }
 
-function readPreferredVariant() {
+function getLegacyPreferredVariantFilePath() {
+  return path.join(app.getPath("appData"), APP_INTERNAL_NAME, PREFERRED_VARIANT_FILE);
+}
+
+function readPreferredVariant(baseVariant = DEFAULT_PET_VARIANT) {
   try {
-    const filePath = getPreferredVariantFilePath();
-    if (!fs.existsSync(filePath)) {
+    const filePaths = [getPreferredVariantFilePath(baseVariant)];
+    if (app.isPackaged) {
+      filePaths.push(getLegacyPreferredVariantFilePath());
+    }
+    const filePath = filePaths.find((candidate) => fs.existsSync(candidate));
+    if (!filePath) {
       return null;
     }
     const content = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
@@ -311,9 +320,9 @@ function readPreferredVariant() {
   return null;
 }
 
-function writePreferredVariant(variant) {
+function writePreferredVariant(variant, baseVariant = DEFAULT_PET_VARIANT) {
   try {
-    const filePath = getPreferredVariantFilePath();
+    const filePath = getPreferredVariantFilePath(baseVariant);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify({ variant }, null, 2), "utf8");
   } catch (error) {
@@ -347,7 +356,7 @@ function readPetRuntimeConfig() {
     const fileConfig = readPetRuntimeConfigFile(configPath);
     if (fileConfig) {
       const preferredVariant = !envVariant && SWITCHABLE_VARIANTS.includes(fileConfig.variant)
-        ? readPreferredVariant()
+        ? readPreferredVariant(fileConfig.variant)
         : null;
       return buildPetRuntimeConfig({
         ...fileConfig,
@@ -364,6 +373,22 @@ function readPetRuntimeConfig() {
     ...(preferredVariant ? { variant: preferredVariant } : {}),
     ...envConfig
   });
+}
+
+function getBasePetVariant() {
+  if (!app.isPackaged) {
+    return petRuntimeConfig.variant;
+  }
+  for (const configPath of getPackagedPetRuntimeConfigPaths()) {
+    if (!fs.existsSync(configPath)) {
+      continue;
+    }
+    const fileConfig = readPetRuntimeConfigFile(configPath);
+    if (fileConfig?.variant) {
+      return fileConfig.variant;
+    }
+  }
+  return petRuntimeConfig.variant;
 }
 
 function getActionAssetFolder(action) {
@@ -6791,7 +6816,7 @@ ipcMain.handle("pet:switch-variant", (_event, variant) => {
   if (!SWITCHABLE_VARIANTS.includes(variant)) {
     return { success: false, error: `Cannot switch to variant: ${variant}` };
   }
-  writePreferredVariant(variant);
+  writePreferredVariant(variant, basePetVariant);
   log(`switching variant to ${variant}, restarting app`);
   app.releaseSingleInstanceLock();
   app.relaunch();
