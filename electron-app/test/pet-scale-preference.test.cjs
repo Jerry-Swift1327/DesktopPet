@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const installerSource = fs.readFileSync(path.join(__dirname, "..", "build", "installer.nsh"), "utf8");
 
 test("pet preferences are stored per variant in an encrypted file", () => {
   assert.match(mainSource, /const variantDataRoot = path\.join\(userDataRoot, "variants", petRuntimeConfig\.variant\);/);
@@ -40,6 +41,26 @@ test("split legacy preference files can migrate into preferences", () => {
   assert.match(scalePreferenceBody, /legacyScalePreferenceFile/);
   assert.match(scalePreferenceBody, /readLegacyPreference\(/);
   assert.match(scalePreferenceBody, /writePreference\(\{ scale: preferredPetScale \}\);/);
+});
+
+test("legacy auto start json is migrated and cleaned up", () => {
+  const autoStartPreferenceBody = mainSource.match(/function readAutoStartPreference\(\) \{([\s\S]*?)function writeAutoStartPreference/)?.[1] || "";
+
+  assert.match(autoStartPreferenceBody, /legacyVariantAutoStartPreferenceFile/);
+  assert.match(autoStartPreferenceBody, /legacyAutoStartPreferenceFile/);
+  assert.match(autoStartPreferenceBody, /writePreference\(\{ autoStartEnabled: enabled \}\);/);
+  assert.match(autoStartPreferenceBody, /removeLegacyPreferenceFile\(legacyFilePath, "auto start preference"\);/);
+});
+
+test("installer no longer writes split auto start preference json", () => {
+  assert.doesNotMatch(installerSource, /auto-start-\$\{PET_VARIANT\}\.json/);
+  assert.doesNotMatch(installerSource, /Function WriteAutoStartPreference/);
+});
+
+test("auto start registry state is persisted into preferences", () => {
+  const refreshBody = mainSource.match(/function refreshAutoStartCacheAsync\(\) \{([\s\S]*?)function setAutoStartEnabled/)?.[1] || "";
+
+  assert.match(refreshBody, /if \(!autoStartPreferenceLoaded\) \{[\s\S]*writeAutoStartPreference\(enabled\);/);
 });
 
 test("pet scale changes persist the preferred scale", () => {

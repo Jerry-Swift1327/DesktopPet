@@ -652,13 +652,24 @@ function writePreference(values) {
 function readLegacyPreference(filePaths, key, label) {
   const filePath = filePaths.find((candidate) => fs.existsSync(candidate));
   if (!filePath) {
-    return undefined;
+    return { value: undefined, filePath: "" };
   }
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"))?.[key];
+    return { value: JSON.parse(fs.readFileSync(filePath, "utf8"))?.[key], filePath };
   } catch (error) {
     log(`failed to read ${label}: ${error.stack || error.message}`);
-    return undefined;
+    return { value: undefined, filePath };
+  }
+}
+
+function removeLegacyPreferenceFile(filePath, label) {
+  if (!filePath) {
+    return;
+  }
+  try {
+    fs.rmSync(filePath, { force: true });
+  } catch (error) {
+    log(`failed to remove ${label}: ${error.stack || error.message}`);
   }
 }
 
@@ -718,11 +729,14 @@ function readAutoStartPreference() {
   const preferences = readPreferences();
   let enabled = preferences.autoStartEnabled;
   let shouldMigrate = false;
+  let legacyFilePath = "";
   if (typeof enabled !== "boolean") {
-    enabled = readLegacyPreference([
+    const legacy = readLegacyPreference([
       legacyVariantAutoStartPreferenceFile,
       legacyAutoStartPreferenceFile
     ], "enabled", "auto start preference");
+    enabled = legacy.value;
+    legacyFilePath = legacy.filePath;
     shouldMigrate = typeof enabled === "boolean";
   }
   if (typeof enabled === "boolean") {
@@ -730,6 +744,7 @@ function readAutoStartPreference() {
     autoStartPreferenceLoaded = true;
     if (shouldMigrate) {
       writePreference({ autoStartEnabled: enabled });
+      removeLegacyPreferenceFile(legacyFilePath, "auto start preference");
     }
   }
 }
@@ -748,6 +763,7 @@ function refreshAutoStartCacheAsync() {
   readAutoStartEnabledAsync((enabled) => {
     if (!autoStartPreferenceLoaded) {
       autoStartEnabledCache = enabled;
+      writeAutoStartPreference(enabled);
     }
     autoStartRefreshInFlight = false;
     sendMenuConfig();
@@ -814,7 +830,7 @@ function readWindowRoamPreference() {
     enabled = readLegacyPreference([
       legacyVariantWindowRoamPreferenceFile,
       legacyWindowRoamPreferenceFile
-    ], "enabled", "window roam preference");
+    ], "enabled", "window roam preference").value;
     shouldMigrate = typeof enabled === "boolean";
   }
   if (typeof enabled === "boolean") {
@@ -850,7 +866,7 @@ function readEyeTrackingPreference() {
     enabled = readLegacyPreference([
       legacyVariantEyeTrackingPreferenceFile,
       legacyEyeTrackingPreferenceFile
-    ], "enabled", "eye tracking preference");
+    ], "enabled", "eye tracking preference").value;
     shouldMigrate = typeof enabled === "boolean";
   }
   if (typeof enabled === "boolean") {
@@ -882,7 +898,7 @@ function readPetScalePreference() {
     scale = readLegacyPreference([
       legacyVariantScalePreferenceFile,
       legacyScalePreferenceFile
-    ], "scale", "scale preference");
+    ], "scale", "scale preference").value;
     shouldMigrate = Number.isFinite(scale);
   }
   if (Number.isFinite(scale)) {

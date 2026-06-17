@@ -37,22 +37,11 @@ FunctionEnd
 Var mui.FinishPage.ShowReadme
 !define MUI_FINISHPAGE_SHOWREADME_VARIABLES
 
-Function WriteAutoStartPreference
-  CreateDirectory "$LOCALAPPDATA\Chongban\${PET_VARIANT}"
-  FileOpen $0 "$LOCALAPPDATA\Chongban\${PET_VARIANT}\auto-start-${PET_VARIANT}.json" w
-  FileWrite $0 "{$\"enabled$\":$1}"
-  FileClose $0
-FunctionEnd
-
 Function EnableAutoStartAfterFinish
-  StrCpy $1 "true"
-  Call WriteAutoStartPreference
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PET_AUTO_START_REGISTRY_KEY}" `"$INSTDIR\${PRODUCT_FILENAME}.exe"`
 FunctionEnd
 
 Function DisableAutoStartAfterFinish
-  StrCpy $1 "false"
-  Call WriteAutoStartPreference
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PET_AUTO_START_REGISTRY_KEY}"
 FunctionEnd
 
