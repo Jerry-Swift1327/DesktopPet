@@ -5161,14 +5161,20 @@ function setPetScale(nextScale) {
   preferredPetScale = clampPetScale(nextScale);
   writePetScalePreference();
   const previousScale = petScale;
-  const clampedScale = clampPetScale(nextScale);
+  const surface = getCurrentSurface();
+  const clampedScale = surface?.type === "window"
+    ? getScaleForSurface(surface, preferredPetScale, activeState, walkDirection)
+    : clampPetScale(nextScale);
+  if (!Number.isFinite(clampedScale)) {
+    petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+    return;
+  }
   if (Math.abs(previousScale - clampedScale) < 0.001) {
     petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
     return;
   }
 
   const bounds = petWindow.getBounds();
-  const surface = getCurrentSurface();
   const walkScaleAnchor = getWalkTrackAnchorForScale(bounds, surface);
   if (isWalkingState() && isTaskbarWalkActive(surface)) {
     petScale = clampedScale;

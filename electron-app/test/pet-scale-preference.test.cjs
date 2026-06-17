@@ -22,3 +22,9 @@ test("pet scale changes persist the preferred scale", () => {
   assert.match(setScaleBody, /preferredPetScale = clampPetScale\(nextScale\);/);
   assert.match(setScaleBody, /writePetScalePreference\(\);/);
 });
+
+test("window dock scale uses the surface-fitted scale", () => {
+  const setScaleBody = mainSource.match(/function setPetScale\(nextScale\) \{([\s\S]*?)function groundPetToWorkArea/)?.[1] || "";
+
+  assert.match(setScaleBody, /surface\?\.type === "window"[\s\S]*getScaleForSurface\(surface, preferredPetScale, activeState, walkDirection\)/);
+});
