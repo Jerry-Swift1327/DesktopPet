@@ -541,6 +541,7 @@ let autoStartPreferenceLoaded = false;
 let windowRoamEnabledCache = false;
 let windowRoamPollTimer = null;
 let windowRoamLastTargetId = "";
+let windowRoamPreferredTargetId = "";
 let windowRoamSuppressedWindowId = "";
 let windowRoamMissingTicks = 0;
 let eyeTrackingEnabledCache = false;
@@ -994,6 +995,11 @@ function setWindowRoamPreference(enabled) {
 
   windowRoamEnabledCache = Boolean(enabled);
   writeWindowRoamPreference(windowRoamEnabledCache);
+  windowRoamPreferredTargetId = "";
+  if (windowRoamEnabledCache && currentSurface?.type === "window") {
+    windowRoamPreferredTargetId = parseWindowHwnd(currentSurface.sourceWindowId);
+    windowRoamLastTargetId = windowRoamPreferredTargetId;
+  }
   windowRoamSuppressedWindowId = "";
   windowRoamMissingTicks = 0;
   updateWindowRoamPolling();
@@ -2086,6 +2092,12 @@ function getTopWindowRoamSurface(excludedWindowId = "") {
   return null;
 }
 
+function getWindowRoamSurfaceById(windowId) {
+  const candidate = findCandidateByHwnd(windowId, { cacheOnly: true })
+    || findCandidateByHwnd(windowId, { useCache: false });
+  return candidate ? buildWindowSurfaceFromItem(candidate).surface : null;
+}
+
 function attachPetToWindowRoamSurface(surface) {
   if (!petWindow || petWindow.isDestroyed()) {
     return false;
@@ -2131,7 +2143,11 @@ function tickWindowRoam() {
     return;
   }
 
-  const surface = getTopWindowRoamSurface();
+  const preferredSurface = windowRoamPreferredTargetId
+    ? getWindowRoamSurfaceById(windowRoamPreferredTargetId)
+    : null;
+  windowRoamPreferredTargetId = "";
+  const surface = preferredSurface || getTopWindowRoamSurface();
   if (!surface) {
     windowRoamMissingTicks += 1;
     if (windowRoamMissingTicks >= WINDOW_ROAM_MAX_MISSING_TICKS) {
@@ -2144,7 +2160,7 @@ function tickWindowRoam() {
   windowRoamMissingTicks = 0;
   const targetId = parseWindowHwnd(surface.sourceWindowId);
   if (targetId === windowRoamLastTargetId && getCurrentSurface().type === "window") {
-    refreshCurrentWindowSurfaceBoundsFromCache();
+    setCurrentSurface(surface);
     groundPetToSurface(activeState, walkDirection, getCurrentSurface());
     return;
   }
@@ -2170,6 +2186,7 @@ function stopWindowRoamPolling() {
   clearInterval(windowRoamPollTimer);
   windowRoamPollTimer = null;
   windowRoamLastTargetId = "";
+  windowRoamPreferredTargetId = "";
 }
 
 function updateWindowRoamPolling() {
@@ -6705,7 +6722,7 @@ function dockPetAfterDrag({ retry = false } = {}) {
   }
 }
 
-function validateCurrentWindowSurface() {
+function validateCurrentWindowSurface({ useCache = true } = {}) {
   if (!currentSurface || currentSurface.type !== "window") {
     return true;
   }
@@ -6713,8 +6730,9 @@ function validateCurrentWindowSurface() {
   if (!sourceWindowId) {
     return false;
   }
-  const same = findCandidateByHwnd(sourceWindowId, { cacheOnly: true });
-  const candidate = same || findCandidateByHwnd(sourceWindowId, { useCache: false });
+  const candidate = useCache
+    ? findCandidateByHwnd(sourceWindowId, { cacheOnly: true }) || findCandidateByHwnd(sourceWindowId, { useCache: false })
+    : findCandidateByHwnd(sourceWindowId, { useCache: false });
   if (!candidate) {
     return false;
   }
@@ -6724,6 +6742,18 @@ function validateCurrentWindowSurface() {
   }
   setCurrentSurface(built.surface);
   return true;
+}
+
+function isPetStillDockedOnWindowSurface(surface = currentSurface) {
+  if (!petWindow || petWindow.isDestroyed() || !surface || surface.type !== "window") {
+    return false;
+  }
+  const visibleRect = getVisiblePetRectFromBounds(petWindow.getBounds(), activeState, walkDirection);
+  const centerX = visibleRect.x + Math.round(visibleRect.width / 2);
+  const bottomY = visibleRect.y + visibleRect.height;
+  return centerX >= surface.left
+    && centerX <= surface.right
+    && Math.abs(bottomY - surface.groundY) <= WINDOW_DOCK_COARSE_CORRECTION_LIMIT;
 }
 
 function fallbackCurrentSurfaceToTaskbar(reason = "window-surface-invalidated") {
@@ -6780,6 +6810,11 @@ function startWindowSurfacePolling() {
       if (windowSurfaceMissingTicks < 1) {
         return;
       }
+    }
+    if (!windowRoamEnabledCache
+      && (!validateCurrentWindowSurface({ useCache: false }) || !isPetStillDockedOnWindowSurface(currentSurface))) {
+      fallbackCurrentSurfaceToTaskbar("window-surface-detached");
+      return;
     }
     const now = Date.now();
     if (now - lastWindowSurfaceHeavyCheckAt < WINDOW_SURFACE_HEAVY_RECHECK_MS) {
