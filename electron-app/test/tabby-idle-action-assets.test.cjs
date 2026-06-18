@@ -51,6 +51,10 @@ test("tabby yawn plays into the stable sleep tail loop", () => {
   const firstBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_000.png"));
   assert.equal(firstBounds.bottom, 238);
   assert.ok(firstBounds.left >= 70 && firstBounds.right <= 220);
+  for (const frameName of ["frame_004.png", "frame_005.png", "frame_006.png", "frame_007.png", "frame_008.png", "frame_009.png", "frame_010.png"]) {
+    const entryBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", frameName));
+    assert.ok(entryBounds.right <= 204);
+  }
   const tailBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_285.png"));
   assert.deepEqual(tailBounds, { left: 65, top: 135, right: 200, bottom: 238 });
   assert.deepEqual(measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_334.png")), tailBounds);
