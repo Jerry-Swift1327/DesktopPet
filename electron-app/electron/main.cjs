@@ -5325,9 +5325,11 @@ function updateRenderedFrame(info) {
     renderedFrameDirection = info.direction >= 0 ? 1 : -1;
   }
   renderedFrameAt = Date.now();
-  const state = getState(renderedFrameState);
-  if (renderedFrameState === STATE_YAWN && Number.isInteger(state?.tailLoopStart) && renderedFrameIndex >= state.tailLoopStart) {
-    scheduleTabbySleepPose(STATE_YAWN);
+  if (renderedFrameState === STATE_YAWN) {
+    const tailLoopStart = readMetadata(getState(renderedFrameState).metadata).tailLoopStart;
+    if (Number.isInteger(tailLoopStart) && renderedFrameIndex >= tailLoopStart) {
+      scheduleTabbySleepPose(STATE_YAWN);
+    }
   }
 }
 

@@ -47,6 +47,7 @@ test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /const TABBY_SLEEP_POSE_MS = 2 \* 60 \* 1000/);
   assert.match(mainSource, /nextTabbySleepPoseInMs: Math\.max\(0, tabbySleepPoseSwitchAt - now\)/);
   assert.match(mainSource, /tabbySleepPoseSwitchAt = Date\.now\(\) \+ TABBY_SLEEP_POSE_MS/);
+  assert.match(mainSource, /readMetadata\(getState\(renderedFrameState\)\.metadata\)\.tailLoopStart/);
   assert.match(mainSource, /scheduleTabbySleepPose\(STATE_YAWN\)/);
   assert.match(mainSource, /setState\(activeState === STATE_SLEEP \? STATE_YAWN : STATE_SLEEP, false\)/);
   assert.match(rendererSource, /renderedKey !== lastRenderedFrameKey \|\| shouldReportSleepStage/);
