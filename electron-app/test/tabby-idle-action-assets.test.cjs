@@ -10,6 +10,18 @@ function listFrames(dir) {
   return fs.readdirSync(dir).filter((name) => /^frame_\d{3}\.png$/.test(name)).sort();
 }
 
+function measureFrameBounds(file) {
+  const result = require("node:child_process").spawnSync("python", ["-c", `
+from PIL import Image
+import json, sys
+alpha = Image.open(sys.argv[1]).convert("RGBA").getchannel("A").point(lambda value: 255 if value > 12 else 0)
+box = alpha.getbbox()
+print(json.dumps({"left": box[0], "top": box[1], "right": box[2] - 1, "bottom": box[3] - 1}))
+`, file], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return JSON.parse(result.stdout);
+}
+
 test("tabby hiss uses full processed frames as runtime frames", () => {
   const actionDir = path.join(projectRoot, "assets", "animations", "tabby_hiss");
   const loop = JSON.parse(fs.readFileSync(path.join(actionDir, "loop.json"), "utf8"));
@@ -35,6 +47,9 @@ test("tabby yawn uses the transition frames before stable sleep", () => {
   assert.equal(loop.sourceLoopEnd, 232);
   assert.equal(transparentFrames.length, 233);
   assert.equal(transparentFrames.length, loop.frameCount);
+  const firstBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_000.png"));
+  assert.equal(firstBounds.bottom, 238);
+  assert.ok(firstBounds.left >= 55 && firstBounds.right <= 190);
   assert.deepEqual(manifest.find((item) => item.action === "tabby_yawn"), loop);
 });
 
@@ -45,9 +60,11 @@ test("tabby sleep loops the stable sleeping frames after yawn", () => {
 
   assert.equal(loop.loopSelection, "manual");
   assert.equal(loop.sourceFrameCount, 335);
-  assert.equal(loop.sourceLoopStart, 233);
+  assert.equal(loop.sourceLoopStart, 285);
   assert.equal(loop.sourceLoopEnd, 334);
-  assert.equal(transparentFrames.length, 102);
+  assert.equal(transparentFrames.length, 50);
   assert.equal(transparentFrames.length, loop.frameCount);
+  const firstBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_000.png"));
+  assert.deepEqual(firstBounds, { left: 69, top: 134, right: 204, bottom: 237 });
   assert.deepEqual(manifest.find((item) => item.action === "tabby_sleep"), loop);
 });
