@@ -3872,7 +3872,7 @@ function isCursorInsidePetVisibleRect() {
   const frameInfo = getRenderedFrameInfo();
   const fallbackHit = isPointInsideRect(point, getHoverHitRect()) || isPointInsideRect(point, getCurrentPetHitRect());
   if (frameInfo.framePath && getFramePixelData(frameInfo.framePath)) {
-    return isPointInsideRenderedFrame(point, frameInfo) || fallbackHit;
+    return isPointInsideRenderedFrame(point, frameInfo);
   }
 
   return fallbackHit;
