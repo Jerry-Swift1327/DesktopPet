@@ -92,12 +92,9 @@ async function renderPetWindow() {
 
   function isSleepStage() {
     const state = getState();
-    return activeState === config.actionIds?.sleep
-      || (
-        activeState === config.actionIds?.yawn
-        && Number.isInteger(state?.tailLoopStart)
-        && getStateFrameIndex(state) >= state.tailLoopStart
-      );
+    return activeState === config.actionIds?.yawn
+      && Number.isInteger(state?.tailLoopStart)
+      && getStateFrameIndex(state) >= state.tailLoopStart;
   }
 
   function getStateFrameSequence(state) {
@@ -558,21 +555,17 @@ async function renderPetWindow() {
   window.desktopPet.onStateChanged((state) => {
     const previousState = activeState;
     activeState = state;
-    if ((previousState === config.actionIds?.sleep || previousState === config.actionIds?.yawn) && state !== previousState) {
+    if (previousState === config.actionIds?.yawn && state !== previousState) {
       stopSleepSound();
     }
-    if (state === config.actionIds?.sleep && previousState !== state) {
-      stopSquatSound();
-      playSleepSound();
-      sleepStageSoundPlayed = true;
-    } else if (state !== config.defaultState) {
+    if (state !== config.defaultState) {
       stopSquatSound();
     } else {
       maybePlaySquatSound(previousState, state);
     }
     frameStep = 0;
     completedOneShotState = "";
-    sleepStageSoundPlayed = state === config.actionIds?.sleep;
+    sleepStageSoundPlayed = false;
     animationEpoch += 1;
     walkFailureCount = 0;
     tickAccumulator = 0;

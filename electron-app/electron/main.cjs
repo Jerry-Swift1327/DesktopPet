@@ -81,7 +81,6 @@ const STATE_STRETCH = petActionIds.stretch;
 const STATE_SHAKE = petActionIds.shake;
 const STATE_YAWN = petActionIds.yawn;
 const STATE_HISS = petActionIds.hiss;
-const STATE_SLEEP = petActionIds.sleep;
 
 const BASE_PET_WINDOW_WIDTH = 180;
 const BASE_PET_WINDOW_HEIGHT = 180;
@@ -234,7 +233,7 @@ const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
 const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
-const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
+const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const sharedGreetings = [
@@ -441,8 +440,7 @@ states.push(
   { id: STATE_STRETCH, label: "伸展", folder: getActionFrameFolder("stretch"), metadata: getActionMetadataPath("stretch"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_SHAKE, label: "抖身", folder: getActionFrameFolder("shake"), metadata: getActionMetadataPath("shake"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_YAWN, label: "打哈欠", folder: getActionFrameFolder("yawn"), metadata: getActionMetadataPath("yawn"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_HISS, label: "哈气", folder: getActionFrameFolder("hiss"), metadata: getActionMetadataPath("hiss"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_SLEEP, label: "睡觉", folder: getActionFrameFolder("sleep"), metadata: getActionMetadataPath("sleep"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
+  { id: STATE_HISS, label: "哈气", folder: getActionFrameFolder("hiss"), metadata: getActionMetadataPath("hiss"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
 );
 
 const statMessages = {
@@ -5465,9 +5463,6 @@ function setState(state, shouldRecordInteraction = true) {
   if (previousState === STATE_WALK && activeState !== DEFAULT_STATE) {
     pendingWalkBubbleMessage = null;
   }
-  if (petRuntimeConfig.variant === "tabby" && activeState === STATE_SLEEP) {
-    hideHoverPanel();
-  }
   if (getState(activeState)?.moving) {
     hideStartupBubble({ force: true });
     hidePetMenu();
@@ -7053,7 +7048,7 @@ ipcMain.on("pet:set-state", (_event, state) => {
   }
 });
 ipcMain.on("pet:wake-sleeping-pet", () => {
-  if (petRuntimeConfig.variant !== "tabby" || (activeState !== STATE_SLEEP && activeState !== STATE_YAWN)) {
+  if (petRuntimeConfig.variant !== "tabby" || activeState !== STATE_YAWN) {
     return;
   }
   recordUserOperation();

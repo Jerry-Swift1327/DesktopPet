@@ -16,8 +16,7 @@ const PET_ACTIONS = Object.freeze({
   stretch: Object.freeze({ id: "petStretch", asset: "stretch" }),
   shake: Object.freeze({ id: "petShake", asset: "shake" }),
   yawn: Object.freeze({ id: "petYawn", asset: "yawn" }),
-  hiss: Object.freeze({ id: "petHiss", asset: "hiss" }),
-  sleep: Object.freeze({ id: "petSleep", asset: "sleep" })
+  hiss: Object.freeze({ id: "petHiss", asset: "hiss" })
 });
 
 const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
@@ -96,7 +95,7 @@ const PET_VARIANT_PROFILES = Object.freeze({
     deliveryVersion: "1.0",
     animationPrefix: "tabby",
     actions: TABBY_ACTION_ORDER,
-    extraAnimationAssets: Object.freeze(["look", "shake", "yawn", "hiss", "sleep"]),
+    extraAnimationAssets: Object.freeze(["look", "shake", "yawn", "hiss"]),
     defaultScale: 1.1,
     installerGuid: "521bbcee-864b-4f43-8854-25d0948a2b2c",
     autoStartRegistryKey: "ChongbanDesktopPet-tabby",

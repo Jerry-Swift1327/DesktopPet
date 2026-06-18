@@ -41,8 +41,8 @@ test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /const TABBY_YAWN_IDLE_MS = 2 \* 60 \* 1000/);
   assert.match(mainSource, /nextTabbyYawnInMs: Math\.max\(0, TABBY_YAWN_IDLE_MS - \(now - lastTabbyUserOperationAt\)\)/);
   assert.match(mainSource, /setState\(STATE_YAWN, false\)/);
-  assert.doesNotMatch(mainSource, /state === STATE_YAWN \? STATE_SLEEP : DEFAULT_STATE/);
-  assert.doesNotMatch(mainSource, /STATE_YAWN, STATE_HISS/);
+  assert.doesNotMatch(mainSource, /STATE_SLEEP/);
+  assert.match(mainSource, /const TABBY_IDLE_STATES = new Set\(\[STATE_YAWN, STATE_HISS\]\)/);
   assert.match(rendererSource, /tailLoopStart \+ \(\(frameStep - tailLoopStart\) % Math\.max\(1, stepCount - tailLoopStart\)\)/);
   assert.doesNotMatch(mainSource, /TABBY_SLEEP_AFTER_YAWN_MS/);
   assert.doesNotMatch(mainSource, /tabbySleepTimer/);
@@ -66,7 +66,7 @@ test("packaged custom variants are not overridden by dog or cat preference", () 
 test("sleeping tabby wakes from a short left click instead of double click", () => {
   assert.match(rendererSource, /SLEEP_WAKE_CLICK_MAX_MS/);
   assert.match(rendererSource, /window\.desktopPet\.wakeSleepingPet\(\)/);
-  assert.match(mainSource, /activeState !== STATE_SLEEP && activeState !== STATE_YAWN/);
+  assert.match(mainSource, /activeState !== STATE_YAWN/);
   assert.doesNotMatch(rendererSource, /addEventListener\("dblclick"/);
 });
 
@@ -75,7 +75,6 @@ test("sleeping tabby hover pauses sleep instead of hissing", () => {
 
   assert.match(mainSource, /petRuntimeConfig\.variant === "tabby" && activeState === STATE_HISS/);
   assert.match(mainSource, /clearHoverIntent\(\);\s*hideHoverPanel\(\);\s*setState\(STATE_HISS, false\)/);
-  assert.doesNotMatch(mouseEnterBody, /activeState === config\.actionIds\?\.sleep/);
   assert.match(rendererSource, /isSleepStage\(\) && sleepSound/);
 });
 

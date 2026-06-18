@@ -60,19 +60,3 @@ test("tabby yawn plays into the stable sleep tail loop", () => {
   assert.deepEqual(measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_334.png")), tailBounds);
   assert.deepEqual(manifest.find((item) => item.action === "tabby_yawn"), loop);
 });
-
-test("tabby sleep loops the stable sleeping frames after yawn", () => {
-  const actionDir = path.join(projectRoot, "assets", "animations", "tabby_sleep");
-  const loop = JSON.parse(fs.readFileSync(path.join(actionDir, "loop.json"), "utf8"));
-  const transparentFrames = listFrames(path.join(actionDir, "transparent_frames"));
-
-  assert.equal(loop.loopSelection, "manual");
-  assert.equal(loop.sourceFrameCount, 335);
-  assert.equal(loop.sourceLoopStart, 285);
-  assert.equal(loop.sourceLoopEnd, 334);
-  assert.equal(transparentFrames.length, 50);
-  assert.equal(transparentFrames.length, loop.frameCount);
-  const firstBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_000.png"));
-  assert.deepEqual(firstBounds, { left: 69, top: 134, right: 204, bottom: 237 });
-  assert.deepEqual(manifest.find((item) => item.action === "tabby_sleep"), loop);
-});
