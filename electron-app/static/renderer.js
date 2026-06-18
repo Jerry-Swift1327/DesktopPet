@@ -1013,7 +1013,8 @@ async function renderHoverWindow() {
         <span data-timer="walk">Walk
 00:00</span>
         ${config.channelConfig?.showYawnTimer ? `<span data-timer="yawn">Yawn
-02:00</span>` : ""}
+02:00</span><span data-timer="sleep-pose">Pose
+00:00</span>` : ""}
       </div>
       <div class="hover-panel__actions" data-hover-actions></div>
     </section>
@@ -1101,6 +1102,7 @@ async function renderHoverWindow() {
     const intimacyTimer = app.querySelector("[data-timer='intimacy']");
     const walkTimer = app.querySelector("[data-timer='walk']");
     const yawnTimer = app.querySelector("[data-timer='yawn']");
+    const sleepPoseTimer = app.querySelector("[data-timer='sleep-pose']");
     if (idleTimer) {
       idleTimer.textContent = `Idle\n${formatTimer((timers.nextIdleGreetingInMs || 0) - elapsedSinceSnapshot)}`;
     }
@@ -1116,6 +1118,9 @@ async function renderHoverWindow() {
     }
     if (yawnTimer) {
       yawnTimer.textContent = `Yawn\n${formatTimer((timers.nextTabbyYawnInMs || 0) - elapsedSinceSnapshot)}`;
+    }
+    if (sleepPoseTimer) {
+      sleepPoseTimer.textContent = `Pose\n${formatTimer((timers.nextTabbySleepPoseInMs || 0) - elapsedSinceSnapshot)}`;
     }
   }
 

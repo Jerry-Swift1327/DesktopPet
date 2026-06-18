@@ -44,6 +44,8 @@ test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /const TABBY_IDLE_STATES = new Set\(\[STATE_YAWN, STATE_SLEEP, STATE_HISS\]\)/);
   assert.match(rendererSource, /tailLoopStart \+ \(\(frameStep - tailLoopStart\) % Math\.max\(1, stepCount - tailLoopStart\)\)/);
   assert.match(mainSource, /const TABBY_SLEEP_POSE_MS = 2 \* 60 \* 1000/);
+  assert.match(mainSource, /nextTabbySleepPoseInMs: Math\.max\(0, tabbySleepPoseSwitchAt - now\)/);
+  assert.match(mainSource, /tabbySleepPoseSwitchAt = Date\.now\(\) \+ TABBY_SLEEP_POSE_MS/);
   assert.match(mainSource, /scheduleTabbySleepPose\(STATE_YAWN\)/);
   assert.match(mainSource, /setState\(activeState === STATE_SLEEP \? STATE_YAWN : STATE_SLEEP, false\)/);
   assert.match(rendererSource, /previousState === config\.actionIds\?\.sleep && state === config\.actionIds\?\.yawn/);
@@ -82,4 +84,9 @@ test("sleeping tabby hover pauses sleep instead of hissing", () => {
 test("tabby release hover panel shows the yawn timer", () => {
   assert.match(rendererSource, /data-timer="yawn"/);
   assert.match(rendererSource, /Yawn\\n\$\{formatTimer\(\(timers\.nextTabbyYawnInMs \|\| 0\) - elapsedSinceSnapshot\)\}/);
+});
+
+test("tabby release hover panel shows the sleep pose timer", () => {
+  assert.match(rendererSource, /data-timer="sleep-pose"/);
+  assert.match(rendererSource, /Pose\\n\$\{formatTimer\(\(timers\.nextTabbySleepPoseInMs \|\| 0\) - elapsedSinceSnapshot\)\}/);
 });

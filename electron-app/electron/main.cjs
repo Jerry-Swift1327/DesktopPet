@@ -514,6 +514,7 @@ let preferredPetScale = DEFAULT_PET_SCALE;
 let randomGreetingTimer = null;
 let tabbyIdlePollTimer = null;
 let tabbySleepPoseTimer = null;
+let tabbySleepPoseSwitchAt = 0;
 let idleGreetingPool = [];
 let intimacyDecayTimer = null;
 let lastUserOperationAt = Date.now();
@@ -2510,6 +2511,7 @@ function buildTimerSummary(now = Date.now()) {
     lastInteractionElapsedMs: Math.max(0, now - (petStats?.lastInteractionAt || now)),
     nextIdleGreetingInMs: Math.max(0, IDLE_GREETING_DELAY_MS - (now - lastUserOperationAt)),
     nextTabbyYawnInMs: Math.max(0, TABBY_YAWN_IDLE_MS - (now - lastTabbyUserOperationAt)),
+    nextTabbySleepPoseInMs: Math.max(0, tabbySleepPoseSwitchAt - now),
     nextIntimacyDecayInMs: Math.max(0, INTIMACY_DECAY_INTERVAL_MS - (now - lastIntimacyDecayAt)),
     walkLoopRemainingMs,
     walkLoopPaused: Boolean(walkLoop?.endsAt && walkPausedAt)
@@ -2572,14 +2574,18 @@ function clearTabbySleepPoseTimer() {
     clearTimeout(tabbySleepPoseTimer);
     tabbySleepPoseTimer = null;
   }
+  tabbySleepPoseSwitchAt = 0;
 }
 
 function scheduleTabbySleepPose(state) {
   if (petRuntimeConfig.variant !== "tabby" || activeState !== state || (state !== STATE_YAWN && state !== STATE_SLEEP) || tabbySleepPoseTimer) {
     return;
   }
+  tabbySleepPoseSwitchAt = Date.now() + TABBY_SLEEP_POSE_MS;
+  sendStats();
   tabbySleepPoseTimer = setTimeout(() => {
     tabbySleepPoseTimer = null;
+    tabbySleepPoseSwitchAt = 0;
     setState(activeState === STATE_SLEEP ? STATE_YAWN : STATE_SLEEP, false);
   }, TABBY_SLEEP_POSE_MS);
 }
