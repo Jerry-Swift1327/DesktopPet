@@ -14,5 +14,7 @@
   "score": 0.018098,
   "loopSelection": "long",
   "qualityScore": 0.013278,
-  "targetLength": 166
+  "targetLength": 166,
+  "trimGroundAlpha": 128,
+  "trimGroundPadding": 1
 }
