@@ -36,7 +36,7 @@ test("tabby hiss uses full processed frames as runtime frames", () => {
   assert.deepEqual(manifest.find((item) => item.action === "tabby_hiss"), loop);
 });
 
-test("tabby yawn uses the transition frames before stable sleep", () => {
+test("tabby yawn plays into the stable sleep tail loop", () => {
   const actionDir = path.join(projectRoot, "assets", "animations", "tabby_yawn");
   const loop = JSON.parse(fs.readFileSync(path.join(actionDir, "loop.json"), "utf8"));
   const transparentFrames = listFrames(path.join(actionDir, "transparent_frames"));
@@ -44,12 +44,16 @@ test("tabby yawn uses the transition frames before stable sleep", () => {
   assert.equal(loop.loopSelection, "manual");
   assert.equal(loop.sourceFrameCount, 335);
   assert.equal(loop.sourceLoopStart, 0);
-  assert.equal(loop.sourceLoopEnd, 232);
-  assert.equal(transparentFrames.length, 233);
+  assert.equal(loop.sourceLoopEnd, 334);
+  assert.equal(loop.tailLoopStart, 285);
+  assert.equal(transparentFrames.length, 335);
   assert.equal(transparentFrames.length, loop.frameCount);
   const firstBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_000.png"));
   assert.equal(firstBounds.bottom, 238);
-  assert.ok(firstBounds.left >= 55 && firstBounds.right <= 190);
+  assert.ok(firstBounds.left >= 70 && firstBounds.right <= 220);
+  const tailBounds = measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_285.png"));
+  assert.deepEqual(tailBounds, { left: 65, top: 135, right: 200, bottom: 238 });
+  assert.deepEqual(measureFrameBounds(path.join(actionDir, "transparent_frames", "frame_334.png")), tailBounds);
   assert.deepEqual(manifest.find((item) => item.action === "tabby_yawn"), loop);
 });
 

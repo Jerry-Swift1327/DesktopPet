@@ -233,7 +233,7 @@ const DAILY_DECAY_FULLNESS = 0;
 const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_YAWN, STATE_HISS]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
 const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -2980,6 +2980,9 @@ function buildPetConfig() {
       const maxFrame = Math.max(0, frames.length - 1);
       const loopStart = Number.isInteger(metadata.loopStart) ? metadata.loopStart : state.loopStart;
       const loopEnd = Number.isInteger(metadata.loopEnd) ? metadata.loopEnd : maxFrame;
+      const tailLoopStart = Number.isInteger(metadata.tailLoopStart)
+        ? Math.min(Math.max(0, metadata.tailLoopStart), maxFrame)
+        : null;
 
       return {
         id: state.id,
@@ -2993,6 +2996,7 @@ function buildPetConfig() {
         oneShot: ONE_SHOT_STATES.has(state.id),
         returnState: ONE_SHOT_STATES.has(state.id) ? DEFAULT_STATE : state.id,
         greetings: state.greetings,
+        tailLoopStart,
         frameSequence: sanitizeFrameSequence(state.frameSequence, maxFrame),
         sequenceRepeatCount: Number.isInteger(state.sequenceRepeatCount) ? Math.max(1, state.sequenceRepeatCount) : 1
       };
@@ -5485,7 +5489,7 @@ function completeOneShotState(state) {
     return;
   }
   const shouldApplyPendingStats = pendingActionStatsState === state;
-  setState(petRuntimeConfig.variant === "tabby" && state === STATE_YAWN ? STATE_SLEEP : DEFAULT_STATE, false);
+  setState(DEFAULT_STATE, false);
   if (shouldApplyPendingStats) {
     pendingActionStatsState = null;
     showStatMessages(applyActionStats(state));
@@ -7049,7 +7053,7 @@ ipcMain.on("pet:set-state", (_event, state) => {
   }
 });
 ipcMain.on("pet:wake-sleeping-pet", () => {
-  if (petRuntimeConfig.variant !== "tabby" || activeState !== STATE_SLEEP) {
+  if (petRuntimeConfig.variant !== "tabby" || (activeState !== STATE_SLEEP && activeState !== STATE_YAWN)) {
     return;
   }
   recordUserOperation();

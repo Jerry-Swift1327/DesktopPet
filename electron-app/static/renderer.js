@@ -70,8 +70,35 @@ async function renderPetWindow() {
   let lastEyeLookStepAt = 0;
   let squatSound = null;
   let sleepSound = null;
+  let sleepStageSoundPlayed = false;
   const squatSounds = Array.isArray(config.squatSounds) ? config.squatSounds : [];
   const sleepSounds = Array.isArray(config.sleepSounds) ? config.sleepSounds : [];
+
+  function getStateFrameIndex(state) {
+    if (!state || state.frames.length === 0) {
+      return 0;
+    }
+    const frameSequence = getStateFrameSequence(state);
+    const stepCount = Math.max(1, frameSequence.length);
+    const tailLoopStart = Number.isInteger(state.tailLoopStart) ? state.tailLoopStart : null;
+    const shouldLoopFrames = !state.oneShot || state.moving;
+    const step = tailLoopStart !== null && frameStep >= stepCount
+      ? tailLoopStart + ((frameStep - tailLoopStart) % Math.max(1, stepCount - tailLoopStart))
+      : shouldLoopFrames
+        ? frameStep % stepCount
+        : Math.min(frameStep, stepCount - 1);
+    return frameSequence[step] ?? 0;
+  }
+
+  function isSleepStage() {
+    const state = getState();
+    return activeState === config.actionIds?.sleep
+      || (
+        activeState === config.actionIds?.yawn
+        && Number.isInteger(state?.tailLoopStart)
+        && getStateFrameIndex(state) >= state.tailLoopStart
+      );
+  }
 
   function getStateFrameSequence(state) {
     if (!state) {
@@ -195,7 +222,7 @@ async function renderPetWindow() {
       screenY: event.screenY,
       clientX: event.clientX,
       clientY: event.clientY,
-      sleep: activeState === config.actionIds?.sleep
+      sleep: isSleepStage()
     };
     if (pointerDown.sleep) {
       return;
@@ -313,6 +340,17 @@ async function renderPetWindow() {
     sleepSound.play().catch(() => {});
   }
 
+  function updateSleepStageSound() {
+    const sleeping = isSleepStage();
+    if (sleeping && !sleepStageSoundPlayed) {
+      stopSquatSound();
+      playSleepSound();
+      sleepStageSoundPlayed = true;
+    } else if (!sleeping) {
+      sleepStageSoundPlayed = false;
+    }
+  }
+
   function getNextEyeLook(current, target) {
     const currentIndex = EYE_LOOK_ORDER.indexOf(current);
     const targetIndex = EYE_LOOK_ORDER.indexOf(target);
@@ -383,12 +421,9 @@ async function renderPetWindow() {
       return;
     }
 
-    const frameSequence = getStateFrameSequence(state);
-    const stepCount = Math.max(1, frameSequence.length);
-    const shouldLoopFrames = !state.oneShot || state.moving;
-    const step = shouldLoopFrames ? frameStep % stepCount : Math.min(frameStep, stepCount - 1);
-    const frameIndex = frameSequence[step] ?? 0;
+    const frameIndex = getStateFrameIndex(state);
     const frame = state.frames[frameIndex] || state.frames[0];
+    updateSleepStageSound();
     const eyeFrame = getEyeTrackingFrame(state);
     const renderedFrame = eyeFrame || frame;
     const shouldMirror = state.defaultFacing === "left" ? direction > 0 : direction < 0;
@@ -523,12 +558,13 @@ async function renderPetWindow() {
   window.desktopPet.onStateChanged((state) => {
     const previousState = activeState;
     activeState = state;
-    if (previousState === config.actionIds?.sleep && state !== previousState) {
+    if ((previousState === config.actionIds?.sleep || previousState === config.actionIds?.yawn) && state !== previousState) {
       stopSleepSound();
     }
     if (state === config.actionIds?.sleep && previousState !== state) {
       stopSquatSound();
       playSleepSound();
+      sleepStageSoundPlayed = true;
     } else if (state !== config.defaultState) {
       stopSquatSound();
     } else {
@@ -536,6 +572,7 @@ async function renderPetWindow() {
     }
     frameStep = 0;
     completedOneShotState = "";
+    sleepStageSoundPlayed = state === config.actionIds?.sleep;
     animationEpoch += 1;
     walkFailureCount = 0;
     tickAccumulator = 0;
@@ -567,7 +604,7 @@ async function renderPetWindow() {
 
   window.desktopPet.onPauseStateChanged((nextIsPaused) => {
     isInteractionPaused = Boolean(nextIsPaused);
-    if (activeState === config.actionIds?.sleep && sleepSound) {
+    if (isSleepStage() && sleepSound) {
       if (isInteractionPaused) {
         sleepSound.pause();
       } else {
