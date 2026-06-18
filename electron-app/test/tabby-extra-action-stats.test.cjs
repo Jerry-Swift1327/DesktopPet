@@ -28,6 +28,7 @@ test("tabby sleep purr plays once when sleep starts", () => {
   assert.match(rendererSource, /sleepStageSoundPlayed/);
   assert.match(rendererSource, /sleepStageFrameReported/);
   assert.match(rendererSource, /getStateFrameIndex\(state\) >= state\.tailLoopStart/);
+  assert.doesNotMatch(rendererSource.match(/window\.desktopPet\.onStateChanged\(\(state\) => \{[\s\S]*?\n  \}\);/)?.[0] || "", /sleepStageSoundPlayed = false/);
 });
 
 test("tabby extra actions update hover panel stats", () => {

@@ -576,7 +576,6 @@ async function renderPetWindow() {
       ? nextState.tailLoopStart
       : 0;
     completedOneShotState = "";
-    sleepStageSoundPlayed = false;
     animationEpoch += 1;
     walkFailureCount = 0;
     tickAccumulator = 0;
