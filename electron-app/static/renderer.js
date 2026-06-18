@@ -48,6 +48,7 @@ async function renderPetWindow() {
   let lastRenderedFrameKey = "";
   let lastRenderedFrameSentAt = 0;
   let lastRenderedFrameDirection = direction;
+  let sleepStageFrameReported = false;
   let rafHandle = 0;
   let tickAccumulator = 0;
   let lastTickAt = performance.now();
@@ -421,6 +422,7 @@ async function renderPetWindow() {
 
     const frameIndex = getStateFrameIndex(state);
     const frame = state.frames[frameIndex] || state.frames[0];
+    const sleeping = isSleepStage();
     updateSleepStageSound();
     const eyeFrame = getEyeTrackingFrame(state);
     const renderedFrame = eyeFrame || frame;
@@ -433,20 +435,25 @@ async function renderPetWindow() {
       img.style.transform = transform;
     }
     const renderedKey = `${state.id}:${frameIndex}:${direction}:${eyeFrame ? currentEyeLook : ""}`;
-    if (renderedKey !== lastRenderedFrameKey) {
+    const shouldReportSleepStage = sleeping && !sleepStageFrameReported;
+    if (renderedKey !== lastRenderedFrameKey || shouldReportSleepStage) {
       const now = performance.now();
       const directionChanged = direction !== lastRenderedFrameDirection;
       const shouldReportImmediately = !state.moving || directionChanged;
-      if (shouldReportImmediately || now - lastRenderedFrameSentAt >= MOVING_FRAME_REPORT_INTERVAL_MS) {
+      if (shouldReportImmediately || shouldReportSleepStage || now - lastRenderedFrameSentAt >= MOVING_FRAME_REPORT_INTERVAL_MS) {
         lastRenderedFrameKey = renderedKey;
         lastRenderedFrameSentAt = now;
         lastRenderedFrameDirection = direction;
+        sleepStageFrameReported = sleeping;
         window.desktopPet.updateRenderedFrame({
           state: state.id,
           frameIndex,
           direction
         });
       }
+    }
+    if (!sleeping) {
+      sleepStageFrameReported = false;
     }
   }
 
@@ -577,6 +584,7 @@ async function renderPetWindow() {
     lastRenderedFrameKey = "";
     lastRenderedFrameSentAt = 0;
     lastRenderedFrameDirection = direction;
+    sleepStageFrameReported = false;
     img.style.willChange = nextState?.moving ? "transform" : "";
     if (nextState?.moving) {
       decodeStateFrames(nextState);

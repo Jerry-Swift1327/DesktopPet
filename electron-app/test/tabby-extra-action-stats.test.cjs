@@ -26,6 +26,7 @@ test("tabby sleep purr plays once when sleep starts", () => {
   assert.match(rendererSource, /sleepSound\.addEventListener\("ended"/);
   assert.doesNotMatch(rendererSource, /sleepSound\.loop = true/);
   assert.match(rendererSource, /sleepStageSoundPlayed/);
+  assert.match(rendererSource, /sleepStageFrameReported/);
   assert.match(rendererSource, /getStateFrameIndex\(state\) >= state\.tailLoopStart/);
 });
 
@@ -48,6 +49,7 @@ test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /tabbySleepPoseSwitchAt = Date\.now\(\) \+ TABBY_SLEEP_POSE_MS/);
   assert.match(mainSource, /scheduleTabbySleepPose\(STATE_YAWN\)/);
   assert.match(mainSource, /setState\(activeState === STATE_SLEEP \? STATE_YAWN : STATE_SLEEP, false\)/);
+  assert.match(rendererSource, /renderedKey !== lastRenderedFrameKey \|\| shouldReportSleepStage/);
   assert.match(rendererSource, /previousState === config\.actionIds\?\.sleep && state === config\.actionIds\?\.yawn/);
 });
 
