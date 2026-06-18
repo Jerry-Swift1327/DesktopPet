@@ -4866,7 +4866,7 @@ function isCursorInsideHoverIntentTarget() {
   if (isTaskbarWalkActive()) {
     return isPointInsideRect(screen.getCursorScreenPoint(), getCurrentPetVisualRect());
   }
-  return isCursorInsideSpriteRect();
+  return isCursorInsidePetVisibleRect();
 }
 
 function isCursorInsideHoverPanel() {
@@ -4879,8 +4879,8 @@ function isCursorInsideHoverPanel() {
 function isCursorInsidePetForMenu() {
   const point = screen.getCursorScreenPoint();
   const padding = getOverlayVisualGap(PET_MENU_GAP_OFFSET, PET_MENU_SCALE_GAP_FACTOR);
-  return isPointInsideRect(point, expandRect(getMenuAnchorRect(), padding))
-    || isPointInsideRect(point, expandRect(getWindowRect(petWindow), padding));
+  return isCursorInsidePetVisibleRect()
+    || isPointInsideRect(point, expandRect(getMenuAnchorRect(), padding));
 }
 
 function isCursorInsideMenuPanel() {
@@ -5188,7 +5188,7 @@ function scheduleHideHoverPanel() {
       hideHoverPanel();
       return;
     }
-    if (isPointerOverPet || isPointerOverHoverPanel || isCursorInsideSpriteRect() || isCursorInsideHoverPanel()) {
+    if (isPointerOverPet || isPointerOverHoverPanel || isCursorInsidePetVisibleRect() || isCursorInsideHoverPanel()) {
       return;
     }
     hideHoverPanel();
