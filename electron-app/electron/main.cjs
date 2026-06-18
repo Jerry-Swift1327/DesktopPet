@@ -233,7 +233,7 @@ const DAILY_DECAY_FULLNESS = 0;
 const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LIE, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_YAWN, STATE_HISS]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_YAWN, STATE_HISS]);
 const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -2733,7 +2733,7 @@ function applyActionStats(stateId) {
 }
 
 function shouldDelayActionStats(stateId) {
-  return stateId === STATE_FEED || stateId === STATE_BALL || stateId === STATE_LIE || stateId === STATE_LICK || stateId === STATE_BELLY || stateId === STATE_STRETCH;
+  return stateId === STATE_FEED || stateId === STATE_BALL || stateId === STATE_LICK || stateId === STATE_BELLY || stateId === STATE_STRETCH;
 }
 
 function showStatMessages(messages) {

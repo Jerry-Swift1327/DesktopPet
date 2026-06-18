@@ -307,7 +307,9 @@ async function renderPetWindow() {
       return;
     }
     sleepSound = new Audio(sleepSounds[Math.floor(Math.random() * sleepSounds.length)]);
-    sleepSound.loop = true;
+    sleepSound.addEventListener("ended", () => {
+      sleepSound = null;
+    }, { once: true });
     sleepSound.play().catch(() => {});
   }
 
@@ -1056,6 +1058,7 @@ async function renderHoverWindow() {
       button.classList.toggle("is-active", isActive);
       button.disabled = Boolean(
         ((state?.id === actionIds.walk || state?.id === actionIds.squat) && isActive)
+        || (state?.id === actionIds.lie && isActive)
         || (state?.oneShot && isActive)
       );
     }

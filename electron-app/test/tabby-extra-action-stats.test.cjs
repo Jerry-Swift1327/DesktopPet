@@ -6,13 +6,25 @@ const path = require("node:path");
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 const rendererSource = fs.readFileSync(path.join(__dirname, "..", "static", "renderer.js"), "utf8");
 
-test("tabby extra one-shot actions settle stats after playback", () => {
+test("tabby extra actions settle stats at the right time", () => {
   const delayBody = mainSource.match(/function shouldDelayActionStats\(stateId\) \{\s*return ([^;]+);/s)?.[1] || "";
 
-  assert.match(delayBody, /STATE_LIE/);
+  assert.doesNotMatch(delayBody, /STATE_LIE/);
   assert.match(delayBody, /STATE_LICK/);
   assert.match(delayBody, /STATE_BELLY/);
   assert.match(delayBody, /STATE_STRETCH/);
+});
+
+test("tabby lie loops instead of completing as a one-shot action", () => {
+  const oneShotStates = mainSource.match(/const ONE_SHOT_STATES = new Set\(\[([^\]]+)\]\);/)?.[1] || "";
+
+  assert.doesNotMatch(oneShotStates, /STATE_LIE/);
+  assert.match(rendererSource, /state\?\.id === actionIds\.lie && isActive/);
+});
+
+test("tabby sleep purr plays once when sleep starts", () => {
+  assert.match(rendererSource, /sleepSound\.addEventListener\("ended"/);
+  assert.doesNotMatch(rendererSource, /sleepSound\.loop = true/);
 });
 
 test("tabby extra actions update hover panel stats", () => {
