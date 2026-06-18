@@ -2729,7 +2729,7 @@ function applyActionStats(stateId) {
     petStats.intimacy = clampStat(petStats.intimacy + randomStatDelta(INTERACTION_INTIMACY_GAIN_MIN, INTERACTION_INTIMACY_GAIN_MAX));
   }
   if (stateId === STATE_FEED) {
-    petStats.fullness = clampStat(petStats.fullness + randomStatDelta(FEED_FULLNESS_GAIN_MIN, FEED_FULLNESS_GAIN_MAX));
+    petStats.fullness = PET_STAT_MAX;
   }
   if (stateId === STATE_LIE) {
     petStats.health = clampStat(petStats.health + LIE_HEALTH_GAIN);
