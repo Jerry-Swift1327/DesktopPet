@@ -33,6 +33,7 @@ test("pet runtime config defaults to dog release", () => {
     stretch: "petStretch",
     shake: "petShake",
     yawn: "petYawn",
+    sleep: "petSleep",
     hiss: "petHiss"
   });
   assert.deepEqual(config.actionOrder, ["petSquat", "petWalk", "petFeed", "petBall"]);
@@ -247,6 +248,7 @@ test("variant assets follow the existing animation folder convention", () => {
     "tabby_look",
     "tabby_shake",
     "tabby_yawn",
+    "tabby_sleep",
     "tabby_hiss"
   ]);
   assert.deepEqual(getVariantAnimationFolders("brit"), [

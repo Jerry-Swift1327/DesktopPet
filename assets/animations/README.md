@@ -9,7 +9,7 @@
 | `dog` | `dog_squat`、`dog_walk`、`dog_feed`、`dog_ball` |
 | `cat` | `cat_squat`、`cat_walk`、`cat_feed`、`cat_ball` |
 | `shorthair` | `shorthair_squat`、`shorthair_walk`、`shorthair_feed`、`shorthair_ball` |
-| `tabby` | `tabby_squat`、`tabby_walk`、`tabby_feed`、`tabby_ball`、`tabby_lie`、`tabby_lick`、`tabby_belly`、`tabby_stretch`、`tabby_look`、`tabby_shake`、`tabby_yawn`、`tabby_hiss` |
+| `tabby` | `tabby_squat`、`tabby_walk`、`tabby_feed`、`tabby_ball`、`tabby_lie`、`tabby_lick`、`tabby_belly`、`tabby_stretch`、`tabby_look`、`tabby_shake`、`tabby_yawn`、`tabby_sleep`、`tabby_hiss` |
 | `brit` | `brit_squat`、`brit_walk`、`brit_feed`、`brit_ball` |
 | `bshmitted` | `bshmitted_squat`、`bshmitted_walk`、`bshmitted_feed`、`bshmitted_ball` |
 | `van` | `van_squat`、`van_walk`、`van_feed`、`van_ball` |

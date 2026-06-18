@@ -80,6 +80,7 @@ const STATE_BELLY = petActionIds.belly;
 const STATE_STRETCH = petActionIds.stretch;
 const STATE_SHAKE = petActionIds.shake;
 const STATE_YAWN = petActionIds.yawn;
+const STATE_SLEEP = petActionIds.sleep;
 const STATE_HISS = petActionIds.hiss;
 
 const BASE_PET_WINDOW_WIDTH = 180;
@@ -176,6 +177,7 @@ const RANDOM_GREETING_MAX_MS = 1 * 60 * 1000;
 const RANDOM_GREETING_RETRY_MS = 2 * 60 * 1000;
 const IDLE_GREETING_DELAY_MS = RANDOM_GREETING_MIN_MS;
 const TABBY_YAWN_IDLE_MS = 2 * 60 * 1000;
+const TABBY_SLEEP_POSE_MS = 2 * 60 * 1000;
 const INTIMACY_DECAY_INTERVAL_MS = 10 * 60 * 1000;
 const FULLNESS_DECAY_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_DECAY_INTERVAL_MS = 10 * 60 * 1000;
@@ -233,7 +235,7 @@ const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
 const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
-const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_HISS]);
+const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const sharedGreetings = [
@@ -440,6 +442,7 @@ states.push(
   { id: STATE_STRETCH, label: "伸展", folder: getActionFrameFolder("stretch"), metadata: getActionMetadataPath("stretch"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_SHAKE, label: "抖身", folder: getActionFrameFolder("shake"), metadata: getActionMetadataPath("shake"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_YAWN, label: "打哈欠", folder: getActionFrameFolder("yawn"), metadata: getActionMetadataPath("yawn"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
+  { id: STATE_SLEEP, label: "睡觉", folder: getActionFrameFolder("sleep"), metadata: getActionMetadataPath("sleep"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
   { id: STATE_HISS, label: "哈气", folder: getActionFrameFolder("hiss"), metadata: getActionMetadataPath("hiss"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
 );
 
@@ -510,6 +513,7 @@ let petScale = DEFAULT_PET_SCALE;
 let preferredPetScale = DEFAULT_PET_SCALE;
 let randomGreetingTimer = null;
 let tabbyIdlePollTimer = null;
+let tabbySleepPoseTimer = null;
 let idleGreetingPool = [];
 let intimacyDecayTimer = null;
 let lastUserOperationAt = Date.now();
@@ -2561,6 +2565,23 @@ function updateTabbyIdleActions() {
     log("tabby idle -> yawn");
     setState(STATE_YAWN, false);
   }
+}
+
+function clearTabbySleepPoseTimer() {
+  if (tabbySleepPoseTimer) {
+    clearTimeout(tabbySleepPoseTimer);
+    tabbySleepPoseTimer = null;
+  }
+}
+
+function scheduleTabbySleepPose(state) {
+  if (petRuntimeConfig.variant !== "tabby" || activeState !== state || (state !== STATE_YAWN && state !== STATE_SLEEP) || tabbySleepPoseTimer) {
+    return;
+  }
+  tabbySleepPoseTimer = setTimeout(() => {
+    tabbySleepPoseTimer = null;
+    setState(activeState === STATE_SLEEP ? STATE_YAWN : STATE_SLEEP, false);
+  }, TABBY_SLEEP_POSE_MS);
 }
 
 function recordUserOperation({ scheduleGreeting = true } = {}) {
@@ -5298,6 +5319,10 @@ function updateRenderedFrame(info) {
     renderedFrameDirection = info.direction >= 0 ? 1 : -1;
   }
   renderedFrameAt = Date.now();
+  const state = getState(renderedFrameState);
+  if (renderedFrameState === STATE_YAWN && Number.isInteger(state?.tailLoopStart) && renderedFrameIndex >= state.tailLoopStart) {
+    scheduleTabbySleepPose(STATE_YAWN);
+  }
 }
 
 function clearDragState({ notify = true, keepPause = false } = {}) {
@@ -5460,6 +5485,9 @@ function setState(state, shouldRecordInteraction = true) {
   }
   selectedState = state;
   activeState = state;
+  if (previousState !== state) {
+    clearTabbySleepPoseTimer();
+  }
   if (previousState === STATE_WALK && activeState !== DEFAULT_STATE) {
     pendingWalkBubbleMessage = null;
   }
@@ -5475,6 +5503,9 @@ function setState(state, shouldRecordInteraction = true) {
     preserveBottomAnchorForState(transitionAnchor, activeState, walkDirection, getCurrentSurface());
   }
   sendPetState();
+  if (activeState === STATE_SLEEP) {
+    scheduleTabbySleepPose(activeState);
+  }
   showStatMessages(statMessagesToShow);
   showPendingWalkBubbleMessage();
 }
@@ -7048,7 +7079,7 @@ ipcMain.on("pet:set-state", (_event, state) => {
   }
 });
 ipcMain.on("pet:wake-sleeping-pet", () => {
-  if (petRuntimeConfig.variant !== "tabby" || activeState !== STATE_YAWN) {
+  if (petRuntimeConfig.variant !== "tabby" || (activeState !== STATE_YAWN && activeState !== STATE_SLEEP)) {
     return;
   }
   recordUserOperation();

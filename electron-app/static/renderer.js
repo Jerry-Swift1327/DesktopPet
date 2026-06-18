@@ -92,7 +92,8 @@ async function renderPetWindow() {
 
   function isSleepStage() {
     const state = getState();
-    return activeState === config.actionIds?.yawn
+    return activeState === config.actionIds?.sleep
+      || activeState === config.actionIds?.yawn
       && Number.isInteger(state?.tailLoopStart)
       && getStateFrameIndex(state) >= state.tailLoopStart;
   }
@@ -555,7 +556,7 @@ async function renderPetWindow() {
   window.desktopPet.onStateChanged((state) => {
     const previousState = activeState;
     activeState = state;
-    if (previousState === config.actionIds?.yawn && state !== previousState) {
+    if ((previousState === config.actionIds?.yawn || previousState === config.actionIds?.sleep) && state !== previousState) {
       stopSleepSound();
     }
     if (state !== config.defaultState) {
@@ -563,7 +564,10 @@ async function renderPetWindow() {
     } else {
       maybePlaySquatSound(previousState, state);
     }
-    frameStep = 0;
+    const nextState = getState();
+    frameStep = previousState === config.actionIds?.sleep && state === config.actionIds?.yawn && Number.isInteger(nextState?.tailLoopStart)
+      ? nextState.tailLoopStart
+      : 0;
     completedOneShotState = "";
     sleepStageSoundPlayed = false;
     animationEpoch += 1;
@@ -573,7 +577,6 @@ async function renderPetWindow() {
     lastRenderedFrameKey = "";
     lastRenderedFrameSentAt = 0;
     lastRenderedFrameDirection = direction;
-    const nextState = getState();
     img.style.willChange = nextState?.moving ? "transform" : "";
     if (nextState?.moving) {
       decodeStateFrames(nextState);

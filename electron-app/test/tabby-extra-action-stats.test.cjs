@@ -41,11 +41,12 @@ test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /const TABBY_YAWN_IDLE_MS = 2 \* 60 \* 1000/);
   assert.match(mainSource, /nextTabbyYawnInMs: Math\.max\(0, TABBY_YAWN_IDLE_MS - \(now - lastTabbyUserOperationAt\)\)/);
   assert.match(mainSource, /setState\(STATE_YAWN, false\)/);
-  assert.doesNotMatch(mainSource, /STATE_SLEEP/);
-  assert.match(mainSource, /const TABBY_IDLE_STATES = new Set\(\[STATE_YAWN, STATE_HISS\]\)/);
+  assert.match(mainSource, /const TABBY_IDLE_STATES = new Set\(\[STATE_YAWN, STATE_SLEEP, STATE_HISS\]\)/);
   assert.match(rendererSource, /tailLoopStart \+ \(\(frameStep - tailLoopStart\) % Math\.max\(1, stepCount - tailLoopStart\)\)/);
-  assert.doesNotMatch(mainSource, /TABBY_SLEEP_AFTER_YAWN_MS/);
-  assert.doesNotMatch(mainSource, /tabbySleepTimer/);
+  assert.match(mainSource, /const TABBY_SLEEP_POSE_MS = 2 \* 60 \* 1000/);
+  assert.match(mainSource, /scheduleTabbySleepPose\(STATE_YAWN\)/);
+  assert.match(mainSource, /setState\(activeState === STATE_SLEEP \? STATE_YAWN : STATE_SLEEP, false\)/);
+  assert.match(rendererSource, /previousState === config\.actionIds\?\.sleep && state === config\.actionIds\?\.yawn/);
 });
 
 test("packaged runtime validates the external assets root first", () => {
@@ -66,7 +67,7 @@ test("packaged custom variants are not overridden by dog or cat preference", () 
 test("sleeping tabby wakes from a short left click instead of double click", () => {
   assert.match(rendererSource, /SLEEP_WAKE_CLICK_MAX_MS/);
   assert.match(rendererSource, /window\.desktopPet\.wakeSleepingPet\(\)/);
-  assert.match(mainSource, /activeState !== STATE_YAWN/);
+  assert.match(mainSource, /activeState !== STATE_YAWN && activeState !== STATE_SLEEP/);
   assert.doesNotMatch(rendererSource, /addEventListener\("dblclick"/);
 });
 
