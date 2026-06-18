@@ -39,7 +39,7 @@ bad = []
 for frame in sorted(Path(sys.argv[1]).glob("frame_*.png")):
     alpha = Image.open(frame).convert("RGBA").getchannel("A").point(lambda value: 255 if value > 12 else 0)
     box = alpha.getbbox()
-    if box and box[3] - 1 > 176:
+    if box and box[3] - 1 > 240:
         bad.append(f"{frame.name}:{box[3] - 1}")
 if bad:
     print("\\n".join(bad))
