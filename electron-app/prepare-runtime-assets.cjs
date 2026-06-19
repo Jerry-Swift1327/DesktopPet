@@ -1,4 +1,5 @@
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const {
   PET_VARIANT_IDS,
@@ -103,6 +104,16 @@ if (SWITCHABLE_VARIANTS.includes(variant)) {
       fs.copyFileSync(otherManifest, path.join(runtimeAnimations, otherManifestName));
     }
   }
+}
+
+// 将二维码图片从 Downloads 目录复制到运行资源中，确保安装包内可用
+const contactQrSource = path.join(os.homedir(), "Downloads", "contact_qr_code.jpg");
+const contactQrTarget = path.join(runtimeRoot, "contact_qr_code.jpg");
+if (fs.existsSync(contactQrSource)) {
+  fs.copyFileSync(contactQrSource, contactQrTarget);
+  console.log("Copied contact QR code:", contactQrTarget);
+} else {
+  console.warn("contact_qr_code.jpg not found in Downloads, skipping.");
 }
 
 console.log("Prepared runtime assets:");

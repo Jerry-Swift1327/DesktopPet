@@ -7313,16 +7313,28 @@ ipcMain.on("pet:hide-customization", () => {
 ipcMain.handle("pet:get-contact-qrcode", async () => {
   const fs = require("fs");
   const os = require("os");
-  const qrPath = path.join(os.homedir(), "Downloads", "contact_qr_code.jpg");
-  try {
-    if (!fs.existsSync(qrPath)) {
-      return { success: false, error: "QR code file not found" };
-    }
-    const data = fs.readFileSync(qrPath);
-    return { success: true, data: data.toString("base64"), mimeType: "image/jpeg" };
-  } catch (err) {
-    return { success: false, error: err.message };
+  // 优先从应用内运行资源查找（打包后可用），fallback 到用户 Downloads 目录
+  const candidates = [];
+  if (app.isPackaged) {
+    candidates.push(
+      path.join(process.resourcesPath, "app", ".runtime-assets", "contact_qr_code.jpg"),
+      path.join(process.resourcesPath, "app.asar", ".runtime-assets", "contact_qr_code.jpg")
+    );
+  } else {
+    candidates.push(path.join(__dirname, "..", ".runtime-assets", "contact_qr_code.jpg"));
   }
+  candidates.push(path.join(os.homedir(), "Downloads", "contact_qr_code.jpg"));
+  for (const qrPath of candidates) {
+    try {
+      if (fs.existsSync(qrPath)) {
+        const data = fs.readFileSync(qrPath);
+        return { success: true, data: data.toString("base64"), mimeType: "image/jpeg" };
+      }
+    } catch (_) {
+      continue;
+    }
+  }
+  return { success: false, error: "QR code file not found" };
 });
 ipcMain.on("pet:adjust-scale", (_event, deltaY) => {
   if (Number.isFinite(deltaY)) {
