@@ -989,16 +989,18 @@ async function renderCustomizationWindow() {
   app.innerHTML = `
     <section class="customization-panel" aria-label="形象定制">
       <div class="customization-panel__body">
-        <h2 class="customization-panel__heading">定制宠物形象</h2>
-        <p class="customization-panel__desc">想把自家宠物做成桌宠陪伴自己，可通过以下方式联系我哦！</p>
-        <div class="customization-panel__contact">
-          <div class="customization-panel__contact-row">
-            <span class="customization-panel__label">微信</span>
-            <span class="customization-panel__value">keqiba666</span>
-          </div>
-          <div class="customization-panel__contact-row">
-            <span class="customization-panel__label">邮箱</span>
-            <span class="customization-panel__value">458065825@qq.com</span>
+        <div class="customization-panel__left">
+          <h2 class="customization-panel__heading">定制宠物形象</h2>
+          <p class="customization-panel__desc">想把自家宠物做成桌宠陪伴自己，可通过以下方式联系我哦！</p>
+          <div class="customization-panel__contact">
+            <div class="customization-panel__contact-row">
+              <span class="customization-panel__label">微信</span>
+              <span class="customization-panel__value">keqiba666</span>
+            </div>
+            <div class="customization-panel__contact-row">
+              <span class="customization-panel__label">邮箱</span>
+              <span class="customization-panel__value">458065825@qq.com</span>
+            </div>
           </div>
         </div>
         <div class="customization-panel__qr" data-qr-container>

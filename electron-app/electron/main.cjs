@@ -122,8 +122,8 @@ const PET_MENU_ITEM_HEIGHT = 40;
 const PET_MENU_HIDE_DELAY_MS = 700;
 const HOVER_PANEL_WIDTH = 232;
 const HOVER_PANEL_HEIGHT = petRuntimeConfig.channelConfig.hoverPanelHeight;
-const CUSTOMIZATION_PANEL_WIDTH = 420;
-const CUSTOMIZATION_PANEL_HEIGHT = 460;
+const CUSTOMIZATION_PANEL_WIDTH = 380;
+const CUSTOMIZATION_PANEL_HEIGHT = 380;
 const HOVER_HIDE_DELAY_MS = 700;
 const HOVER_INTENT_DELAY_MS = 70;
 const TASKBAR_WALK_HOVER_INTENT_DELAY_MS = 240;
@@ -5227,12 +5227,14 @@ function createCustomizationWindow() {
   const iconPath = getAppIconPath();
   customizationWindowReady = false;
   customizationWindow = new BrowserWindow({
-    title: "联系作者 - 宠伴",
+    title: "联系作者",
     width: CUSTOMIZATION_PANEL_WIDTH,
     height: CUSTOMIZATION_PANEL_HEIGHT,
     frame: true,
     transparent: false,
     resizable: false,
+    minimizable: false,
+    maximizable: false,
     movable: true,
     hasShadow: true,
     skipTaskbar: false,
@@ -5252,6 +5254,7 @@ function createCustomizationWindow() {
   customizationWindow.setAlwaysOnTop(true, process.platform === "darwin" ? "floating" : "screen-saver");
   customizationWindow.once("ready-to-show", () => {
     customizationWindowReady = true;
+    customizationWindow.setMenu(null);
   });
   customizationWindow.loadURL(getAppPageUrl("customization")).catch((error) => {
     log(`customization window load failed: ${error.stack || error.message}`);
