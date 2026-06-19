@@ -510,6 +510,7 @@ button {
   align-items: center;
   gap: 10px;
   padding: 4px 0;
+  position: relative;
 }
 
 .customization-panel__label {
