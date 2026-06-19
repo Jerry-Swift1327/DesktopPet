@@ -122,8 +122,8 @@ const PET_MENU_ITEM_HEIGHT = 40;
 const PET_MENU_HIDE_DELAY_MS = 700;
 const HOVER_PANEL_WIDTH = 232;
 const HOVER_PANEL_HEIGHT = petRuntimeConfig.channelConfig.hoverPanelHeight;
-const CUSTOMIZATION_PANEL_WIDTH = 320;
-const CUSTOMIZATION_PANEL_HEIGHT = 520;
+const CUSTOMIZATION_PANEL_WIDTH = 420;
+const CUSTOMIZATION_PANEL_HEIGHT = 460;
 const HOVER_HIDE_DELAY_MS = 700;
 const HOVER_INTENT_DELAY_MS = 70;
 const TASKBAR_WALK_HOVER_INTENT_DELAY_MS = 240;
@@ -5227,20 +5227,20 @@ function createCustomizationWindow() {
   const iconPath = getAppIconPath();
   customizationWindowReady = false;
   customizationWindow = new BrowserWindow({
-    title: APP_DISPLAY_NAME,
+    title: "联系作者 - 宠伴",
     width: CUSTOMIZATION_PANEL_WIDTH,
     height: CUSTOMIZATION_PANEL_HEIGHT,
-    frame: false,
-    transparent: true,
+    frame: true,
+    transparent: false,
     resizable: false,
-    movable: false,
-    hasShadow: false,
-    skipTaskbar: true,
+    movable: true,
+    hasShadow: true,
+    skipTaskbar: false,
     alwaysOnTop: true,
     show: false,
     focusable: true,
     icon: iconPath || undefined,
-    backgroundColor: "#00000000",
+    backgroundColor: "#fff9f0",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

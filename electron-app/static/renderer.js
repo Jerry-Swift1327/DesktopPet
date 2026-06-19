@@ -988,15 +988,6 @@ async function renderCustomizationWindow() {
   app.className = "customization-stage";
   app.innerHTML = `
     <section class="customization-panel" aria-label="形象定制">
-      <header class="customization-panel__header">
-        <div class="customization-panel__title-row">
-          <img class="customization-panel__icon" src="" alt="" data-app-icon />
-          <span class="customization-panel__title">联系作者</span>
-        </div>
-        <button type="button" class="customization-panel__close" aria-label="关闭" data-close>
-          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
-      </header>
       <div class="customization-panel__body">
         <h2 class="customization-panel__heading">定制宠物形象</h2>
         <p class="customization-panel__desc">想把自家宠物做成桌宠陪伴自己，可通过以下方式联系我哦！</p>
@@ -1016,13 +1007,6 @@ async function renderCustomizationWindow() {
       </div>
     </section>
   `;
-
-  const closeBtn = app.querySelector("[data-close]");
-  if (closeBtn) {
-    closeBtn.addEventListener("click", () => {
-      window.desktopPet.hideCustomization();
-    });
-  }
 
   const qrContainer = app.querySelector("[data-qr-container]");
   if (qrContainer) {
