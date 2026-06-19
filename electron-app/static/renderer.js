@@ -1021,7 +1021,6 @@ async function renderCustomizationWindow() {
       if (!text) return;
       try {
         await navigator.clipboard.writeText(text);
-        showToast(e.currentTarget, "已复制");
       } catch (_) {
         // fallback: 使用传统方式
         const ta = document.createElement("textarea");
@@ -1032,7 +1031,6 @@ async function renderCustomizationWindow() {
         ta.select();
         document.execCommand("copy");
         document.body.removeChild(ta);
-        showToast(e.currentTarget, "已复制");
       }
     });
   }
@@ -1049,20 +1047,6 @@ async function renderCustomizationWindow() {
       qrContainer.innerHTML = `<p class="customization-panel__qr-error">二维码加载失败</p>`;
     });
   }
-}
-
-function showToast(targetEl, message) {
-  const existing = targetEl.querySelector(".customization-panel__copy-toast");
-  if (existing) existing.remove();
-
-  const toast = document.createElement("span");
-  toast.className = "customization-panel__copy-toast";
-  toast.textContent = message;
-  targetEl.appendChild(toast);
-
-  setTimeout(() => {
-    toast.remove();
-  }, 1600);
 }
 
 async function renderHoverWindow() {
