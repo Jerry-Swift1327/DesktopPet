@@ -5,7 +5,9 @@ const mode = window.location.hash === "#menu"
     ? "hover"
     : window.location.hash === "#bubble"
       ? "bubble"
-      : "pet";
+      : window.location.hash === "#customization"
+        ? "customization"
+        : "pet";
 const WALK_DIAGNOSTICS_ENABLED = false;
 
 function logWalkDiagnostic(message) {
@@ -27,6 +29,8 @@ if (mode === "menu") {
   renderHoverWindow();
 } else if (mode === "bubble") {
   renderStartupBubbleWindow();
+} else if (mode === "customization") {
+  renderCustomizationWindow();
 } else {
   renderPetWindow();
 }
@@ -958,6 +962,12 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
     if (target.dataset.command === "quit") {
       window.desktopPet.quit();
     }
+
+    if (target.dataset.command === "customization") {
+      window.desktopPet.hideMenu();
+      window.desktopPet.showCustomization();
+      return;
+    }
   });
 
   window.desktopPet.onMenuData((nextConfig) => {
@@ -972,6 +982,60 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
   updateWindowRoamState();
   updateEyeTrackingState();
   reportMenuHeight();
+}
+
+async function renderCustomizationWindow() {
+  app.className = "customization-stage";
+  app.innerHTML = `
+    <section class="customization-panel" aria-label="形象定制">
+      <header class="customization-panel__header">
+        <div class="customization-panel__title-row">
+          <img class="customization-panel__icon" src="" alt="" data-app-icon />
+          <span class="customization-panel__title">联系作者</span>
+        </div>
+        <button type="button" class="customization-panel__close" aria-label="关闭" data-close>
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div class="customization-panel__body">
+        <h2 class="customization-panel__heading">定制宠物形象</h2>
+        <p class="customization-panel__desc">想把自家宠物做成桌宠陪伴自己，可通过以下方式联系我哦！</p>
+        <div class="customization-panel__contact">
+          <div class="customization-panel__contact-row">
+            <span class="customization-panel__label">微信</span>
+            <span class="customization-panel__value">keqiba666</span>
+          </div>
+          <div class="customization-panel__contact-row">
+            <span class="customization-panel__label">邮箱</span>
+            <span class="customization-panel__value">458065825@qq.com</span>
+          </div>
+        </div>
+        <div class="customization-panel__qr" data-qr-container>
+          <p class="customization-panel__qr-loading">加载中...</p>
+        </div>
+      </div>
+    </section>
+  `;
+
+  const closeBtn = app.querySelector("[data-close]");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      window.desktopPet.hideCustomization();
+    });
+  }
+
+  const qrContainer = app.querySelector("[data-qr-container]");
+  if (qrContainer) {
+    window.desktopPet.getContactQrCode().then((result) => {
+      if (!result || !result.success) {
+        qrContainer.innerHTML = `<p class="customization-panel__qr-error">${result?.error || "二维码加载失败"}</p>`;
+        return;
+      }
+      qrContainer.innerHTML = `<img class="customization-panel__qr-img" src="data:${result.mimeType};base64,${result.data}" alt="联系二维码" />`;
+    }).catch(() => {
+      qrContainer.innerHTML = `<p class="customization-panel__qr-error">二维码加载失败</p>`;
+    });
+  }
 }
 
 async function renderHoverWindow() {

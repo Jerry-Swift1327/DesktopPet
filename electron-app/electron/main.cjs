@@ -122,6 +122,8 @@ const PET_MENU_ITEM_HEIGHT = 40;
 const PET_MENU_HIDE_DELAY_MS = 700;
 const HOVER_PANEL_WIDTH = 232;
 const HOVER_PANEL_HEIGHT = petRuntimeConfig.channelConfig.hoverPanelHeight;
+const CUSTOMIZATION_PANEL_WIDTH = 320;
+const CUSTOMIZATION_PANEL_HEIGHT = 520;
 const HOVER_HIDE_DELAY_MS = 700;
 const HOVER_INTENT_DELAY_MS = 70;
 const TASKBAR_WALK_HOVER_INTENT_DELAY_MS = 240;
@@ -482,6 +484,10 @@ let menuFrozenPetRect = null;
 let menuPlacementSnapshot = null;
 let hoverAnchorRect = null;
 let hoverFrozenPetRect = null;
+let customizationWindow;
+let customizationWindowReady = false;
+let customizationAnchorRect = null;
+let customizationFrozenPetRect = null;
 let currentMenuHeight = PET_MENU_COLLAPSED_HEIGHT;
 let activeState = DEFAULT_STATE;
 let selectedState = DEFAULT_STATE;
@@ -4348,7 +4354,8 @@ function shouldSuppressHoverPanel() {
     || windowDockInProgress
     || getBubbleHoverSuppressionMs() > 0
     || getWindowDockHoverSuppressionMs() > 0
-    || (petRuntimeConfig.variant === "tabby" && activeState === STATE_HISS);
+    || (petRuntimeConfig.variant === "tabby" && activeState === STATE_HISS)
+    || (customizationWindow && !customizationWindow.isDestroyed() && customizationWindow.isVisible());
 }
 
 function scheduleRandomGreeting(delayMs = null) {
@@ -5090,6 +5097,9 @@ function showPetMenu() {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
+  if (customizationWindow && !customizationWindow.isDestroyed() && customizationWindow.isVisible()) {
+    return;
+  }
   refreshAutoStartCacheAsync();
   if (menuHideTimer) {
     clearTimeout(menuHideTimer);
@@ -5193,6 +5203,181 @@ function scheduleHideHoverPanel() {
     }
     hideHoverPanel();
   }, HOVER_HIDE_DELAY_MS);
+}
+
+function freezeCustomizationPetRect() {
+  customizationFrozenPetRect = getCustomizationAnchorRect(null);
+  return customizationFrozenPetRect;
+}
+
+function getCustomizationAnchorRect(anchorRect = null) {
+  if (anchorRect) {
+    return anchorRect;
+  }
+  if (customizationFrozenPetRect) {
+    return customizationFrozenPetRect;
+  }
+  if (taskbarWalkRunway && isTaskbarWalkActive()) {
+    return getTaskbarWalkOverlayPetRect() || getPetSpriteRect() || getVisiblePetRect();
+  }
+  return getWindowRect(petWindow) || getPetSpriteRect() || getVisiblePetRect();
+}
+
+function createCustomizationWindow() {
+  const iconPath = getAppIconPath();
+  customizationWindowReady = false;
+  customizationWindow = new BrowserWindow({
+    title: APP_DISPLAY_NAME,
+    width: CUSTOMIZATION_PANEL_WIDTH,
+    height: CUSTOMIZATION_PANEL_HEIGHT,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    focusable: true,
+    icon: iconPath || undefined,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      sandbox: false,
+      nodeIntegration: false
+    }
+  });
+
+  customizationWindow.setAlwaysOnTop(true, process.platform === "darwin" ? "floating" : "screen-saver");
+  customizationWindow.once("ready-to-show", () => {
+    customizationWindowReady = true;
+  });
+  customizationWindow.loadURL(getAppPageUrl("customization")).catch((error) => {
+    log(`customization window load failed: ${error.stack || error.message}`);
+  });
+  customizationWindow.on("closed", () => {
+    removeInteractionPause("customization");
+    customizationWindow = null;
+    customizationWindowReady = false;
+    customizationAnchorRect = null;
+    customizationFrozenPetRect = null;
+  });
+}
+
+function showCustomizationPanel() {
+  if (!petWindow || petWindow.isDestroyed()) {
+    return;
+  }
+  hidePetMenu();
+  hideHoverPanel();
+  addInteractionPause("customization");
+  customizationAnchorRect = freezeCustomizationPetRect();
+
+  if (!customizationWindow || customizationWindow.isDestroyed()) {
+    createCustomizationWindow();
+  }
+
+  setFixedWindowBounds(customizationWindow, getCustomizationPosition(customizationAnchorRect), CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT, "customization");
+  customizationWindow.show();
+  customizationWindow.focus();
+}
+
+function hideCustomizationPanel() {
+  if (!customizationWindow || customizationWindow.isDestroyed()) {
+    removeInteractionPause("customization");
+    customizationFrozenPetRect = null;
+    return;
+  }
+  customizationWindow.hide();
+  customizationAnchorRect = null;
+  customizationFrozenPetRect = null;
+  removeInteractionPause("customization");
+}
+
+function getCustomizationPosition(anchorRect = customizationAnchorRect) {
+  const fullPetRect = getCustomizationAnchorRect(anchorRect);
+  const petRect = getOverlayPlacementRect(fullPetRect);
+  const avoidRect = expandRect(petRect, getScaledOverlayCollisionPadding());
+  const panelGap = getOverlayVisualGap(0, HOVER_PANEL_SCALE_GAP_FACTOR);
+  const rawArea = getOverlayWorkArea(avoidRect);
+  const area = getOverlaySafeArea(rawArea, panelGap);
+  const areaRight = area.x + area.width;
+  const areaBottom = area.y + area.height;
+  const verticalOffset = getOverlayVerticalOffset(0);
+  const centeredX = petRect.x + Math.round((petRect.width - CUSTOMIZATION_PANEL_WIDTH) / 2);
+  const sideY = petRect.y + Math.round((petRect.height - CUSTOMIZATION_PANEL_HEIGHT) / 2) + verticalOffset;
+
+  const above = {
+    x: clamp(centeredX, area.x, areaRight - CUSTOMIZATION_PANEL_WIDTH),
+    y: Math.round(avoidRect.y - CUSTOMIZATION_PANEL_HEIGHT - panelGap + verticalOffset),
+    width: CUSTOMIZATION_PANEL_WIDTH,
+    height: CUSTOMIZATION_PANEL_HEIGHT
+  };
+  if (above.y >= area.y && !rectsOverlap(above, avoidRect)) {
+    return above;
+  }
+
+  const right = {
+    x: Math.round(avoidRect.x + avoidRect.width + panelGap),
+    y: clamp(sideY, area.y, areaBottom - CUSTOMIZATION_PANEL_HEIGHT),
+    width: CUSTOMIZATION_PANEL_WIDTH,
+    height: CUSTOMIZATION_PANEL_HEIGHT
+  };
+  if (right.x + CUSTOMIZATION_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect)) {
+    return right;
+  }
+
+  const left = {
+    x: Math.round(avoidRect.x - CUSTOMIZATION_PANEL_WIDTH - panelGap),
+    y: clamp(sideY, area.y, areaBottom - CUSTOMIZATION_PANEL_HEIGHT),
+    width: CUSTOMIZATION_PANEL_WIDTH,
+    height: CUSTOMIZATION_PANEL_HEIGHT
+  };
+  if (left.x >= area.x && !rectsOverlap(left, avoidRect)) {
+    return left;
+  }
+
+  const below = {
+    x: clamp(centeredX, area.x, areaRight - CUSTOMIZATION_PANEL_WIDTH),
+    y: Math.round(avoidRect.y + avoidRect.height + panelGap + verticalOffset),
+    width: CUSTOMIZATION_PANEL_WIDTH,
+    height: CUSTOMIZATION_PANEL_HEIGHT
+  };
+  if (below.y + CUSTOMIZATION_PANEL_HEIGHT <= areaBottom && !rectsOverlap(below, avoidRect)) {
+    return below;
+  }
+
+  const preferred = {
+    x: Math.round(above.x),
+    y: Math.round(above.y),
+    width: CUSTOMIZATION_PANEL_WIDTH,
+    height: CUSTOMIZATION_PANEL_HEIGHT
+  };
+  const fallbackCandidates = [above, right, left, below]
+    .map((candidate) => {
+      const rounded = {
+        x: Math.round(candidate.x),
+        y: Math.round(candidate.y),
+        width: CUSTOMIZATION_PANEL_WIDTH,
+        height: CUSTOMIZATION_PANEL_HEIGHT
+      };
+      const clamped = clampPanelRect(rounded, area, CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT);
+      const shift = Math.abs(clamped.x - rounded.x) + Math.abs(clamped.y - rounded.y);
+      return { rect: clamped, shift };
+    })
+    .filter((entry) => !rectsOverlap(entry.rect, avoidRect));
+  if (fallbackCandidates.length > 0) {
+    return pickBestOverlayCandidate(
+      fallbackCandidates,
+      preferred,
+      area,
+      rawArea,
+      Math.max(8, Math.round(panelGap * 0.45))
+    );
+  }
+
+  return clampPanelRect(preferred, area, CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT);
 }
 
 function beginHoverFromPointer() {
@@ -7115,6 +7300,26 @@ ipcMain.on("pet:hide", () => {
 });
 ipcMain.on("pet:quit", () => app.quit());
 ipcMain.on("pet:hide-menu", hidePetMenu);
+ipcMain.on("pet:show-customization", () => {
+  showCustomizationPanel();
+});
+ipcMain.on("pet:hide-customization", () => {
+  hideCustomizationPanel();
+});
+ipcMain.handle("pet:get-contact-qrcode", async () => {
+  const fs = require("fs");
+  const os = require("os");
+  const qrPath = path.join(os.homedir(), "Downloads", "contact_qr_code.jpg");
+  try {
+    if (!fs.existsSync(qrPath)) {
+      return { success: false, error: "QR code file not found" };
+    }
+    const data = fs.readFileSync(qrPath);
+    return { success: true, data: data.toString("base64"), mimeType: "image/jpeg" };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
 ipcMain.on("pet:adjust-scale", (_event, deltaY) => {
   if (Number.isFinite(deltaY)) {
     recordUserOperation();
@@ -7137,6 +7342,7 @@ ipcMain.on("pet:drag-start", (_event, point) => {
   hideStartupBubble({ force: true });
   hidePetMenu();
   hideHoverPanel();
+  hideCustomizationPanel();
   isPointerOverHoverPanel = false;
   const now = Date.now();
 
