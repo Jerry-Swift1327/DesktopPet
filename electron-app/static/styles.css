@@ -530,17 +530,17 @@ button {
 
 .customization-panel__qr {
   background: #FFFFFF;
-  border: 1px solid #e8e0d5;
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 200px;
-  height: 200px;
+  width: calc(100% - 40px);
+  height: auto;
+  min-height: 220px;
   margin-top: auto;
-  margin-bottom: 16px;
-  align-self: center;
+  margin-bottom: 0;
+  align-self: stretch;
   flex-shrink: 0;
 }
 
