@@ -1052,13 +1052,13 @@ async function renderCustomizationWindow() {
 }
 
 function showToast(targetEl, message) {
-  const existing = targetEl.parentElement.querySelector(".customization-panel__copy-toast");
+  const existing = targetEl.querySelector(".customization-panel__copy-toast");
   if (existing) existing.remove();
 
   const toast = document.createElement("span");
   toast.className = "customization-panel__copy-toast";
   toast.textContent = message;
-  targetEl.parentElement.appendChild(toast);
+  targetEl.appendChild(toast);
 
   setTimeout(() => {
     toast.remove();
