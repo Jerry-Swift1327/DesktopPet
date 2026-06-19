@@ -5255,7 +5255,7 @@ function createCustomizationWindow() {
   customizationWindow.once("ready-to-show", () => {
     customizationWindowReady = true;
     customizationWindow.setMenu(null);
-    customizationWindow.setTitle("联系作者");
+    customizationWindow.setTitle("联系创作者");
   });
   customizationWindow.loadURL(getAppPageUrl("customization")).catch((error) => {
     log(`customization window load failed: ${error.stack || error.message}`);
