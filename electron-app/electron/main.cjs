@@ -4189,10 +4189,20 @@ function getStartupBubblePosition(width = STARTUP_BUBBLE_DEFAULT_WIDTH, height =
     }
   ];
 
-  for (const candidate of candidates) {
-    if (rectFitsInArea(candidate.rect, area) && !rectsOverlap(candidate.rect, avoidRect)) {
-      return candidate.rect;
-    }
+  if (rectFitsInArea(candidates[0].rect, area) && !rectsOverlap(candidates[0].rect, avoidRect)) {
+    return candidates[0].rect;
+  }
+
+  const rightFits = rectFitsInArea(candidates[1].rect, area) && !rectsOverlap(candidates[1].rect, avoidRect);
+  const leftFits = rectFitsInArea(candidates[2].rect, area) && !rectsOverlap(candidates[2].rect, avoidRect);
+  if (rightFits && leftFits) {
+    const rightSpace = areaRight - (avoidRect.x + avoidRect.width);
+    const leftSpace = avoidRect.x - area.x;
+    return rightSpace >= leftSpace ? candidates[1].rect : candidates[2].rect;
+  } else if (rightFits) {
+    return candidates[1].rect;
+  } else if (leftFits) {
+    return candidates[2].rect;
   }
 
   const clampedCandidates = candidates.map((candidate) => {
@@ -7366,6 +7376,9 @@ ipcMain.on("pet:adjust-scale", (_event, deltaY) => {
 });
 ipcMain.on("pet:drag-start", (_event, point) => {
   if (!petWindow || petWindow.isDestroyed() || !isScreenPoint(point)) {
+    return;
+  }
+  if (customizationWindow && !customizationWindow.isDestroyed() && customizationWindow.isVisible()) {
     return;
   }
 
