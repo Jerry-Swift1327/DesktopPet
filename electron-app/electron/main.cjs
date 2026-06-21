@@ -2339,6 +2339,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
       petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
       refreshMenuAnchorAfterScale();
       refreshHoverAnchorAfterScale();
+      refreshCustomizationAnchorAfterScale();
       repositionStartupBubbleWindow({ refreshAnchor: true });
     }
     return true;
@@ -2373,6 +2374,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
     petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
     refreshMenuAnchorAfterScale();
     refreshHoverAnchorAfterScale();
+    refreshCustomizationAnchorAfterScale();
     repositionStartupBubbleWindow({ refreshAnchor: true });
     return true;
   }
@@ -2393,6 +2395,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
   petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
   refreshMenuAnchorAfterScale();
   refreshHoverAnchorAfterScale();
+  refreshCustomizationAnchorAfterScale();
   repositionStartupBubbleWindow({ refreshAnchor: true });
   return true;
 }
@@ -4655,17 +4658,21 @@ function getHoverPosition(anchorRect = hoverAnchorRect) {
     width: HOVER_PANEL_WIDTH,
     height: HOVER_PANEL_HEIGHT
   };
-  if (right.x + HOVER_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect)) {
-    return right;
-  }
-
   const left = {
     x: Math.round(avoidRect.x - HOVER_PANEL_WIDTH - panelGap),
     y: clamp(sideY, area.y, areaBottom - HOVER_PANEL_HEIGHT),
     width: HOVER_PANEL_WIDTH,
     height: HOVER_PANEL_HEIGHT
   };
-  if (left.x >= area.x && !rectsOverlap(left, avoidRect)) {
+  const rightFits = right.x + HOVER_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect);
+  const leftFits = left.x >= area.x && !rectsOverlap(left, avoidRect);
+  if (rightFits && leftFits) {
+    const rightSpace = areaRight - (avoidRect.x + avoidRect.width);
+    const leftSpace = avoidRect.x - area.x;
+    return rightSpace >= leftSpace ? right : left;
+  } else if (rightFits) {
+    return right;
+  } else if (leftFits) {
     return left;
   }
 
@@ -4763,6 +4770,15 @@ function refreshMenuAnchorAfterScale() {
   menuAnchorRect = freezeMenuPetRect();
   menuPlacementSnapshot = buildMenuPlacementSnapshot(menuAnchorRect);
   repositionMenuWindow();
+}
+
+function refreshCustomizationAnchorAfterScale() {
+  if (!customizationWindow || customizationWindow.isDestroyed() || !customizationWindow.isVisible()) {
+    return;
+  }
+  customizationFrozenPetRect = null;
+  customizationAnchorRect = freezeCustomizationPetRect();
+  setFixedWindowBounds(customizationWindow, getCustomizationPosition(customizationAnchorRect), CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT, "customization");
 }
 
 function isPointInsideRect(point, rect) {
@@ -5235,9 +5251,9 @@ function createCustomizationWindow() {
     resizable: false,
     minimizable: false,
     maximizable: false,
-    movable: true,
+    movable: false,
     hasShadow: true,
-    skipTaskbar: false,
+    skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
     focusable: true,
@@ -5328,17 +5344,21 @@ function getCustomizationPosition(anchorRect = customizationAnchorRect) {
     width: CUSTOMIZATION_PANEL_WIDTH,
     height: CUSTOMIZATION_PANEL_HEIGHT
   };
-  if (right.x + CUSTOMIZATION_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect)) {
-    return right;
-  }
-
   const left = {
     x: Math.round(avoidRect.x - CUSTOMIZATION_PANEL_WIDTH - panelGap),
     y: clamp(sideY, area.y, areaBottom - CUSTOMIZATION_PANEL_HEIGHT),
     width: CUSTOMIZATION_PANEL_WIDTH,
     height: CUSTOMIZATION_PANEL_HEIGHT
   };
-  if (left.x >= area.x && !rectsOverlap(left, avoidRect)) {
+  const rightFits = right.x + CUSTOMIZATION_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect);
+  const leftFits = left.x >= area.x && !rectsOverlap(left, avoidRect);
+  if (rightFits && leftFits) {
+    const rightSpace = areaRight - (avoidRect.x + avoidRect.width);
+    const leftSpace = avoidRect.x - area.x;
+    return rightSpace >= leftSpace ? right : left;
+  } else if (rightFits) {
+    return right;
+  } else if (leftFits) {
     return left;
   }
 
@@ -5567,6 +5587,7 @@ function setPetScale(nextScale) {
     petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
     refreshMenuAnchorAfterScale();
     refreshHoverAnchorAfterScale();
+    refreshCustomizationAnchorAfterScale();
     repositionStartupBubbleWindow({ refreshAnchor: true });
     syncWalkTrackX();
     updatePetWindowMousePassthrough();
@@ -5597,6 +5618,7 @@ function setPetScale(nextScale) {
   petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
   refreshMenuAnchorAfterScale();
   refreshHoverAnchorAfterScale();
+  refreshCustomizationAnchorAfterScale();
   repositionStartupBubbleWindow({ refreshAnchor: true });
   if (isWalkingState()) {
     syncWalkTrackX();
