@@ -35,6 +35,8 @@ electron-app/package.json
 
 `main.cjs` 正在逐步将职责委托给 `core/`、`pet/`、`shared/` 子目录的模块：`core/` 收口常量、日志、运行时配置和偏好存储等基础能力；`pet/` 收口宠物状态定义和资源加载；`shared/` 收口无副作用的几何工具和跨窗口消息广播。后续拆分应继续沿此方向，把纯逻辑从 `main.cjs` 抽出到对应子目录，避免在 `main.cjs` 中新增可独立的逻辑。
 
+窗口创建和控制器逻辑已拆分到 `electron-app/electron/windows/` 目录：`main.cjs` 通过 `windows/overlay-window.cjs` 的 `createOverlayWindow` 工厂创建 overlay 窗口（归纳 BrowserWindow 选项），定位几何由 `windows/overlay-geometry.cjs` 提供（含菜单/悬停/自定义面板位置计算），气泡、菜单、悬停面板、自定义面板分别由 `windows/bubble-controller.cjs`、`windows/menu-controller.cjs`、`windows/hover-controller.cjs`、`windows/customization-controller.cjs` 以 `createXController(context)` 形式封装创建、显示、隐藏、定位和可见性等行为。`main.cjs` 负责在启动时构造这些控制器并注入上下文，窗口相关逻辑修改应优先落到对应控制器模块，而非 `main.cjs`。
+
 如果要降低未来维护成本，可考虑在独立需求中逐步拆分 `main.cjs`。
 
 ## 渲染层职责

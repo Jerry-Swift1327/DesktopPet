@@ -30,6 +30,8 @@ const { clamp, expandRect, cloneRect, boundsAreEqual, isPointInsideRect, rectsOv
 const { safeSend, broadcastToWindows } = require("./shared/messaging.cjs");
 // 从 pet 模块导入宠物状态构建工具
 const { sharedGreetings, buildPetStates } = require("./pet/pet-states.cjs");
+// overlay 窗口公共创建 helper，供 createXxxWindow 共享 BrowserWindow 创建逻辑
+const { createOverlayWindow } = require("./windows/overlay-window.cjs");
 
 const APP_INTERNAL_NAME = "Chongban";
 const APP_DISPLAY_NAME = "宠伴";
@@ -3956,91 +3958,52 @@ function clampPetWindowPositionForState(x, y, stateId = activeState, direction =
 
 function createPetWindow() {
   log("creating pet window");
-  const iconPath = getAppIconPath();
-  petWindow = new BrowserWindow({
-    title: APP_DISPLAY_NAME,
+  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
+  petWindow = createOverlayWindow({
+    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
+    hash: "pet",
     width: getPetWindowWidth(),
     height: getPetWindowHeight(),
-    frame: false,
-    transparent: true,
-    resizable: false,
     movable: true,
-    hasShadow: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    show: false,
     focusable: true,
-    icon: iconPath || undefined,
-    backgroundColor: "#00000000",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      sandbox: false,
-      nodeIntegration: false
-    }
-  });
-
-  petWindow.setAlwaysOnTop(true, process.platform === "darwin" ? "floating" : "screen-saver");
-  const petPageUrl = getAppPageUrl("pet");
-  petWindow.loadURL(petPageUrl).catch((error) => {
-    log(`pet window load failed: ${error.stack || error.message}`);
-  });
-  petWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-    log(`pet did-fail-load ${errorCode} ${errorDescription} ${validatedURL}`);
-  });
-  petWindow.once("ready-to-show", () => {
-    log("pet window ready-to-show");
-    moveToStartPosition(false);
-    petWindow.show();
-    if (process.platform === "darwin") {
+    onDidFailLoad: (_event, errorCode, errorDescription, validatedURL) => {
+      log(`pet did-fail-load ${errorCode} ${errorDescription} ${validatedURL}`);
+    },
+    onReady: () => {
+      log("pet window ready-to-show");
       moveToStartPosition(false);
+      petWindow.show();
+      if (process.platform === "darwin") {
+        moveToStartPosition(false);
+      }
+      sendPetState();
+      showStartupBubble();
     }
-    sendPetState();
-    showStartupBubble();
   });
 }
 
 function createStartupBubbleWindow() {
-  const iconPath = getAppIconPath();
-  startupBubbleWindow = new BrowserWindow({
-    title: APP_DISPLAY_NAME,
+  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
+  startupBubbleWindow = createOverlayWindow({
+    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
+    hash: "bubble",
     width: STARTUP_BUBBLE_DEFAULT_WIDTH,
     height: STARTUP_BUBBLE_HEIGHT,
-    frame: false,
-    transparent: true,
-    resizable: false,
     movable: false,
-    hasShadow: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    show: false,
     focusable: false,
-    icon: iconPath || undefined,
-    backgroundColor: "#00000000",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      sandbox: false,
-      nodeIntegration: false
+    onReady: () => {
+      startupBubbleWindowReady = true;
+      if (startupBubbleWindow?.isVisible()) {
+        safeSend(startupBubbleWindow, "pet:bubble-data", {
+          ...buildPetConfig(),
+          message: startupBubbleWindow.__pendingMessage || null
+        });
+      }
+    },
+    onClose: () => {
+      startupBubbleWindow = null;
+      startupBubbleWindowReady = false;
     }
-  });
-
-  startupBubbleWindow.setAlwaysOnTop(true, process.platform === "darwin" ? "floating" : "screen-saver");
-  startupBubbleWindow.once("ready-to-show", () => {
-    startupBubbleWindowReady = true;
-    if (startupBubbleWindow?.isVisible()) {
-      safeSend(startupBubbleWindow, "pet:bubble-data", {
-        ...buildPetConfig(),
-        message: startupBubbleWindow.__pendingMessage || null
-      });
-    }
-  });
-  startupBubbleWindow.loadURL(getAppPageUrl("bubble")).catch((error) => {
-    log(`startup bubble load failed: ${error.stack || error.message}`);
-  });
-  startupBubbleWindow.on("closed", () => {
-    startupBubbleWindow = null;
-    startupBubbleWindowReady = false;
   });
 }
 
@@ -4864,53 +4827,34 @@ function stopHoverPolling() {
 }
 
 function createMenuWindow() {
-  const iconPath = getAppIconPath();
   menuWindowReady = false;
-  menuWindow = new BrowserWindow({
-    title: APP_DISPLAY_NAME,
+  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
+  menuWindow = createOverlayWindow({
+    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
+    hash: "menu",
     width: PET_MENU_WIDTH,
     height: getQuickMenuHeight(),
-    frame: false,
-    transparent: true,
-    resizable: false,
     movable: false,
-    hasShadow: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    show: false,
     focusable: true,
-    icon: iconPath || undefined,
-    backgroundColor: "#00000000",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      sandbox: false,
-      nodeIntegration: false
+    onReady: () => {
+      menuWindowReady = true;
+      if (menuWindow?.isVisible()) {
+        safeSend(menuWindow, "pet:menu-data", buildPetConfig());
+      }
+    },
+    onBlur: () => {
+      scheduleHidePetMenu();
+    },
+    onClose: () => {
+      removeInteractionPause("menu");
+      menuWindow = null;
+      menuWindowReady = false;
+      lastMenuBounds = null;
+      menuAnchorRect = null;
+      menuFrozenPetRect = null;
+      menuPlacementSnapshot = null;
+      isPointerOverMenuPanel = false;
     }
-  });
-
-  menuWindow.setAlwaysOnTop(true, process.platform === "darwin" ? "floating" : "screen-saver");
-  menuWindow.once("ready-to-show", () => {
-    menuWindowReady = true;
-    if (menuWindow?.isVisible()) {
-      safeSend(menuWindow, "pet:menu-data", buildPetConfig());
-    }
-  });
-  menuWindow.loadURL(getAppPageUrl("menu")).catch((error) => {
-    log(`menu window load failed: ${error.stack || error.message}`);
-  });
-  menuWindow.on("blur", () => {
-    scheduleHidePetMenu();
-  });
-  menuWindow.on("closed", () => {
-    removeInteractionPause("menu");
-    menuWindow = null;
-    menuWindowReady = false;
-    lastMenuBounds = null;
-    menuAnchorRect = null;
-    menuFrozenPetRect = null;
-    menuPlacementSnapshot = null;
-    isPointerOverMenuPanel = false;
   });
 }
 
@@ -4924,52 +4868,33 @@ function resizePetMenu(height) {
 }
 
 function createHoverWindow() {
-  const iconPath = getAppIconPath();
-  hoverWindow = new BrowserWindow({
-    title: APP_DISPLAY_NAME,
+  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
+  hoverWindow = createOverlayWindow({
+    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
+    hash: "hover",
     width: HOVER_PANEL_WIDTH,
     height: HOVER_PANEL_HEIGHT,
-    frame: false,
-    transparent: true,
-    resizable: false,
     movable: false,
-    hasShadow: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    show: false,
     focusable: false,
-    icon: iconPath || undefined,
-    backgroundColor: "#00000000",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      sandbox: false,
-      nodeIntegration: false
+    onReady: () => {
+      hoverWindowReady = true;
+      if (hoverWindow?.isVisible()) {
+        safeSend(hoverWindow, "pet:hover-data", buildPetConfig());
+      }
+    },
+    onBlur: () => {
+      if (!isCursorInsideHoverPanel() && !isCursorInsideSpriteRect()) {
+        scheduleHideHoverPanel();
+      }
+    },
+    onClose: () => {
+      removeInteractionPause("hover");
+      removeInteractionPause("hover-intent");
+      hoverWindow = null;
+      hoverWindowReady = false;
+      lastHoverBounds = null;
+      isPointerOverHoverPanel = false;
     }
-  });
-
-  hoverWindow.setAlwaysOnTop(true, process.platform === "darwin" ? "floating" : "screen-saver");
-  hoverWindow.once("ready-to-show", () => {
-    hoverWindowReady = true;
-    if (hoverWindow?.isVisible()) {
-      safeSend(hoverWindow, "pet:hover-data", buildPetConfig());
-    }
-  });
-  hoverWindow.loadURL(getAppPageUrl("hover")).catch((error) => {
-    log(`hover window load failed: ${error.stack || error.message}`);
-  });
-  hoverWindow.on("blur", () => {
-    if (!isCursorInsideHoverPanel() && !isCursorInsideSpriteRect()) {
-      scheduleHideHoverPanel();
-    }
-  });
-  hoverWindow.on("closed", () => {
-    removeInteractionPause("hover");
-    removeInteractionPause("hover-intent");
-    hoverWindow = null;
-    hoverWindowReady = false;
-    lastHoverBounds = null;
-    isPointerOverHoverPanel = false;
   });
 }
 
@@ -5104,48 +5029,34 @@ function getCustomizationAnchorRect(anchorRect = null) {
 }
 
 function createCustomizationWindow() {
-  const iconPath = getAppIconPath();
   customizationWindowReady = false;
-  customizationWindow = new BrowserWindow({
+  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
+  customizationWindow = createOverlayWindow({
+    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
+    hash: "customization",
     title: "联系作者",
     width: CUSTOMIZATION_PANEL_WIDTH,
     height: CUSTOMIZATION_PANEL_HEIGHT,
     frame: true,
     transparent: false,
-    resizable: false,
+    hasShadow: true,
+    backgroundColor: "#fff9f0",
     minimizable: false,
     maximizable: false,
     movable: false,
-    hasShadow: true,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    show: false,
     focusable: true,
-    icon: iconPath || undefined,
-    backgroundColor: "#fff9f0",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      sandbox: false,
-      nodeIntegration: false
+    onReady: () => {
+      customizationWindowReady = true;
+      customizationWindow.setMenu(null);
+      customizationWindow.setTitle("联系创作者");
+    },
+    onClose: () => {
+      removeInteractionPause("customization");
+      customizationWindow = null;
+      customizationWindowReady = false;
+      customizationAnchorRect = null;
+      customizationFrozenPetRect = null;
     }
-  });
-
-  customizationWindow.setAlwaysOnTop(true, process.platform === "darwin" ? "floating" : "screen-saver");
-  customizationWindow.once("ready-to-show", () => {
-    customizationWindowReady = true;
-    customizationWindow.setMenu(null);
-    customizationWindow.setTitle("联系创作者");
-  });
-  customizationWindow.loadURL(getAppPageUrl("customization")).catch((error) => {
-    log(`customization window load failed: ${error.stack || error.message}`);
-  });
-  customizationWindow.on("closed", () => {
-    removeInteractionPause("customization");
-    customizationWindow = null;
-    customizationWindowReady = false;
-    customizationAnchorRect = null;
-    customizationFrozenPetRect = null;
   });
 }
 

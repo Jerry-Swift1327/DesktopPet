@@ -20,6 +20,12 @@
 | `pet/asset-loader.cjs` | 宠物资源加载，含帧列表、元数据、图标路径 |
 | `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
 | `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
+| `windows/overlay-window.cjs` | overlay 窗口公共创建 helper，归纳 BrowserWindow 选项 |
+| `windows/overlay-geometry.cjs` | overlay 定位几何，含菜单/悬停/自定义面板位置计算 |
+| `windows/bubble-controller.cjs` | 气泡窗口控制器（创建、显示、隐藏、定位） |
+| `windows/menu-controller.cjs` | 菜单窗口控制器（创建、显示、隐藏、定位、可见性） |
+| `windows/hover-controller.cjs` | 悬停面板控制器（创建、显示、隐藏、轮询、可见性） |
+| `windows/customization-controller.cjs` | 自定义面板控制器（创建、显示、隐藏、定位） |
 
 ## 主进程功能域
 
@@ -47,6 +53,12 @@
 | 资源加载 | `pet/asset-loader.cjs`、`listFrames`、`getAssetsRoot` |
 | 几何工具 | `shared/bounds.cjs`、`clamp`、`isPointInsideRect` |
 | 消息广播 | `shared/messaging.cjs`、`safeSend`、`broadcastToWindows` |
+| 窗口创建 | `windows/overlay-window.cjs`、`createOverlayWindow` |
+| 窗口定位 | `windows/overlay-geometry.cjs`、`getOverlayPlacementRect`、`getMenuPosition` |
+| 气泡控制 | `windows/bubble-controller.cjs`、`showStartupBubble`、`hideStartupBubble` |
+| 菜单控制 | `windows/menu-controller.cjs`、`showPetMenu`、`hidePetMenu` |
+| 悬停控制 | `windows/hover-controller.cjs`、`showHoverPanel`、`hideHoverPanel` |
+| 自定义面板 | `windows/customization-controller.cjs`、`showCustomizationPanel` |
 
 ## IPC 修改流程
 
