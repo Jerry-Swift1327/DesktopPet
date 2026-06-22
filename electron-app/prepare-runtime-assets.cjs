@@ -79,6 +79,11 @@ if (fs.existsSync(manifest)) {
   fs.copyFileSync(manifest, path.join(runtimeAnimations, manifestName));
 }
 
+const variantSounds = path.join(projectRoot, "assets", "sounds", variant);
+if (fs.existsSync(variantSounds)) {
+  copyDirectory(variantSounds, path.join(runtimeRoot, "sounds", variant));
+}
+
 if (SWITCHABLE_VARIANTS.includes(variant)) {
   const otherVariants = SWITCHABLE_VARIANTS.filter((v) => v !== variant);
   for (const otherVariant of otherVariants) {
