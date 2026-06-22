@@ -4,7 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
-const rendererSource = fs.readFileSync(path.join(__dirname, "..", "static", "renderer.js"), "utf8");
+// 渲染层已拆分到 renderer/ 目录下多个模块，测试需读取所有模块内容
+const rendererSource = ["shared", "pet-window", "menu-window", "hover-window", "bubble-window", "customization-window"]
+  .map((name) => fs.readFileSync(path.join(__dirname, "..", "static", "renderer", `${name}.js`), "utf8"))
+  .join("\n");
 
 test("tabby extra actions settle stats at the right time", () => {
   const delayBody = mainSource.match(/function shouldDelayActionStats\(stateId\) \{\s*return ([^;]+);/s)?.[1] || "";

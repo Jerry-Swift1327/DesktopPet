@@ -45,14 +45,15 @@ electron-app/package.json
 
 ## 渲染层职责
 
-`electron-app/static/renderer.js` 根据 `window.location.hash` 切换渲染模式：
+`electron-app/static/renderer.js` 是渲染层轻入口，根据 `window.location.hash` 分发到 `renderer/` 目录下对应模块。公共变量（app、mode）和工具函数在 `renderer/shared.js` 中定义，各渲染模式函数在对应模块文件中定义，`index.html` 按顺序加载各模块：
 
-| 模式 | hash | 作用 |
-| --- | --- | --- |
-| pet | 默认 | 展示宠物帧、处理拖拽、右键菜单、滚轮缩放、双击互动 |
-| menu | `#menu` | 右键快捷菜单，包含重置位置、窗口漫游、自启动、重置大小、退出 |
-| hover | `#hover` | 悬停状态面板，展示属性、计时器和动作按钮 |
-| bubble | `#bubble` | 启动或提示气泡 |
+| 模式 | hash | 模块文件 | 作用 |
+| --- | --- | --- | --- |
+| pet | 默认 | `renderer/pet-window.js` | 展示宠物帧、处理拖拽、右键菜单、滚轮缩放、双击互动 |
+| menu | `#menu` | `renderer/menu-window.js` | 右键快捷菜单，包含重置位置、窗口漫游、自启动、重置大小、退出 |
+| hover | `#hover` | `renderer/hover-window.js` | 悬停状态面板，展示属性、计时器和动作按钮 |
+| bubble | `#bubble` | `renderer/bubble-window.js` | 启动或提示气泡 |
+| customization | `#customization` | `renderer/customization-window.js` | 形象定制面板，展示变体切换、联系二维码和复制信息 |
 
 渲染层不直接访问 Node API，而是通过 `preload.cjs` 暴露的 `window.desktopPet` 调用主进程。
 
