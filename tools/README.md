@@ -21,7 +21,8 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `process_pet_actions.py` | 统一资源处理脚本：抽帧、抠像、增强、循环选取、方向采样 |
+| `process_pet_actions.py` | 统一资源处理 CLI 入口：抽帧、抠像、增强、循环选取、方向采样 |
+| `pet_actions/` | 资源处理 Python 包，按职责拆分到子模块 |
 | `build_quality_previews.py` | 生成当前帧、候选帧和并排对比预览视频 |
 | `process_pet_videos.py` | （已弃用）旧版批量处理脚本，功能已合并到 `process_pet_actions.py` |
 | `replace_action_video.py` | （已弃用）旧版替换单个动作脚本，功能已合并到 `process_pet_actions.py` |
@@ -120,6 +121,22 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 - 排除 `excludedFrames` 中的偏亮帧
 - `frame_000` 使用尾部同方向帧（`sourceStartPolicy: tail-matched-first-frame`）
 - `frame_001` 起从第一个稳定帧开始接续
+
+## pet_actions/ 包
+
+`process_pet_actions.py` 的资源处理函数已按职责拆分到 `pet_actions/` Python 包中。包内各模块用相对导入，`__init__.py` 只定义全局常量，不导入子模块。
+
+| 模块 | 作用 |
+| --- | --- |
+| `__init__.py` | 全局常量（PROJECT_ROOT、ANIMATIONS_ROOT、帧尺寸、FRAME_MS 等） |
+| `ffmpeg.py` | ffmpeg 查找和视频抽帧（find_ffmpeg、extract_frames） |
+| `files.py` | 帧目录和文件操作（clear_frame_dir、find_video、write_json、copy_tree_frames） |
+| `chroma.py` | 绿幕抠像、帧归一化和增强（chroma_key_green_image、normalize_pet_frame、normalize_candidate_frame 等） |
+| `frames.py` | 帧签名、运动分析、方向采样和循环帧构建（frame_signature、detect_brightness_anomaly、sample_direction_frames 等） |
+| `loops.py` | 循环片段选取（find_best_loop、find_best_long_loop、resolve_source_range） |
+| `manifest.py` | manifest 文件更新（update_manifest） |
+
+`process_pet_actions.py` 通过 `from pet_actions.xxx import ...` 导入所需函数和常量，仅保留 CLI 入口（process_action_core、cmd_process、cmd_replace、main）。
 
 ## build_quality_previews.py
 

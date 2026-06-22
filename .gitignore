@@ -14,6 +14,7 @@ Thumbs.db
 .tmp/
 .codex-temp/
 tools/__pycache__/
+tools/pet_actions/__pycache__/
 
 # Local handoff/progress notes
 handoff/
