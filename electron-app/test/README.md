@@ -21,6 +21,9 @@ node --test "test/**/*.test.cjs"
 | --- | --- | --- |
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名 | `../electron/pet-variants.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |
+| `bounds.test.cjs` | 纯几何工具函数 | `../electron/shared/bounds.cjs` |
+| `messaging.test.cjs` | webContents.send 安全发送和广播 | `../electron/shared/messaging.cjs` |
+| `pet-states.test.cjs` | 宠物状态工厂和状态数组构建 | `../electron/pet/pet-states.cjs` |
 
 ## 何时补测试
 

@@ -17,6 +17,8 @@ electron-app/package.json
       -> 按 hash 渲染 pet/menu/hover/bubble 模式
 ```
 
+模块加载顺序：`main.cjs` 启动时优先加载 `core/` 下的基础模块（先 `app-constants.cjs` 提供常量，再 `logger.cjs` 提供日志能力，随后 `runtime-config.cjs` 读取变体配置和用户数据目录，`preferences-store.cjs` 在需要时读取偏好），之后按需加载 `pet/`（`pet-states.cjs` 构建状态、`asset-loader.cjs` 加载帧和元数据）和 `shared/`（`bounds.cjs` 提供几何计算、`messaging.cjs` 在窗口创建后用于向渲染层广播）。`main.cjs` 仍保留窗口、IPC 和系统能力编排，纯逻辑优先委托给子目录模块。
+
 ## 主进程职责
 
 `electron-app/electron/main.cjs` 是当前最大、最核心的文件，主要负责：
@@ -30,6 +32,8 @@ electron-app/package.json
 - 亲密度、饱食度、健康值、每日/周期衰减和提示消息。
 - Windows 自启动偏好和注册表写入。
 - IPC 事件处理。
+
+`main.cjs` 正在逐步将职责委托给 `core/`、`pet/`、`shared/` 子目录的模块：`core/` 收口常量、日志、运行时配置和偏好存储等基础能力；`pet/` 收口宠物状态定义和资源加载；`shared/` 收口无副作用的几何工具和跨窗口消息广播。后续拆分应继续沿此方向，把纯逻辑从 `main.cjs` 抽出到对应子目录，避免在 `main.cjs` 中新增可独立的逻辑。
 
 如果要降低未来维护成本，可考虑在独立需求中逐步拆分 `main.cjs`。
 

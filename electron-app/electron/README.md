@@ -12,6 +12,14 @@
 | `walk-clock.cjs` | 行走循环暂停/恢复计时 |
 | `window-surfaces.ps1` | Windows 窗口候选列表探测 |
 | `window-from-point.ps1` | 根据屏幕点查找窗口 |
+| `core/app-constants.cjs` | 应用级常量定义，按功能域分组 |
+| `core/logger.cjs` | 日志模块，提供文件日志和行走诊断日志 |
+| `core/runtime-config.cjs` | 运行时配置，负责变体配置读取和用户数据目录定位 |
+| `core/preferences-store.cjs` | 偏好存储，统一管理 autoStart/windowRoam/eyeTracking/scale 偏好 |
+| `pet/pet-states.cjs` | 宠物状态定义，含 buildPetState 工厂和 sharedGreetings |
+| `pet/asset-loader.cjs` | 宠物资源加载，含帧列表、元数据、图标路径 |
+| `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
+| `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
 
 ## 主进程功能域
 
@@ -31,6 +39,14 @@
 | 气泡 | `startupBubble`、`bubble` |
 | 状态值 | `petStats`、`fullness`、`health`、`intimacy` |
 | 自启动 | `autoStart`、`WINDOWS_STARTUP_RUN_KEY` |
+| 常量 | `core/app-constants.cjs` |
+| 日志 | `core/logger.cjs`、`log(` |
+| 运行时配置 | `core/runtime-config.cjs`、`petRuntimeConfig` |
+| 偏好存储 | `core/preferences-store.cjs`、`readPreferences`、`writePreference` |
+| 宠物状态 | `pet/pet-states.cjs`、`buildPetStates`、`sharedGreetings` |
+| 资源加载 | `pet/asset-loader.cjs`、`listFrames`、`getAssetsRoot` |
+| 几何工具 | `shared/bounds.cjs`、`clamp`、`isPointInsideRect` |
+| 消息广播 | `shared/messaging.cjs`、`safeSend`、`broadcastToWindows` |
 
 ## IPC 修改流程
 

@@ -24,6 +24,12 @@ const {
 const {
   isLikelyDesktopOrSystemWindow
 } = require("./window-surface-filter.cjs");
+// 从 shared 模块导入几何工具函数（12 个）
+const { clamp, expandRect, cloneRect, boundsAreEqual, isPointInsideRect, rectsOverlap, rectFitsInArea, getRectCenter, getRectCenterDistance, getRectClosestEdgeDistance, normalizeBounds, isValidRect } = require("./shared/bounds.cjs");
+// 从 shared 模块导入安全通信工具
+const { safeSend, broadcastToWindows } = require("./shared/messaging.cjs");
+// 从 pet 模块导入宠物状态构建工具
+const { sharedGreetings, buildPetStates } = require("./pet/pet-states.cjs");
 
 const APP_INTERNAL_NAME = "Chongban";
 const APP_DISPLAY_NAME = "宠伴";
@@ -240,44 +246,7 @@ const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK,
 const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-const sharedGreetings = [
-  "主人，你想我没？我很想你",
-  "现在你在想谁呢？",
-  "累坏我宝了，偷个懒歇会吧！",
-  "我想你了，你想我了吗？",
-  "世界万般好，不及你一半!",
-  "目光所及，四下皆是你！",
-  "万事不用愁，咱家为你加油！",
-  "你不用多好，有你就是最好！",
-  "主人啥时候带我吃香喝辣的？",
-  "再忙也陪陪我嘛！",
-  "肚子咕咕叫，快喂我好吃的嘛",
-  "空空的肚子，急需美食投喂",
-  "再不吃东西，我就要啃屏幕咯",
-  "你好久都没理我了……",
-  "孤零零的，有点难过呢",
-  "哼，我才不要主动搭话",
-  "我就在这儿，陪着你哦",
-  "忙完啦？来聊两句吧",
-  "最喜欢主人啦，贴贴～",
-  "一刻都不想离开你身边",
-  "抓到你啦，不许偷偷忽略我",
-  "身体棒棒，陪你一整天",
-  "状态在线，随时陪玩哦",
-  "精力爆棚，想到处溜达！",
-  "浑身充满力气，太开心啦",
-  "摸鱼时间到，快乐加倍！",
-  "键盘敲累啦，抬头看看我呗",
-  "不管多忙，我一直陪着你",
-  "累了就歇歇，我在身边哦",
-  "平凡时光，有我就很美好",
-  "偷偷溜一圈，吓唬一下主人",
-  "猜猜我下一秒要去哪里？",
-  "被你摸到啦，痒痒~",
-  "嘿嘿，就喜欢和你玩耍",
-  "一直陪着你，静静守着屏幕",
-  "和主人贴贴最幸福"
-];
+// sharedGreetings 已从 pet/pet-states.cjs 导入
 
 function readPetRuntimeConfigFile(configPath) {
   try {
@@ -414,39 +383,11 @@ function getActionMetadataPath(action) {
   return `${getActionAssetFolder(action)}/loop.json`;
 }
 
-const states = [
-  { id: STATE_SQUAT, label: "蹲坐", folder: getActionFrameFolder("squat"), metadata: getActionMetadataPath("squat"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_WALK, label: "闲逛", folder: getActionFrameFolder("walk"), metadata: getActionMetadataPath("walk"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: true, greetings: sharedGreetings },
-  {
-    id: STATE_FEED,
-    label: "喂食",
-    folder: getActionFrameFolder("feed"),
-    metadata: getActionMetadataPath("feed"),
-    frameMs: 30,
-    loopStart: 0,
-    loopEnd: 0,
-    defaultFacing: "left",
-    moving: false,
-    frameSequence: {
-      repeatRangeStart: 0,
-      repeatRangeEnd: 999,
-      repeatCount: 2
-    },
-    greetings: sharedGreetings
-  },
-  { id: STATE_BALL, label: "玩耍", folder: getActionFrameFolder("ball"), metadata: getActionMetadataPath("ball"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
-];
-
-states.push(
-  { id: STATE_LIE, label: "趴下", folder: getActionFrameFolder("lie"), metadata: getActionMetadataPath("lie"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_LICK, label: "舔爪", folder: getActionFrameFolder("lick"), metadata: getActionMetadataPath("lick"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_BELLY, label: "翻肚", folder: getActionFrameFolder("belly"), metadata: getActionMetadataPath("belly"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_STRETCH, label: "伸展", folder: getActionFrameFolder("stretch"), metadata: getActionMetadataPath("stretch"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_SHAKE, label: "抖身", folder: getActionFrameFolder("shake"), metadata: getActionMetadataPath("shake"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_YAWN, label: "打哈欠", folder: getActionFrameFolder("yawn"), metadata: getActionMetadataPath("yawn"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_SLEEP, label: "睡觉", folder: getActionFrameFolder("sleep"), metadata: getActionMetadataPath("sleep"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings },
-  { id: STATE_HISS, label: "哈气", folder: getActionFrameFolder("hiss"), metadata: getActionMetadataPath("hiss"), frameMs: 30, loopStart: 0, loopEnd: 0, defaultFacing: "left", moving: false, greetings: sharedGreetings }
-);
+// states 已通过 buildPetStates 从 pet/pet-states.cjs 构建
+// 注意：assetsRoot 传 "animations"（相对路径），与原 getActionAssetFolder 返回的 "animations/${prefix}_${action}" 一致；
+// listFrames/listFramePaths/readMetadata 均通过 path.join(getAssetsRoot(), folder) 拼接，期望 folder 为相对路径。
+// 任务原指示使用 getAssetsRoot() 会导致生成绝对路径且缺少 "animations" 前缀，破坏路径拼接，故改用 "animations"。
+const states = buildPetStates(petActionIds, "animations", petAnimationPrefix, sharedGreetings);
 
 const statMessages = {
   hungry: ["我饿了，碗碗发来提醒", "肚子在开会，主题是加餐"],
@@ -940,7 +881,7 @@ function buildMenuFeatures() {
 
 function sendMenuConfig() {
   if (menuWindow && !menuWindow.isDestroyed() && menuWindowReady && !menuWindow.webContents.isLoading()) {
-    menuWindow.webContents.send("pet:menu-data", buildPetConfig());
+    safeSend(menuWindow, "pet:menu-data", buildPetConfig());
   }
 }
 
@@ -1880,14 +1821,7 @@ function rectFromWindowItem(item) {
   };
 }
 
-function isValidRect(rect) {
-  return Number.isFinite(rect.left)
-    && Number.isFinite(rect.top)
-    && Number.isFinite(rect.right)
-    && Number.isFinite(rect.bottom)
-    && rect.right > rect.left
-    && rect.bottom > rect.top;
-}
+// isValidRect 已从 shared/bounds.cjs 导入
 
 function isWindowTopDockable(rect, area) {
   const verticalSlack = 10;
@@ -2136,7 +2070,7 @@ function attachPetToWindowRoamSurface(surface) {
   if (isWalkingState()) {
     refreshWalkLoopAfterSurfaceChange();
   } else {
-    petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
   }
   return true;
 }
@@ -2218,7 +2152,7 @@ function sendEyeTrackingLook(look) {
     return;
   }
   lastEyeTrackingLook = nextLook;
-  petWindow?.webContents.send("pet:eye-tracking-look", nextLook);
+  safeSend(petWindow, "pet:eye-tracking-look", nextLook);
 }
 
 function getEyeTrackingLookForCursor(point) {
@@ -2336,7 +2270,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
       }, false);
     }
     if (wasRunwayActive || needsResize) {
-      petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+      safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
       refreshMenuAnchorAfterScale();
       refreshHoverAnchorAfterScale();
       refreshCustomizationAnchorAfterScale();
@@ -2371,7 +2305,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
       surface,
       { force: true, reason: "scale" }
     );
-    petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
     refreshMenuAnchorAfterScale();
     refreshHoverAnchorAfterScale();
     refreshCustomizationAnchorAfterScale();
@@ -2392,7 +2326,7 @@ function applySurfaceScale(surface, stateId = activeState, direction = walkDirec
     width: newWidth,
     height: newHeight
   }, false);
-  petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
   refreshMenuAnchorAfterScale();
   refreshHoverAnchorAfterScale();
   refreshCustomizationAnchorAfterScale();
@@ -2485,7 +2419,7 @@ function sendScaleState() {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
-  petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
 }
 
 function encodeStatsPayload(data) {
@@ -2551,9 +2485,7 @@ function sendStats() {
     return;
   }
   const stats = buildStatsSummary();
-  petWindow.webContents.send("pet:stats-changed", stats);
-  menuWindow?.webContents.send("pet:stats-changed", stats);
-  hoverWindow?.webContents.send("pet:stats-changed", stats);
+  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:stats-changed", stats);
 }
 
 function scheduleIdleGreeting(delayMs = IDLE_GREETING_DELAY_MS) {
@@ -3421,9 +3353,7 @@ function getAppPageUrl(hash) {
   return `${toFileUrl(path.join(__dirname, "..", "static", "index.html"))}#${hash}`;
 }
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
+// clamp 已从 shared/bounds.cjs 导入
 
 function randomStatDelta(min = STAT_CHANGE_MIN, max = STAT_CHANGE_MAX) {
   const floor = Math.round(Number(min) || STAT_CHANGE_MIN);
@@ -3718,7 +3648,7 @@ function sendInteractionPauseState() {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
-  petWindow.webContents.send("pet:pause-state-changed", isInteractionPaused());
+  safeSend(petWindow, "pet:pause-state-changed", isInteractionPaused());
 }
 
 function pauseWalkLoopClock() {
@@ -3779,19 +3709,7 @@ function clearHoverIntent({ keepFrozenRect = false } = {}) {
   removeInteractionPause("hover-intent");
 }
 
-function expandRect(rect, padding) {
-  if (!rect) {
-    return null;
-  }
-
-  const safePadding = Math.max(0, Math.round(padding));
-  return {
-    x: Math.round(rect.x - safePadding),
-    y: Math.round(rect.y - safePadding),
-    width: Math.round(rect.width + safePadding * 2),
-    height: Math.round(rect.height + safePadding * 2)
-  };
-}
+// expandRect 已从 shared/bounds.cjs 导入
 
 function getOverlayScaleDelta() {
   return petScale - 1;
@@ -3957,22 +3875,9 @@ function freezeMenuPetRect() {
   return menuFrozenPetRect;
 }
 
-function normalizeBounds(bounds, width, height) {
-  return {
-    x: Math.round(bounds.x),
-    y: Math.round(bounds.y),
-    width,
-    height
-  };
-}
+// normalizeBounds 已从 shared/bounds.cjs 导入
 
-function boundsAreEqual(left, right) {
-  return Boolean(left && right)
-    && left.x === right.x
-    && left.y === right.y
-    && left.width === right.width
-    && left.height === right.height;
-}
+// boundsAreEqual 已从 shared/bounds.cjs 导入
 
 function setFixedWindowBounds(targetWindow, bounds, width, height, cacheKey) {
   if (!targetWindow || targetWindow.isDestroyed()) {
@@ -4124,7 +4029,7 @@ function createStartupBubbleWindow() {
   startupBubbleWindow.once("ready-to-show", () => {
     startupBubbleWindowReady = true;
     if (startupBubbleWindow?.isVisible()) {
-      startupBubbleWindow.webContents.send("pet:bubble-data", {
+      safeSend(startupBubbleWindow, "pet:bubble-data", {
         ...buildPetConfig(),
         message: startupBubbleWindow.__pendingMessage || null
       });
@@ -4293,7 +4198,7 @@ function showBubbleMessage(message = null, durationMs = STARTUP_BUBBLE_DURATION_
   log(`startup-bubble target=${bubbleBounds.x},${bubbleBounds.y},${bubbleBounds.width},${bubbleBounds.height}`);
   startupBubbleWindow.showInactive();
   if (startupBubbleWindowReady && !startupBubbleWindow.webContents.isLoading()) {
-    startupBubbleWindow.webContents.send("pet:bubble-data", {
+    safeSend(startupBubbleWindow, "pet:bubble-data", {
       ...buildPetConfig(),
       message
     });
@@ -4417,21 +4322,7 @@ function showRandomActionGreeting() {
   }
 }
 
-function cloneRect(rect) {
-  if (!rect) {
-    return null;
-  }
-  const cloned = {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height)
-  };
-  if (isResolvedOverlayPetRect(rect)) {
-    cloned.resolvedOverlayPetRect = true;
-  }
-  return cloned;
-}
+// cloneRect 已从 shared/bounds.cjs 导入（原本地版本调用 isResolvedOverlayPetRect，导入版本已内联等价检查）
 
 function buildMenuPlacementSnapshot(anchorRect = menuAnchorRect) {
   const baseAnchorRect = cloneRect(anchorRect || getMenuAnchorRect(null));
@@ -4791,33 +4682,11 @@ function refreshCustomizationAnchorAfterScale() {
   setFixedWindowBounds(customizationWindow, getCustomizationPosition(customizationAnchorRect), CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT, "customization");
 }
 
-function isPointInsideRect(point, rect) {
-  if (!rect) {
-    return false;
-  }
-  return point.x >= rect.x
-    && point.x <= rect.x + rect.width
-    && point.y >= rect.y
-    && point.y <= rect.y + rect.height;
-}
+// isPointInsideRect 已从 shared/bounds.cjs 导入
 
-function rectsOverlap(left, right) {
-  if (!left || !right) {
-    return false;
-  }
+// rectsOverlap 已从 shared/bounds.cjs 导入
 
-  return left.x < right.x + right.width
-    && left.x + left.width > right.x
-    && left.y < right.y + right.height
-    && left.y + left.height > right.y;
-}
-
-function rectFitsInArea(rect, area) {
-  return rect.x >= area.x
-    && rect.y >= area.y
-    && rect.x + rect.width <= area.x + area.width
-    && rect.y + rect.height <= area.y + area.height;
-}
+// rectFitsInArea 已从 shared/bounds.cjs 导入
 
 function getOverlaySafeArea(area, referenceGap = OVERLAY_BASE_GAP) {
   const inset = clamp(Math.round(Math.max(8, referenceGap * 0.55)), 8, 18);
@@ -4832,26 +4701,11 @@ function getOverlaySafeArea(area, referenceGap = OVERLAY_BASE_GAP) {
   };
 }
 
-function getRectCenter(rect) {
-  return {
-    x: rect.x + rect.width / 2,
-    y: rect.y + rect.height / 2
-  };
-}
+// getRectCenter 已从 shared/bounds.cjs 导入
 
-function getRectCenterDistance(left, right) {
-  const leftCenter = getRectCenter(left);
-  const rightCenter = getRectCenter(right);
-  return Math.round(Math.abs(leftCenter.x - rightCenter.x) + Math.abs(leftCenter.y - rightCenter.y));
-}
+// getRectCenterDistance 已从 shared/bounds.cjs 导入
 
-function getRectClosestEdgeDistance(rect, area) {
-  const leftGap = rect.x - area.x;
-  const rightGap = area.x + area.width - (rect.x + rect.width);
-  const topGap = rect.y - area.y;
-  const bottomGap = area.y + area.height - (rect.y + rect.height);
-  return Math.min(leftGap, rightGap, topGap, bottomGap);
-}
+// getRectClosestEdgeDistance 已从 shared/bounds.cjs 导入
 
 function pickBestOverlayCandidate(entries, preferredRect, safeArea, rawArea, minEdgeGap = 8) {
   if (!entries || entries.length === 0) {
@@ -5039,7 +4893,7 @@ function createMenuWindow() {
   menuWindow.once("ready-to-show", () => {
     menuWindowReady = true;
     if (menuWindow?.isVisible()) {
-      menuWindow.webContents.send("pet:menu-data", buildPetConfig());
+      safeSend(menuWindow, "pet:menu-data", buildPetConfig());
     }
   });
   menuWindow.loadURL(getAppPageUrl("menu")).catch((error) => {
@@ -5098,7 +4952,7 @@ function createHoverWindow() {
   hoverWindow.once("ready-to-show", () => {
     hoverWindowReady = true;
     if (hoverWindow?.isVisible()) {
-      hoverWindow.webContents.send("pet:hover-data", buildPetConfig());
+      safeSend(hoverWindow, "pet:hover-data", buildPetConfig());
     }
   });
   hoverWindow.loadURL(getAppPageUrl("hover")).catch((error) => {
@@ -5147,7 +5001,7 @@ function showPetMenu() {
   menuWindow.show();
   menuWindow.focus();
   if (menuWindowReady && !menuWindow.webContents.isLoading()) {
-    menuWindow.webContents.send("pet:menu-data", buildPetConfig());
+    safeSend(menuWindow, "pet:menu-data", buildPetConfig());
   }
 }
 
@@ -5176,7 +5030,7 @@ function showHoverPanel() {
   setFixedWindowBounds(hoverWindow, getHoverPosition(hoverAnchorRect), HOVER_PANEL_WIDTH, HOVER_PANEL_HEIGHT, "hover");
   hoverWindow.showInactive();
   if (hoverWindowReady && !hoverWindow.webContents.isLoading()) {
-    hoverWindow.webContents.send("pet:hover-data", buildPetConfig());
+    safeSend(hoverWindow, "pet:hover-data", buildPetConfig());
   }
 }
 
@@ -5502,14 +5356,10 @@ function sendPetState() {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
-  petWindow.webContents.send("pet:state-changed", activeState);
-  menuWindow?.webContents.send("pet:state-changed", activeState);
-  hoverWindow?.webContents.send("pet:state-changed", activeState);
-  petWindow.webContents.send("pet:direction-changed", walkDirection);
-  menuWindow?.webContents.send("pet:direction-changed", walkDirection);
-  hoverWindow?.webContents.send("pet:direction-changed", walkDirection);
-  petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
-  petWindow.webContents.send("pet:eye-tracking-look", lastEyeTrackingLook);
+  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:state-changed", activeState);
+  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:direction-changed", walkDirection);
+  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
+  safeSend(petWindow, "pet:eye-tracking-look", lastEyeTrackingLook);
   sendStats();
 }
 
@@ -5517,16 +5367,14 @@ function sendWalkDirection() {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
-  petWindow.webContents.send("pet:direction-changed", walkDirection);
-  menuWindow?.webContents.send("pet:direction-changed", walkDirection);
-  hoverWindow?.webContents.send("pet:direction-changed", walkDirection);
+  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:direction-changed", walkDirection);
 }
 
 function sendDragState(isDragging) {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
-  petWindow.webContents.send("pet:drag-state-changed", isDragging);
+  safeSend(petWindow, "pet:drag-state-changed", isDragging);
 }
 
 function updateRenderedFrame(info) {
@@ -5578,11 +5426,11 @@ function setPetScale(nextScale) {
     ? getScaleForSurface(surface, preferredPetScale, activeState, walkDirection)
     : clampPetScale(nextScale);
   if (!Number.isFinite(clampedScale)) {
-    petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
     return;
   }
   if (Math.abs(previousScale - clampedScale) < 0.001) {
-    petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
     return;
   }
 
@@ -5594,7 +5442,7 @@ function setPetScale(nextScale) {
     if (!restoreWalkTrackAnchorAfterScale(walkScaleAnchor, surfaceAfterScale)) {
       groundPetToSurface(activeState, walkDirection, surfaceAfterScale);
     }
-    petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
     refreshMenuAnchorAfterScale();
     refreshHoverAnchorAfterScale();
     refreshCustomizationAnchorAfterScale();
@@ -5625,7 +5473,7 @@ function setPetScale(nextScale) {
   } else {
     groundPetToSurface(activeState, walkDirection, surfaceAfterResize);
   }
-  petWindow.webContents.send("pet:scale-changed", buildScaleSummary());
+  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
   refreshMenuAnchorAfterScale();
   refreshHoverAnchorAfterScale();
   refreshCustomizationAnchorAfterScale();
