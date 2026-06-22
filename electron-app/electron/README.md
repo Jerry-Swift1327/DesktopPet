@@ -26,6 +26,13 @@
 | `windows/menu-controller.cjs` | 菜单窗口控制器（创建、显示、隐藏、定位、可见性） |
 | `windows/hover-controller.cjs` | 悬停面板控制器（创建、显示、隐藏、轮询、可见性） |
 | `windows/customization-controller.cjs` | 自定义面板控制器（创建、显示、隐藏、定位） |
+| `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏跑道） |
+| `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
+| `behavior/window-roam-controller.cjs` | 窗口漫游控制器（目标选取、附着、轮询） |
+| `behavior/eye-tracking-controller.cjs` | 眼球追踪控制器（光标追踪、轮询） |
+| `platform/auto-start.cjs` | 开机自启（注册表读写、缓存、摘要） |
+| `platform/window-surfaces.cjs` | 窗口候选探测（PowerShell 调用、解析、评分） |
+| `platform/screen-metrics.cjs` | 屏幕度量（任务栏表面、跑道、显示器） |
 
 ## 主进程功能域
 
@@ -59,6 +66,13 @@
 | 菜单控制 | `windows/menu-controller.cjs`、`showPetMenu`、`hidePetMenu` |
 | 悬停控制 | `windows/hover-controller.cjs`、`showHoverPanel`、`hideHoverPanel` |
 | 自定义面板 | `windows/customization-controller.cjs`、`showCustomizationPanel` |
+| 行走控制 | `behavior/walk-controller.cjs`、`advanceWalkStep`、`startWalkLoop` |
+| 贴靠控制 | `behavior/dock-controller.cjs`、`dockPetAfterDrag`、`windowSurfacePoll` |
+| 窗口漫游控制 | `behavior/window-roam-controller.cjs`、`tickWindowRoam` |
+| 眼球追踪控制 | `behavior/eye-tracking-controller.cjs`、`tickEyeTracking` |
+| 开机自启 | `platform/auto-start.cjs`、`setAutoStartEnabled` |
+| 窗口候选探测 | `platform/window-surfaces.cjs`、`listWindowSurfaceCandidates` |
+| 屏幕度量 | `platform/screen-metrics.cjs`、`getTaskbarSurface`、`getSurfaceDisplay` |
 
 ## IPC 修改流程
 

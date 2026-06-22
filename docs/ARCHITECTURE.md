@@ -37,6 +37,10 @@ electron-app/package.json
 
 窗口创建和控制器逻辑已拆分到 `electron-app/electron/windows/` 目录：`main.cjs` 通过 `windows/overlay-window.cjs` 的 `createOverlayWindow` 工厂创建 overlay 窗口（归纳 BrowserWindow 选项），定位几何由 `windows/overlay-geometry.cjs` 提供（含菜单/悬停/自定义面板位置计算），气泡、菜单、悬停面板、自定义面板分别由 `windows/bubble-controller.cjs`、`windows/menu-controller.cjs`、`windows/hover-controller.cjs`、`windows/customization-controller.cjs` 以 `createXController(context)` 形式封装创建、显示、隐藏、定位和可见性等行为。`main.cjs` 负责在启动时构造这些控制器并注入上下文，窗口相关逻辑修改应优先落到对应控制器模块，而非 `main.cjs`。
 
+行为控制器逻辑已拆分到 `electron-app/electron/behavior/` 目录：行走循环和步进由 `behavior/walk-controller.cjs` 封装（含任务栏跑道推进），拖拽后贴靠和窗口表面轮询由 `behavior/dock-controller.cjs` 封装，窗口漫游目标选取和轮询由 `behavior/window-roam-controller.cjs` 封装，眼球追踪光标跟随由 `behavior/eye-tracking-controller.cjs` 封装。各模块以 `createXController(context)` 形式暴露，依赖通过 context 注入，控制流和执行顺序与 `main.cjs` 原逻辑一致。
+
+平台能力已拆分到 `electron-app/electron/platform/` 目录：开机自启注册表读写和缓存由 `platform/auto-start.cjs` 封装，窗口候选探测（PowerShell 调用、解析、评分）由 `platform/window-surfaces.cjs` 封装，屏幕度量（任务栏表面、跑道、显示器）由 `platform/screen-metrics.cjs` 封装。各模块以 `createXController(context)` 形式暴露，依赖通过 context 注入。
+
 如果要降低未来维护成本，可考虑在独立需求中逐步拆分 `main.cjs`。
 
 ## 渲染层职责

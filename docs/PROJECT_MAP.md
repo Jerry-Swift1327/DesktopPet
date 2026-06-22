@@ -29,6 +29,8 @@
 | `electron-app/electron/pet/` | 宠物状态定义和资源加载 | 调整宠物状态机、帧列表加载或资源根路径 |
 | `electron-app/electron/shared/` | 共享工具（几何函数、消息广播） | 修改几何计算或跨窗口消息发送逻辑 |
 | `electron-app/electron/windows/` | 窗口创建和控制器（overlay 公共创建、定位几何、菜单/悬停/气泡/自定义面板控制器） | 调整 overlay 窗口创建选项、定位计算或各窗口控制器的显示/隐藏/可见性逻辑 |
+| `electron-app/electron/behavior/` | 行为控制器（行走、贴靠、窗口漫游、眼球追踪） | 调整行走步进、贴靠回退、漫游目标选取或眼球追踪轮询 |
+| `electron-app/electron/platform/` | 平台能力（开机自启、窗口候选探测、屏幕度量） | 修改注册表读写、PowerShell 窗口枚举或任务栏/显示器度量 |
 | `electron-app/static/index.html` | 渲染窗口 HTML 入口 | 页面加载入口变化 |
 | `electron-app/static/renderer.js` | 宠物、菜单、悬停面板、气泡窗口渲染逻辑 | UI 行为、按钮、动画播放、IPC 调用 |
 | `electron-app/static/styles.css` | 渲染层样式 | 宠物窗口、菜单、悬停面板和气泡视觉调整 |
