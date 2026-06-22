@@ -10,7 +10,7 @@ test("window roam keeps the current window target when enabled from a window sur
   const tickBody = mainSource.match(/function tickWindowRoam\(\) \{([\s\S]*?)function startWindowRoamPolling/)?.[1] || "";
   const dockBody = mainSource.match(/function dockPetAfterDrag\(\{ retry = false \} = \{\}\) \{([\s\S]*?)function validateCurrentWindowSurface/)?.[1] || "";
 
-  assert.match(setRoamBody, /if \(windowRoamEnabledCache && currentSurface\?\.type === "window"\) \{[\s\S]*windowRoamPreferredTargetId = parseWindowHwnd\(currentSurface\.sourceWindowId\);[\s\S]*windowRoamLastTargetId = windowRoamPreferredTargetId;/);
+  assert.match(setRoamBody, /if \(roamEnabled && currentSurface\?\.type === "window"\) \{[\s\S]*windowRoamPreferredTargetId = parseWindowHwnd\(currentSurface\.sourceWindowId\);[\s\S]*windowRoamLastTargetId = windowRoamPreferredTargetId;/);
   assert.match(setRoamBody, /windowRoamDragFallbackSuppressedUntil = 0;/);
   assert.match(tickBody, /if \(Date\.now\(\) < windowRoamDragFallbackSuppressedUntil\) \{[\s\S]*return;[\s\S]*\}/);
   assert.match(tickBody, /const preferredSurface = windowRoamPreferredTargetId[\s\S]*\? getWindowRoamSurfaceById\(windowRoamPreferredTargetId\)[\s\S]*: null;/);
@@ -23,12 +23,12 @@ test("window roam keeps the current window target when enabled from a window sur
 test("window surface polling falls back when a non-roaming pet is no longer docked", () => {
   const dockedBody = mainSource.match(/function isPetStillDockedOnWindowSurface\(surface = currentSurface\) \{([\s\S]*?)function fallbackCurrentSurfaceToTaskbar/)?.[1] || "";
   const pollingBody = mainSource.match(/function startWindowSurfacePolling\(\) \{([\s\S]*?)function stopWindowSurfacePolling/)?.[1] || "";
-  const detachedBranch = pollingBody.match(/if \(!windowRoamEnabledCache && !isPetStillDockedOnWindowSurface\(currentSurface\)\) \{([\s\S]*?)\n    \}/)?.[1] || "";
+  const detachedBranch = pollingBody.match(/if \(!preferencesStore\.getWindowRoamEnabled\(\) && !isPetStillDockedOnWindowSurface\(currentSurface\)\) \{([\s\S]*?)\n    \}/)?.[1] || "";
 
   assert.match(dockedBody, /centerX >= surface\.left/);
   assert.match(dockedBody, /centerX <= surface\.right/);
   assert.match(dockedBody, /Math\.abs\(bottomY - surface\.groundY\) <= WINDOW_DOCK_COARSE_CORRECTION_LIMIT/);
-  assert.match(pollingBody, /!windowRoamEnabledCache/);
+  assert.match(pollingBody, /!preferencesStore\.getWindowRoamEnabled\(\)/);
   assert.match(pollingBody, /!isPetStillDockedOnWindowSurface\(currentSurface\)/);
   assert.match(pollingBody, /fallbackCurrentSurfaceToTaskbar\("window-surface-detached"\);[\s\S]*return;/);
   assert.doesNotMatch(detachedBranch, /validateCurrentWindowSurface/);

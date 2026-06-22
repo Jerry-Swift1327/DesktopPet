@@ -288,12 +288,57 @@ function createPreferencesStore({
     writePreference({ scale: preferredPetScale });
   }
 
+  function getAutoStartEnabled() {
+    return autoStartEnabledCache;
+  }
+
+  function setAutoStartEnabled(value) {
+    autoStartEnabledCache = Boolean(value);
+  }
+
+  function isAutoStartPreferenceLoaded() {
+    return autoStartPreferenceLoaded;
+  }
+
+  function getWindowRoamEnabled() {
+    return windowRoamEnabledCache;
+  }
+
+  function setWindowRoamEnabled(value) {
+    windowRoamEnabledCache = Boolean(value);
+  }
+
+  function getEyeTrackingEnabled() {
+    return eyeTrackingEnabledCache;
+  }
+
+  function setEyeTrackingEnabled(value) {
+    eyeTrackingEnabledCache = Boolean(value);
+  }
+
+  function getPetScale() {
+    return petScale;
+  }
+
+  function setPetScale(value) {
+    petScale = value;
+  }
+
+  function getPreferredPetScale() {
+    return preferredPetScale;
+  }
+
+  function setPreferredPetScale(value) {
+    preferredPetScale = value;
+  }
+
   return {
     getPreferencesKey,
     readPreferences,
     writePreference,
     readLegacyPreference,
     removeLegacyPreferenceFile,
+    isAutoStartSupported,
     canToggleAutoStart,
     readAutoStartPreference,
     writeAutoStartPreference,
@@ -307,7 +352,18 @@ function createPreferencesStore({
     writeEyeTrackingPreference,
     buildEyeTrackingSummary,
     readPetScalePreference,
-    writePetScalePreference
+    writePetScalePreference,
+    getAutoStartEnabled,
+    setAutoStartEnabled,
+    isAutoStartPreferenceLoaded,
+    getWindowRoamEnabled,
+    setWindowRoamEnabled,
+    getEyeTrackingEnabled,
+    setEyeTrackingEnabled,
+    getPetScale,
+    setPetScale,
+    getPreferredPetScale,
+    setPreferredPetScale
   };
 }
 

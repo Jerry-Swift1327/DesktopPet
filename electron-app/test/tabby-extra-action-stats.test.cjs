@@ -4,6 +4,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const appConstantsSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "app-constants.cjs"), "utf8");
+const runtimeConfigSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "runtime-config.cjs"), "utf8");
+const assetLoaderSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "asset-loader.cjs"), "utf8");
 // 渲染层已拆分到 renderer/ 目录下多个模块，测试需读取所有模块内容
 const rendererSource = ["shared", "pet-window", "menu-window", "hover-window", "bubble-window", "customization-window"]
   .map((name) => fs.readFileSync(path.join(__dirname, "..", "static", "renderer", `${name}.js`), "utf8"))
@@ -43,12 +46,12 @@ test("tabby extra actions update hover panel stats", () => {
 
 test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /tabbyIdlePollTimer = setInterval\(updateTabbyIdleActions, 1000\)/);
-  assert.match(mainSource, /const TABBY_YAWN_IDLE_MS = 2 \* 60 \* 1000/);
+  assert.match(appConstantsSource, /const TABBY_YAWN_IDLE_MS = 2 \* 60 \* 1000/);
   assert.match(mainSource, /nextTabbyYawnInMs: Math\.max\(0, TABBY_YAWN_IDLE_MS - \(now - lastTabbyUserOperationAt\)\)/);
   assert.match(mainSource, /setState\(STATE_YAWN, false\)/);
   assert.match(mainSource, /const TABBY_IDLE_STATES = new Set\(\[STATE_YAWN, STATE_SLEEP, STATE_HISS\]\)/);
   assert.match(rendererSource, /tailLoopStart \+ \(\(frameStep - tailLoopStart\) % Math\.max\(1, stepCount - tailLoopStart\)\)/);
-  assert.match(mainSource, /const TABBY_SLEEP_POSE_MS = 2 \* 60 \* 1000/);
+  assert.match(appConstantsSource, /const TABBY_SLEEP_POSE_MS = 2 \* 60 \* 1000/);
   assert.match(mainSource, /nextTabbySleepPoseInMs: Math\.max\(0, tabbySleepPoseSwitchAt - now\)/);
   assert.match(mainSource, /tabbySleepPoseSwitchAt = Date\.now\(\) \+ TABBY_SLEEP_POSE_MS/);
   assert.match(mainSource, /readMetadata\(getState\(renderedFrameState\)\.metadata\)\.tailLoopStart/);
@@ -59,7 +62,7 @@ test("tabby idle actions run outside the idle greeting timer", () => {
 });
 
 test("packaged runtime validates the external assets root first", () => {
-  const getAssetsRootBody = mainSource.match(/function getAssetsRoot\(\) \{([\s\S]*?)function toFileUrl/)?.[1] || "";
+  const getAssetsRootBody = assetLoaderSource.match(/function getAssetsRoot\(\) \{([\s\S]*?)function listFrames/)?.[1] || "";
 
   assert.match(getAssetsRootBody, /path\.join\(process\.resourcesPath, "assets"\)/);
   assert.match(getAssetsRootBody, /frame_000\.png/);
@@ -67,7 +70,7 @@ test("packaged runtime validates the external assets root first", () => {
 });
 
 test("packaged custom variants are not overridden by dog or cat preference", () => {
-  const runtimeConfigBody = mainSource.match(/function readPetRuntimeConfig\(\) \{([\s\S]*?)function getActionAssetFolder/)?.[1] || "";
+  const runtimeConfigBody = runtimeConfigSource.match(/function readPetRuntimeConfig\(\) \{([\s\S]*?)function getBasePetVariant/)?.[1] || "";
 
   assert.match(runtimeConfigBody, /SWITCHABLE_VARIANTS\.includes\(fileConfig\.variant\)/);
   assert.match(runtimeConfigBody, /\.\.\.\(preferredVariant \? \{ variant: preferredVariant \} : \{\}\)/);

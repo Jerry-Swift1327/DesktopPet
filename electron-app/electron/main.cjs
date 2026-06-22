@@ -19,7 +19,8 @@ const {
   buildPetRuntimeConfig,
   getPetUserDataFolder,
   getPetPlatformFeatures,
-  getPetVariantProfile
+  getPetVariantProfile,
+  MAC_USER_DATA_PARENT
 } = require("./pet-variants.cjs");
 const {
   isLikelyDesktopOrSystemWindow
@@ -33,14 +34,166 @@ const { sharedGreetings, buildPetStates } = require("./pet/pet-states.cjs");
 // overlay 窗口公共创建 helper，供 createXxxWindow 共享 BrowserWindow 创建逻辑
 const { createOverlayWindow } = require("./windows/overlay-window.cjs");
 
-const APP_INTERNAL_NAME = "Chongban";
-const APP_DISPLAY_NAME = "宠伴";
-const APP_ICON_FILE = "app_icon.ico";
-const WINDOWS_STARTUP_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-const PREFERENCES_FILE = "preferences.dat";
-const PREFERENCES_VERSION = 1;
-const PREFERENCES_MAGIC = "CBPREF1";
-const PREFERENCES_CIPHER = "aes-256-gcm";
+// 应用级常量集中管理
+const appConstants = require("./core/app-constants.cjs");
+const { createRuntimeConfig } = require("./core/runtime-config.cjs");
+const { createPreferencesStore } = require("./core/preferences-store.cjs");
+const { createAssetLoader } = require("./pet/asset-loader.cjs");
+const {
+  APP_INTERNAL_NAME,
+  APP_DISPLAY_NAME,
+  APP_ICON_FILE,
+  WINDOWS_STARTUP_RUN_KEY,
+  PREFERENCES_FILE,
+  PREFERENCES_VERSION,
+  PREFERENCES_MAGIC,
+  PREFERENCES_CIPHER,
+  BASE_PET_WINDOW_WIDTH,
+  BASE_PET_WINDOW_HEIGHT,
+  BASE_PET_SPRITE_SIZE,
+  PET_SCALE_MIN,
+  PET_SCALE_MAX,
+  PET_SCALE_STEP,
+  ENABLE_WINDOW_DOCKING,
+  WINDOW_DOCK_GAP,
+  WINDOW_DOCK_MIN_WIDTH,
+  WINDOW_SURFACE_SIDE_GAP,
+  WINDOW_DOCK_STRICT_THRESHOLD,
+  WINDOW_DOCK_FAST_RELEASE_THRESHOLD,
+  WINDOW_DOCK_NORMAL_HIT_SAMPLES,
+  WINDOW_DOCK_FAST_HIT_SAMPLES,
+  WINDOW_DOCK_POINT_OFFSETS_Y,
+  WINDOW_DOCK_FAST_POINT_OFFSETS_Y,
+  WINDOW_DOCK_FAST_RELEASE_SPEED_PX_PER_SEC,
+  WINDOW_DOCK_FAST_RELEASE_MAX_AGE_MS,
+  WINDOW_DOCK_COARSE_CORRECTION_LIMIT,
+  WINDOW_DOCK_FINE_CORRECTION_LIMIT,
+  WINDOW_DOCK_DRAG_RELEASE_BUDGET_MS,
+  WINDOW_DOCK_DEBUG,
+  STARTUP_BUBBLE_DEFAULT_WIDTH,
+  STARTUP_BUBBLE_MIN_WIDTH,
+  STARTUP_BUBBLE_MAX_WIDTH,
+  STARTUP_BUBBLE_HEIGHT,
+  STARTUP_BUBBLE_GAP_OFFSET,
+  STARTUP_BUBBLE_SCALE_GAP_FACTOR,
+  STARTUP_BUBBLE_DURATION_MS,
+  STARTUP_BUBBLE_HOVER_LOCK_MS,
+  PET_MENU_WIDTH,
+  PET_MENU_COLLAPSED_HEIGHT,
+  PET_MENU_MIN_HEIGHT,
+  PET_MENU_MAX_HEIGHT,
+  PET_MENU_PADDING_Y,
+  PET_MENU_ITEM_HEIGHT,
+  PET_MENU_HIDE_DELAY_MS,
+  HOVER_PANEL_WIDTH,
+  CUSTOMIZATION_PANEL_WIDTH,
+  CUSTOMIZATION_PANEL_HEIGHT,
+  HOVER_HIDE_DELAY_MS,
+  HOVER_INTENT_DELAY_MS,
+  TASKBAR_WALK_HOVER_INTENT_DELAY_MS,
+  HOVER_POLL_INTERVAL_MS,
+  WINDOW_SURFACE_POLL_INTERVAL_MS,
+  WINDOW_SURFACE_HEAVY_RECHECK_MS,
+  WINDOW_SURFACE_CACHE_MS,
+  WINDOW_SURFACE_ASYNC_REFRESH_MIN_MS,
+  WINDOW_SURFACE_DRAG_REFRESH_MIN_MS,
+  WINDOW_SURFACE_BACKGROUND_REFRESH_MS,
+  WINDOW_SURFACE_FALLBACK_BLEND_MS,
+  WINDOW_DOCK_DRAG_RETRY_DELAY_MS,
+  WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS,
+  WINDOW_ROAM_POLL_INTERVAL_MS,
+  WINDOW_ROAM_MAX_MISSING_TICKS,
+  WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
+  EYE_TRACKING_POLL_INTERVAL_MS,
+  EYE_TRACKING_FRAME_NAME_PATTERN,
+  DARWIN_DISPLAY_METRICS_SETTLE_MS,
+  OVERLAY_BASE_GAP,
+  OVERLAY_GAP_MIN,
+  OVERLAY_GAP_MAX,
+  OVERLAY_VERTICAL_OFFSET,
+  HOVER_PANEL_GAP_OFFSET,
+  HOVER_PANEL_VERTICAL_OFFSET,
+  HOVER_PANEL_SCALE_GAP_FACTOR,
+  PET_MENU_GAP_OFFSET,
+  PET_MENU_BASE_VERTICAL_LIFT,
+  PET_MENU_VERTICAL_LIFT_MIN,
+  PET_MENU_VERTICAL_LIFT_MAX,
+  PET_MENU_VERTICAL_OFFSET,
+  PET_MENU_SCALE_GAP_FACTOR,
+  PET_MENU_SCALE_UP_VERTICAL_FACTOR,
+  PET_MENU_SCALE_DOWN_VERTICAL_FACTOR,
+  PET_MENU_HEAD_SCAN_RATIO,
+  PET_MENU_HEAD_X_OFFSET,
+  PET_MENU_HEAD_Y_OFFSET,
+  OVERLAY_COLLISION_PADDING_BASE,
+  OVERLAY_COLLISION_PADDING_MIN,
+  OVERLAY_COLLISION_PADDING_MAX,
+  HOVER_BODY_HIT_PADDING_BASE,
+  HOVER_BODY_HIT_PADDING_MIN,
+  HOVER_BODY_HIT_PADDING_MAX,
+  HOVER_PANEL_AVOID_PADDING_MIN,
+  HOVER_PANEL_AVOID_PADDING_SCALE,
+  RANDOM_GREETING_MIN_MS,
+  RANDOM_GREETING_MAX_MS,
+  RANDOM_GREETING_RETRY_MS,
+  IDLE_GREETING_DELAY_MS,
+  TABBY_YAWN_IDLE_MS,
+  TABBY_SLEEP_POSE_MS,
+  INTIMACY_DECAY_INTERVAL_MS,
+  FULLNESS_DECAY_INTERVAL_MS,
+  HEALTH_DECAY_INTERVAL_MS,
+  HEALTH_RECOVERY_INTERVAL_MS,
+  STAT_NATURAL_DELTA,
+  VISIBLE_ALPHA_THRESHOLD,
+  PET_STAT_MIN,
+  PET_STAT_MAX,
+  PET_INTIMACY_DEFAULT,
+  PET_FULLNESS_DEFAULT,
+  PET_HEALTH_DEFAULT,
+  VISIBLE_RIGHT_GAP,
+  VISIBLE_SIDE_GAP,
+  VISIBLE_TOP_GAP,
+  VISIBLE_BOTTOM_GAP,
+  WALK_EDGE_PADDING,
+  WALK_STEP,
+  WALK_EDGE_TOLERANCE,
+  WALK_MIRROR_HYSTERESIS_PX,
+  WALK_MIRROR_COOLDOWN_STEPS,
+  WALK_SCALE_APPLY_THROTTLE_MS,
+  WALK_EDGE_STUCK_STEPS_TO_FORCE_MIRROR,
+  WALK_LOOP_DURATION_MS,
+  DARWIN_BOTTOM_DOCK_WIDTH_HEIGHT_FACTOR,
+  TASKBAR_WALK_RUNWAY_PADDING_MIN,
+  TASKBAR_WALK_RUNWAY_PADDING_MAX,
+  TASKBAR_WALK_RUNWAY_PADDING_SCALE,
+  TASKBAR_WALK_RUNWAY_RECENTER_RATIO,
+  TASKBAR_WALK_RUNWAY_SCREEN_BUFFER_FACTOR,
+  TASKBAR_HOME_HOVER_CENTER_INSET_MIN,
+  WALK_DIAGNOSTICS_ENABLED,
+  INTERACTION_INTIMACY_GAIN_MIN,
+  INTERACTION_INTIMACY_GAIN_MAX,
+  FEED_FULLNESS_GAIN_MIN,
+  FEED_FULLNESS_GAIN_MAX,
+  LIE_HEALTH_GAIN,
+  LICK_HEALTH_GAIN,
+  BELLY_FULLNESS_COST,
+  STRETCH_HEALTH_GAIN,
+  STRETCH_FULLNESS_COST,
+  HEALTH_RECOVERY_THRESHOLD,
+  HUNGER_WARNING_THRESHOLD,
+  HUNGER_CRITICAL_THRESHOLD,
+  EXHAUSTED_THRESHOLD,
+  HEALTH_TIRED_THRESHOLD,
+  HEALTH_RECOVERED_THRESHOLD,
+  FULL_PROMPT_THRESHOLD,
+  CLOSE_PROMPT_THRESHOLD,
+  CLOSE_PROMPT_RESET_THRESHOLD,
+  HUNGER_PROMPT_CLEAR_THRESHOLD,
+  FULL_PROMPT_RESET_THRESHOLD,
+  HEALTH_PROMPT_CLEAR_THRESHOLD,
+  DAILY_DECAY_FULLNESS,
+  DAILY_DECAY_HEALTH
+} = appConstants;
 
 app.setName(APP_INTERNAL_NAME);
 app.disableHardwareAcceleration();
@@ -52,8 +205,32 @@ app.commandLine.appendSwitch("disable-software-rasterizer");
 app.commandLine.appendSwitch("disable-features", "VizDisplayCompositor");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
-const petRuntimeConfig = readPetRuntimeConfig();
-const basePetVariant = getBasePetVariant();
+// 运行时配置：变体配置读取、首选变体持久化、用户数据目录定位
+const runtimeConfig = createRuntimeConfig({
+  app,
+  fs,
+  path,
+  petVariants: {
+    PET_VARIANT_CONFIG_FILE,
+    PREFERRED_VARIANT_FILE,
+    DEFAULT_PET_VARIANT,
+    DEFAULT_PET_CHANNEL,
+    SWITCHABLE_VARIANTS,
+    buildPetRuntimeConfig,
+    getPetUserDataFolder,
+    MAC_USER_DATA_PARENT
+  },
+  appConstants,
+  log
+});
+const {
+  petRuntimeConfig,
+  basePetVariant,
+  getUserDataRoot,
+  readPreferredVariant,
+  writePreferredVariant,
+  readPetRuntimeConfig
+} = runtimeConfig;
 if (process.platform === "win32") {
   app.setAppUserModelId(petRuntimeConfig.singleInstanceKey);
 }
@@ -66,18 +243,50 @@ fs.mkdirSync(path.join(userDataRoot, "session"), { recursive: true });
 app.setPath("userData", userDataRoot);
 app.setPath("sessionData", path.join(userDataRoot, "session"));
 
-function getUserDataRoot() {
-  if (!app.isPackaged) {
-    return path.join(__dirname, "..", ".user-data", petRuntimeConfig.variant);
-  }
-  if (process.platform === "darwin") {
-    return path.join(app.getPath("appData"), getPetUserDataFolder({ ...petRuntimeConfig, platform: process.platform }));
-  }
-  return path.join(process.env.LOCALAPPDATA || path.join(path.dirname(process.execPath), "user-data"), APP_INTERNAL_NAME, basePetVariant);
-}
+// 偏好存储：autoStart/windowRoam/eyeTracking/scale 四组偏好的读写和迁移
+const preferencesStore = createPreferencesStore({
+  app,
+  fs,
+  crypto,
+  path,
+  constants: { PREFERENCES_FILE, PREFERENCES_VERSION, PREFERENCES_MAGIC, PREFERENCES_CIPHER, APP_INTERNAL_NAME },
+  petRuntimeConfig,
+  basePetVariant,
+  variantDataRoot,
+  userDataRoot,
+  log
+});
 
 const petActionIds = getPetActionIds();
 const petAnimationPrefix = petRuntimeConfig.animationPrefix;
+
+// 资源加载：帧列表、元数据、图标路径、眼球追踪帧
+const assetLoader = createAssetLoader({
+  app,
+  fs,
+  path,
+  __dirname,
+  assetsRootCache: "",
+  framePathsCache: new Map(),
+  APP_ICON_FILE,
+  log,
+  petAnimationPrefix,
+  petRuntimeConfig,
+  canToggleEyeTracking: preferencesStore.canToggleEyeTracking,
+  EYE_TRACKING_FRAME_NAME_PATTERN,
+  pathToFileURL
+});
+const {
+  getAssetsRoot,
+  listFrames,
+  listFramePaths,
+  listEyeTrackingFrames,
+  listTabbySounds,
+  readMetadata,
+  getAppIconPath,
+  clampFrameIndex,
+  sanitizeFrameSequence
+} = assetLoader;
 const STATE_SQUAT = petActionIds.squat;
 const STATE_WALK = petActionIds.walk;
 const STATE_FEED = petActionIds.feed;
@@ -91,157 +300,7 @@ const STATE_YAWN = petActionIds.yawn;
 const STATE_SLEEP = petActionIds.sleep;
 const STATE_HISS = petActionIds.hiss;
 
-const BASE_PET_WINDOW_WIDTH = 180;
-const BASE_PET_WINDOW_HEIGHT = 180;
-const BASE_PET_SPRITE_SIZE = 128;
-const PET_SCALE_MIN = 0.75;
-const PET_SCALE_MAX = 1.6;
-const PET_SCALE_STEP = 0.08;
-const ENABLE_WINDOW_DOCKING = true;
-const WINDOW_DOCK_GAP = 0;
-const WINDOW_DOCK_MIN_WIDTH = 180;
-const WINDOW_SURFACE_SIDE_GAP = 0;
-const WINDOW_DOCK_STRICT_THRESHOLD = 36;
-const WINDOW_DOCK_FAST_RELEASE_THRESHOLD = 56;
-const WINDOW_DOCK_NORMAL_HIT_SAMPLES = 3;
-const WINDOW_DOCK_FAST_HIT_SAMPLES = 5;
-const WINDOW_DOCK_POINT_OFFSETS_Y = [2, -4, 8];
-const WINDOW_DOCK_FAST_POINT_OFFSETS_Y = [4, -6, 12];
-const WINDOW_DOCK_FAST_RELEASE_SPEED_PX_PER_SEC = 1200;
-const WINDOW_DOCK_FAST_RELEASE_MAX_AGE_MS = 180;
-const WINDOW_DOCK_COARSE_CORRECTION_LIMIT = 28;
-const WINDOW_DOCK_FINE_CORRECTION_LIMIT = 2;
-const WINDOW_DOCK_DRAG_RELEASE_BUDGET_MS = 120;
-const WINDOW_DOCK_DEBUG = true;
-const STARTUP_BUBBLE_DEFAULT_WIDTH = 238;
-const STARTUP_BUBBLE_MIN_WIDTH = 150;
-const STARTUP_BUBBLE_MAX_WIDTH = 320;
-const STARTUP_BUBBLE_HEIGHT = 54;
-const STARTUP_BUBBLE_GAP_OFFSET = 0;
-const STARTUP_BUBBLE_SCALE_GAP_FACTOR = 34;
-const STARTUP_BUBBLE_DURATION_MS = 4000;
-const STARTUP_BUBBLE_HOVER_LOCK_MS = 1800;
-const PET_MENU_WIDTH = 196;
-const PET_MENU_COLLAPSED_HEIGHT = 142;
-const PET_MENU_MIN_HEIGHT = 128;
-const PET_MENU_MAX_HEIGHT = 500;
-const PET_MENU_PADDING_Y = 14;
-const PET_MENU_ITEM_HEIGHT = 40;
-const PET_MENU_HIDE_DELAY_MS = 700;
-const HOVER_PANEL_WIDTH = 232;
 const HOVER_PANEL_HEIGHT = petRuntimeConfig.channelConfig.hoverPanelHeight;
-const CUSTOMIZATION_PANEL_WIDTH = 380;
-const CUSTOMIZATION_PANEL_HEIGHT = 380;
-const HOVER_HIDE_DELAY_MS = 700;
-const HOVER_INTENT_DELAY_MS = 70;
-const TASKBAR_WALK_HOVER_INTENT_DELAY_MS = 240;
-const HOVER_POLL_INTERVAL_MS = 32;
-const WINDOW_SURFACE_POLL_INTERVAL_MS = 250;
-const WINDOW_SURFACE_HEAVY_RECHECK_MS = 500;
-const WINDOW_SURFACE_CACHE_MS = 320;
-const WINDOW_SURFACE_ASYNC_REFRESH_MIN_MS = 600;
-const WINDOW_SURFACE_DRAG_REFRESH_MIN_MS = 260;
-const WINDOW_SURFACE_BACKGROUND_REFRESH_MS = 900;
-const WINDOW_SURFACE_FALLBACK_BLEND_MS = 90;
-const WINDOW_DOCK_DRAG_RETRY_DELAY_MS = 260;
-const WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS = 2500;
-const WINDOW_ROAM_POLL_INTERVAL_MS = 900;
-const WINDOW_ROAM_MAX_MISSING_TICKS = 2;
-const WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS = WINDOW_ROAM_POLL_INTERVAL_MS * 2;
-const EYE_TRACKING_POLL_INTERVAL_MS = 50;
-const EYE_TRACKING_FRAME_NAME_PATTERN = /^frame_(\d+)\.png$/i;
-const DARWIN_DISPLAY_METRICS_SETTLE_MS = 300;
-// Panel positioning knobs. Change these first when tuning visual spacing.
-const OVERLAY_BASE_GAP = 25; 
-const OVERLAY_GAP_MIN = 12; 
-const OVERLAY_GAP_MAX = 60; 
-const OVERLAY_VERTICAL_OFFSET = 0;
-
-const HOVER_PANEL_GAP_OFFSET = 0; 
-const HOVER_PANEL_VERTICAL_OFFSET = 0; 
-const HOVER_PANEL_SCALE_GAP_FACTOR = 34; 
-
-const PET_MENU_GAP_OFFSET = 0;
-const PET_MENU_BASE_VERTICAL_LIFT = 70;
-const PET_MENU_VERTICAL_LIFT_MIN = 10;
-const PET_MENU_VERTICAL_LIFT_MAX = 56;
-const PET_MENU_VERTICAL_OFFSET = 0;
-const PET_MENU_SCALE_GAP_FACTOR = 34;
-const PET_MENU_SCALE_UP_VERTICAL_FACTOR = 20;
-const PET_MENU_SCALE_DOWN_VERTICAL_FACTOR = 100;
-const PET_MENU_HEAD_SCAN_RATIO = 0.42;
-const PET_MENU_HEAD_X_OFFSET = 0;
-const PET_MENU_HEAD_Y_OFFSET = 0;
-
-const OVERLAY_COLLISION_PADDING_BASE = 1;
-const OVERLAY_COLLISION_PADDING_MIN = 0;
-const OVERLAY_COLLISION_PADDING_MAX = 3;
-
-const HOVER_BODY_HIT_PADDING_BASE = 2;
-const HOVER_BODY_HIT_PADDING_MIN = 0;
-const HOVER_BODY_HIT_PADDING_MAX = 6;
-const HOVER_PANEL_AVOID_PADDING_MIN = 30;
-const HOVER_PANEL_AVOID_PADDING_SCALE = 0.16;
-const RANDOM_GREETING_MIN_MS = 1 * 60 * 1000;
-const RANDOM_GREETING_MAX_MS = 1 * 60 * 1000;
-const RANDOM_GREETING_RETRY_MS = 2 * 60 * 1000;
-const IDLE_GREETING_DELAY_MS = RANDOM_GREETING_MIN_MS;
-const TABBY_YAWN_IDLE_MS = 2 * 60 * 1000;
-const TABBY_SLEEP_POSE_MS = 2 * 60 * 1000;
-const INTIMACY_DECAY_INTERVAL_MS = 10 * 60 * 1000;
-const FULLNESS_DECAY_INTERVAL_MS = 5 * 60 * 1000;
-const HEALTH_DECAY_INTERVAL_MS = 10 * 60 * 1000;
-const HEALTH_RECOVERY_INTERVAL_MS = 2 * 60 * 1000;
-const STAT_NATURAL_DELTA = 1;
-const VISIBLE_ALPHA_THRESHOLD = 12;
-const PET_STAT_MIN = 0;
-const PET_STAT_MAX = 100;
-const PET_INTIMACY_DEFAULT = 50;
-const PET_FULLNESS_DEFAULT = 50;
-const PET_HEALTH_DEFAULT = 100;
-const VISIBLE_RIGHT_GAP = 4;
-const VISIBLE_SIDE_GAP = VISIBLE_RIGHT_GAP;
-const VISIBLE_TOP_GAP = 0;
-const VISIBLE_BOTTOM_GAP = 0;
-const WALK_EDGE_PADDING = 0;
-const WALK_STEP = 1;
-const WALK_EDGE_TOLERANCE = 6;
-const WALK_MIRROR_HYSTERESIS_PX = 1;
-const WALK_MIRROR_COOLDOWN_STEPS = 1;
-const WALK_SCALE_APPLY_THROTTLE_MS = 120;
-const WALK_EDGE_STUCK_STEPS_TO_FORCE_MIRROR = 2;
-const WALK_LOOP_DURATION_MS = 5 * 60 * 1000;
-const DARWIN_BOTTOM_DOCK_WIDTH_HEIGHT_FACTOR = 18;
-const TASKBAR_WALK_RUNWAY_PADDING_MIN = 120;
-const TASKBAR_WALK_RUNWAY_PADDING_MAX = 220;
-const TASKBAR_WALK_RUNWAY_PADDING_SCALE = 1.15;
-const TASKBAR_WALK_RUNWAY_RECENTER_RATIO = 0.35;
-const TASKBAR_WALK_RUNWAY_SCREEN_BUFFER_FACTOR = 1;
-const TASKBAR_HOME_HOVER_CENTER_INSET_MIN = 0;
-const WALK_DIAGNOSTICS_ENABLED = process.env.PET_WALK_DIAGNOSTICS === "1";
-const INTERACTION_INTIMACY_GAIN_MIN = 5;
-const INTERACTION_INTIMACY_GAIN_MAX = 10;
-const FEED_FULLNESS_GAIN_MIN = 10;
-const FEED_FULLNESS_GAIN_MAX = 15;
-const LIE_HEALTH_GAIN = 2;
-const LICK_HEALTH_GAIN = 1;
-const BELLY_FULLNESS_COST = 1;
-const STRETCH_HEALTH_GAIN = 2;
-const STRETCH_FULLNESS_COST = 1;
-const HEALTH_RECOVERY_THRESHOLD = 80;
-const HUNGER_WARNING_THRESHOLD = 44;
-const HUNGER_CRITICAL_THRESHOLD = 24;
-const EXHAUSTED_THRESHOLD = 0;
-const HEALTH_TIRED_THRESHOLD = 34;
-const HEALTH_RECOVERED_THRESHOLD = 82;
-const FULL_PROMPT_THRESHOLD = 100;
-const CLOSE_PROMPT_THRESHOLD = 98;
-const CLOSE_PROMPT_RESET_THRESHOLD = 96;
-const HUNGER_PROMPT_CLEAR_THRESHOLD = 70;
-const FULL_PROMPT_RESET_THRESHOLD = 90;
-const HEALTH_PROMPT_CLEAR_THRESHOLD = 65;
-const DAILY_DECAY_FULLNESS = 0;
-const DAILY_DECAY_HEALTH = 0;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
 const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
@@ -249,129 +308,6 @@ const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 // sharedGreetings 已从 pet/pet-states.cjs 导入
-
-function readPetRuntimeConfigFile(configPath) {
-  try {
-    const configText = fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, "");
-    return JSON.parse(configText);
-  } catch {
-    return null;
-  }
-}
-
-function getPackagedPetRuntimeConfigPaths() {
-  return [
-    path.join(process.resourcesPath, PET_VARIANT_CONFIG_FILE),
-    path.join(process.resourcesPath, "app.asar", ".runtime-assets", PET_VARIANT_CONFIG_FILE),
-    path.join(process.resourcesPath, "app", ".runtime-assets", PET_VARIANT_CONFIG_FILE)
-  ];
-}
-
-function getPreferredVariantFilePath(baseVariant = DEFAULT_PET_VARIANT) {
-  if (!app.isPackaged) {
-    return path.join(__dirname, "..", ".user-data", PREFERRED_VARIANT_FILE);
-  }
-  if (process.platform === "darwin") {
-    return path.join(app.getPath("appData"), MAC_USER_DATA_PARENT, PREFERRED_VARIANT_FILE);
-  }
-  return path.join(process.env.LOCALAPPDATA || path.join(path.dirname(process.execPath), "user-data"), APP_INTERNAL_NAME, baseVariant, PREFERRED_VARIANT_FILE);
-}
-
-function getLegacyPreferredVariantFilePath() {
-  return path.join(app.getPath("appData"), APP_INTERNAL_NAME, PREFERRED_VARIANT_FILE);
-}
-
-function readPreferredVariant(baseVariant = DEFAULT_PET_VARIANT) {
-  try {
-    const filePaths = [getPreferredVariantFilePath(baseVariant)];
-    if (app.isPackaged) {
-      filePaths.push(getLegacyPreferredVariantFilePath());
-    }
-    const filePath = filePaths.find((candidate) => fs.existsSync(candidate));
-    if (!filePath) {
-      return null;
-    }
-    const content = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
-    const data = JSON.parse(content);
-    if (data && data.variant && SWITCHABLE_VARIANTS.includes(data.variant)) {
-      return data.variant;
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function writePreferredVariant(variant, baseVariant = DEFAULT_PET_VARIANT) {
-  try {
-    const filePath = getPreferredVariantFilePath(baseVariant);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify({ variant }, null, 2), "utf8");
-  } catch (error) {
-    log(`failed to write preferred variant: ${error.stack || error.message}`);
-  }
-}
-
-function readPetRuntimeConfig() {
-  const envVariant = process.env.PET_VARIANT || process.env.DESKTOP_PET_VARIANT;
-  const envChannel = process.env.PET_CHANNEL || process.env.DESKTOP_PET_CHANNEL;
-  const envConfig = {};
-  if (envVariant) {
-    envConfig.variant = envVariant;
-  }
-  if (envChannel) {
-    envConfig.channel = envChannel;
-  }
-
-  if (!app.isPackaged) {
-    const preferredVariant = !envVariant ? readPreferredVariant() : null;
-    if (preferredVariant) {
-      envConfig.variant = preferredVariant;
-    }
-    return buildPetRuntimeConfig(envConfig);
-  }
-
-  for (const configPath of getPackagedPetRuntimeConfigPaths()) {
-    if (!fs.existsSync(configPath)) {
-      continue;
-    }
-    const fileConfig = readPetRuntimeConfigFile(configPath);
-    if (fileConfig) {
-      const preferredVariant = !envVariant && SWITCHABLE_VARIANTS.includes(fileConfig.variant)
-        ? readPreferredVariant(fileConfig.variant)
-        : null;
-      return buildPetRuntimeConfig({
-        ...fileConfig,
-        ...envConfig,
-        ...(preferredVariant ? { variant: preferredVariant } : {})
-      });
-    }
-  }
-
-  const preferredVariant = !envVariant ? readPreferredVariant() : null;
-  return buildPetRuntimeConfig({
-    variant: DEFAULT_PET_VARIANT,
-    channel: DEFAULT_PET_CHANNEL,
-    ...(preferredVariant ? { variant: preferredVariant } : {}),
-    ...envConfig
-  });
-}
-
-function getBasePetVariant() {
-  if (!app.isPackaged) {
-    return petRuntimeConfig.variant;
-  }
-  for (const configPath of getPackagedPetRuntimeConfigPaths()) {
-    if (!fs.existsSync(configPath)) {
-      continue;
-    }
-    const fileConfig = readPetRuntimeConfigFile(configPath);
-    if (fileConfig?.variant) {
-      return fileConfig.variant;
-    }
-  }
-  return petRuntimeConfig.variant;
-}
 
 function getActionAssetFolder(action) {
   return `animations/${petAnimationPrefix}_${action}`;
@@ -488,39 +424,22 @@ let windowDockInProgress = false;
 let lastWindowSurfaceBackgroundRefreshAt = 0;
 let bubbleHoverSuppressedUntil = 0;
 let windowDockHoverSuppressedUntil = 0;
-let autoStartEnabledCache = false;
 let autoStartRefreshInFlight = false;
-let autoStartPreferenceLoaded = false;
-let windowRoamEnabledCache = false;
 let windowRoamPollTimer = null;
 let windowRoamLastTargetId = "";
 let windowRoamPreferredTargetId = "";
 let windowRoamSuppressedWindowId = "";
 let windowRoamDragFallbackSuppressedUntil = 0;
 let windowRoamMissingTicks = 0;
-let eyeTrackingEnabledCache = false;
 let eyeTrackingPollTimer = null;
 let lastEyeTrackingLook = "off";
-let eyeTrackingLookFrameCount = 0;
-let assetsRootCache = "";
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
-const preferencesFile = path.join(variantDataRoot, PREFERENCES_FILE);
-const legacyVariantAutoStartPreferenceFile = path.join(variantDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
-const legacyVariantWindowRoamPreferenceFile = path.join(variantDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
-const legacyVariantEyeTrackingPreferenceFile = path.join(variantDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
-const legacyVariantScalePreferenceFile = path.join(variantDataRoot, `scale-${petRuntimeConfig.variant}.json`);
-const legacyAutoStartPreferenceFile = path.join(userDataRoot, `auto-start-${petRuntimeConfig.variant}.json`);
-const legacyWindowRoamPreferenceFile = path.join(userDataRoot, `window-roam-${petRuntimeConfig.variant}.json`);
-const legacyEyeTrackingPreferenceFile = path.join(userDataRoot, `eye-tracking-${petRuntimeConfig.variant}.json`);
-const legacyScalePreferenceFile = path.join(userDataRoot, `scale-${petRuntimeConfig.variant}.json`);
 const logDir = path.join(userDataRoot, "logs");
 const logFile = path.join(logDir, "main.log");
 const visibleBoundsCache = new Map();
 const headBoundsCache = new Map();
-const framePathsCache = new Map();
 const framePixelCache = new Map();
-let preferencesCache = null;
 
 function log(message) {
   try {
@@ -541,96 +460,8 @@ function getAutoStartCommand() {
   return `"${process.execPath}"`;
 }
 
-function isAutoStartSupported() {
-  return process.platform === "win32" && app.isPackaged;
-}
-
-function canToggleAutoStart() {
-  return Boolean(petRuntimeConfig.features?.autoStart) && isAutoStartSupported();
-}
-
-function getPreferencesKey() {
-  return crypto.createHash("sha256")
-    .update([APP_INTERNAL_NAME, basePetVariant, petRuntimeConfig.variant, app.getPath("home")].join("|"))
-    .digest();
-}
-
-function readPreferences() {
-  if (preferencesCache) {
-    return preferencesCache;
-  }
-  preferencesCache = {};
-  if (!fs.existsSync(preferencesFile)) {
-    return preferencesCache;
-  }
-
-  try {
-    const [magic, ivText, tagText, encryptedText] = fs.readFileSync(preferencesFile, "utf8").trim().split(".");
-    if (magic !== PREFERENCES_MAGIC || !ivText || !tagText || !encryptedText) {
-      return preferencesCache;
-    }
-    const decipher = crypto.createDecipheriv(PREFERENCES_CIPHER, getPreferencesKey(), Buffer.from(ivText, "base64"));
-    decipher.setAuthTag(Buffer.from(tagText, "base64"));
-    const raw = Buffer.concat([
-      decipher.update(Buffer.from(encryptedText, "base64")),
-      decipher.final()
-    ]).toString("utf8");
-    const data = JSON.parse(raw);
-    if (data && typeof data === "object") {
-      preferencesCache = data;
-    }
-  } catch (error) {
-    log(`failed to read preferences: ${error.stack || error.message}`);
-  }
-  return preferencesCache;
-}
-
-function writePreference(values) {
-  try {
-    preferencesCache = { ...readPreferences(), ...values, version: PREFERENCES_VERSION };
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv(PREFERENCES_CIPHER, getPreferencesKey(), iv);
-    const encrypted = Buffer.concat([
-      cipher.update(JSON.stringify(preferencesCache), "utf8"),
-      cipher.final()
-    ]);
-    fs.writeFileSync(preferencesFile, [
-      PREFERENCES_MAGIC,
-      iv.toString("base64"),
-      cipher.getAuthTag().toString("base64"),
-      encrypted.toString("base64")
-    ].join("."), "utf8");
-  } catch (error) {
-    log(`failed to write preferences: ${error.stack || error.message}`);
-  }
-}
-
-function readLegacyPreference(filePaths, key, label) {
-  const filePath = filePaths.find((candidate) => fs.existsSync(candidate));
-  if (!filePath) {
-    return { value: undefined, filePath: "" };
-  }
-  try {
-    return { value: JSON.parse(fs.readFileSync(filePath, "utf8"))?.[key], filePath };
-  } catch (error) {
-    log(`failed to read ${label}: ${error.stack || error.message}`);
-    return { value: undefined, filePath };
-  }
-}
-
-function removeLegacyPreferenceFile(filePath, label) {
-  if (!filePath) {
-    return;
-  }
-  try {
-    fs.rmSync(filePath, { force: true });
-  } catch (error) {
-    log(`failed to remove ${label}: ${error.stack || error.message}`);
-  }
-}
-
 function readAutoStartEnabledSync() {
-  if (!isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
+  if (!preferencesStore.isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
     return false;
   }
 
@@ -657,7 +488,7 @@ function readAutoStartEnabledSync() {
 }
 
 function readAutoStartEnabledAsync(callback) {
-  if (!isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
+  if (!preferencesStore.isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
     callback(false);
     return;
   }
@@ -682,32 +513,11 @@ function readAutoStartEnabledAsync(callback) {
 }
 
 function readAutoStartPreference() {
-  const preferences = readPreferences();
-  let enabled = preferences.autoStartEnabled;
-  let shouldMigrate = false;
-  let legacyFilePath = "";
-  if (typeof enabled !== "boolean") {
-    const legacy = readLegacyPreference([
-      legacyVariantAutoStartPreferenceFile,
-      legacyAutoStartPreferenceFile
-    ], "enabled", "auto start preference");
-    enabled = legacy.value;
-    legacyFilePath = legacy.filePath;
-    shouldMigrate = typeof enabled === "boolean";
-  }
-  if (typeof enabled === "boolean") {
-    autoStartEnabledCache = enabled;
-    autoStartPreferenceLoaded = true;
-    if (shouldMigrate) {
-      writePreference({ autoStartEnabled: enabled });
-      removeLegacyPreferenceFile(legacyFilePath, "auto start preference");
-    }
-  }
+  preferencesStore.readAutoStartPreference();
 }
 
 function writeAutoStartPreference(enabled) {
-  writePreference({ autoStartEnabled: Boolean(enabled) });
-  autoStartPreferenceLoaded = true;
+  preferencesStore.writeAutoStartPreference(enabled);
 }
 
 function refreshAutoStartCacheAsync() {
@@ -717,8 +527,8 @@ function refreshAutoStartCacheAsync() {
 
   autoStartRefreshInFlight = true;
   readAutoStartEnabledAsync((enabled) => {
-    if (!autoStartPreferenceLoaded) {
-      autoStartEnabledCache = enabled;
+    if (!preferencesStore.isAutoStartPreferenceLoaded()) {
+      preferencesStore.setAutoStartEnabled(enabled);
       writeAutoStartPreference(enabled);
     }
     autoStartRefreshInFlight = false;
@@ -727,7 +537,7 @@ function refreshAutoStartCacheAsync() {
 }
 
 function setAutoStartEnabled(enabled) {
-  if (!canToggleAutoStart()) {
+  if (!preferencesStore.canToggleAutoStart()) {
     throw new Error("Auto start is not available for this build.");
   }
 
@@ -766,108 +576,44 @@ function setAutoStartEnabled(enabled) {
 }
 
 function buildAutoStartSummary(error = "") {
-  return {
-    supported: isAutoStartSupported(),
-    enabled: autoStartEnabledCache,
-    canToggle: canToggleAutoStart(),
-    error
-  };
-}
-
-function canToggleWindowRoam() {
-  return Boolean(petRuntimeConfig.features?.windowRoam) && ENABLE_WINDOW_DOCKING && process.platform === "win32";
+  return preferencesStore.buildAutoStartSummary(error);
 }
 
 function readWindowRoamPreference() {
-  const preferences = readPreferences();
-  let enabled = preferences.windowRoamEnabled;
-  let shouldMigrate = false;
-  if (typeof enabled !== "boolean") {
-    enabled = readLegacyPreference([
-      legacyVariantWindowRoamPreferenceFile,
-      legacyWindowRoamPreferenceFile
-    ], "enabled", "window roam preference").value;
-    shouldMigrate = typeof enabled === "boolean";
-  }
-  if (typeof enabled === "boolean") {
-    windowRoamEnabledCache = enabled;
-    if (shouldMigrate) {
-      writePreference({ windowRoamEnabled: enabled });
-    }
-  }
+  preferencesStore.readWindowRoamPreference();
 }
 
 function writeWindowRoamPreference(enabled) {
-  writePreference({ windowRoamEnabled: Boolean(enabled) });
+  preferencesStore.writeWindowRoamPreference(enabled);
 }
 
 function buildWindowRoamSummary(error = "") {
-  return {
-    supported: ENABLE_WINDOW_DOCKING && process.platform === "win32",
-    enabled: windowRoamEnabledCache,
-    canToggle: canToggleWindowRoam(),
-    error
-  };
-}
-
-function canToggleEyeTracking() {
-  return Boolean(petRuntimeConfig.features?.eyeTracking);
+  return preferencesStore.buildWindowRoamSummary(error);
 }
 
 function readEyeTrackingPreference() {
-  const preferences = readPreferences();
-  let enabled = preferences.eyeTrackingEnabled;
-  let shouldMigrate = false;
-  if (typeof enabled !== "boolean") {
-    enabled = readLegacyPreference([
-      legacyVariantEyeTrackingPreferenceFile,
-      legacyEyeTrackingPreferenceFile
-    ], "enabled", "eye tracking preference").value;
-    shouldMigrate = typeof enabled === "boolean";
-  }
-  if (typeof enabled === "boolean") {
-    eyeTrackingEnabledCache = enabled;
-    if (shouldMigrate) {
-      writePreference({ eyeTrackingEnabled: enabled });
-    }
-  }
+  preferencesStore.readEyeTrackingPreference();
 }
 
 function writeEyeTrackingPreference(enabled) {
-  writePreference({ eyeTrackingEnabled: Boolean(enabled) });
+  preferencesStore.writeEyeTrackingPreference(enabled);
 }
 
 function buildEyeTrackingSummary(error = "") {
-  return {
-    supported: canToggleEyeTracking(),
-    enabled: eyeTrackingEnabledCache,
-    canToggle: canToggleEyeTracking(),
-    error
-  };
+  return preferencesStore.buildEyeTrackingSummary(error);
 }
 
 function readPetScalePreference() {
-  const preferences = readPreferences();
-  let scale = preferences.scale;
-  let shouldMigrate = false;
-  if (!Number.isFinite(scale)) {
-    scale = readLegacyPreference([
-      legacyVariantScalePreferenceFile,
-      legacyScalePreferenceFile
-    ], "scale", "scale preference").value;
-    shouldMigrate = Number.isFinite(scale);
-  }
-  if (Number.isFinite(scale)) {
-    preferredPetScale = clampPetScale(scale);
-    petScale = preferredPetScale;
-    if (shouldMigrate) {
-      writePreference({ scale: preferredPetScale });
-    }
-  }
+  preferencesStore.readPetScalePreference();
+  // 同步运行时变量
+  petScale = preferencesStore.getPetScale();
+  preferredPetScale = preferencesStore.getPreferredPetScale();
 }
 
 function writePetScalePreference() {
-  writePreference({ scale: preferredPetScale });
+  // 同步到模块后写入
+  preferencesStore.setPreferredPetScale(preferredPetScale);
+  preferencesStore.writePetScalePreference();
 }
 
 function buildMenuFeatures() {
@@ -918,18 +664,18 @@ function getQuickMenuHeight() {
 }
 
 function setAutoStartPreference(enabled) {
-  if (!canToggleAutoStart()) {
+  if (!preferencesStore.canToggleAutoStart()) {
     return buildAutoStartSummary("Auto start is not available for this build.");
   }
 
   const nextEnabled = Boolean(enabled);
   try {
     setAutoStartEnabled(nextEnabled);
-    autoStartEnabledCache = nextEnabled;
+    preferencesStore.setAutoStartEnabled(nextEnabled);
     writeAutoStartPreference(nextEnabled);
   } catch (error) {
     log(`failed to set auto start: ${error.stack || error.message}`);
-    autoStartEnabledCache = readAutoStartEnabledSync();
+    preferencesStore.setAutoStartEnabled(readAutoStartEnabledSync());
     return buildAutoStartSummary(error.message || "Failed to update auto start.");
   }
 
@@ -939,18 +685,19 @@ function setAutoStartPreference(enabled) {
 }
 
 function toggleAutoStart() {
-  return setAutoStartPreference(!autoStartEnabledCache);
+  return setAutoStartPreference(!preferencesStore.getAutoStartEnabled());
 }
 
 function setWindowRoamPreference(enabled) {
-  if (!canToggleWindowRoam()) {
+  if (!preferencesStore.canToggleWindowRoam()) {
     return buildWindowRoamSummary("Window roam is not available for this build.");
   }
 
-  windowRoamEnabledCache = Boolean(enabled);
-  writeWindowRoamPreference(windowRoamEnabledCache);
+  const roamEnabled = Boolean(enabled);
+  preferencesStore.setWindowRoamEnabled(roamEnabled);
+  writeWindowRoamPreference(roamEnabled);
   windowRoamPreferredTargetId = "";
-  if (windowRoamEnabledCache && currentSurface?.type === "window") {
+  if (roamEnabled && currentSurface?.type === "window") {
     windowRoamPreferredTargetId = parseWindowHwnd(currentSurface.sourceWindowId);
     windowRoamLastTargetId = windowRoamPreferredTargetId;
   }
@@ -963,12 +710,13 @@ function setWindowRoamPreference(enabled) {
 }
 
 function setEyeTrackingPreference(enabled) {
-  if (!canToggleEyeTracking()) {
+  if (!preferencesStore.canToggleEyeTracking()) {
     return buildEyeTrackingSummary("Eye tracking is not available for this build.");
   }
 
-  eyeTrackingEnabledCache = Boolean(enabled);
-  writeEyeTrackingPreference(eyeTrackingEnabledCache);
+  const trackingEnabled = Boolean(enabled);
+  preferencesStore.setEyeTrackingEnabled(trackingEnabled);
+  writeEyeTrackingPreference(trackingEnabled);
   updateEyeTrackingPolling();
   sendMenuConfig();
   return buildEyeTrackingSummary();
@@ -2087,7 +1835,7 @@ function fallbackWindowRoamToTaskbar(reason = "window-roam-no-target") {
 }
 
 function tickWindowRoam() {
-  if (!windowRoamEnabledCache || dragState || windowDockInProgress || !petWindow || petWindow.isDestroyed()) {
+  if (!preferencesStore.getWindowRoamEnabled() || dragState || windowDockInProgress || !petWindow || petWindow.isDestroyed()) {
     return;
   }
   if (Date.now() < windowRoamDragFallbackSuppressedUntil) {
@@ -2123,7 +1871,7 @@ function tickWindowRoam() {
 }
 
 function startWindowRoamPolling() {
-  if (windowRoamPollTimer || !canToggleWindowRoam()) {
+  if (windowRoamPollTimer || !preferencesStore.canToggleWindowRoam()) {
     return;
   }
   tickWindowRoam();
@@ -2141,7 +1889,7 @@ function stopWindowRoamPolling() {
 }
 
 function updateWindowRoamPolling() {
-  if (windowRoamEnabledCache) {
+  if (preferencesStore.getWindowRoamEnabled()) {
     startWindowRoamPolling();
   } else {
     stopWindowRoamPolling();
@@ -2159,19 +1907,20 @@ function sendEyeTrackingLook(look) {
 
 function getEyeTrackingLookForCursor(point) {
   const rect = getRenderedFrameHeadRectFromBounds(petWindow.getBounds()) || getRenderedFrameVisibleRect() || getVisiblePetRect();
-  if (!rect || eyeTrackingLookFrameCount <= 0) {
+  const lookFrameCount = assetLoader.getEyeTrackingLookFrameCount();
+  if (!rect || lookFrameCount <= 0) {
     return "off";
   }
 
   const dx = point.x - (rect.x + rect.width / 2);
   const dy = point.y - (rect.y + rect.height / 2);
   const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
-  const index = Math.round(((angle - Math.PI + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * eyeTrackingLookFrameCount) % eyeTrackingLookFrameCount;
+  const index = Math.round(((angle - Math.PI + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * lookFrameCount) % lookFrameCount;
   return `frame_${String(index).padStart(3, "0")}`;
 }
 
 function tickEyeTracking() {
-  if (!eyeTrackingEnabledCache || activeState !== STATE_SQUAT || dragState || !petWindow || petWindow.isDestroyed()) {
+  if (!preferencesStore.getEyeTrackingEnabled() || activeState !== STATE_SQUAT || dragState || !petWindow || petWindow.isDestroyed()) {
     sendEyeTrackingLook("off");
     return;
   }
@@ -2188,7 +1937,7 @@ function tickEyeTracking() {
 }
 
 function startEyeTrackingPolling() {
-  if (eyeTrackingPollTimer || !canToggleEyeTracking()) {
+  if (eyeTrackingPollTimer || !preferencesStore.canToggleEyeTracking()) {
     return;
   }
   tickEyeTracking();
@@ -2205,7 +1954,7 @@ function stopEyeTrackingPolling() {
 }
 
 function updateEyeTrackingPolling() {
-  if (eyeTrackingEnabledCache) {
+  if (preferencesStore.getEyeTrackingEnabled()) {
     startEyeTrackingPolling();
   } else {
     stopEyeTrackingPolling();
@@ -2735,182 +2484,8 @@ function applyCompletedWalkStats() {
   return messages.filter(Boolean);
 }
 
-function getAssetsRoot() {
-  if (assetsRootCache) {
-    return assetsRootCache;
-  }
-  if (app.isPackaged) {
-    const candidates = [
-      path.join(process.resourcesPath, "assets"),
-      path.join(process.resourcesPath, "app", ".runtime-assets"),
-      path.join(process.resourcesPath, "app.asar", ".runtime-assets")
-    ];
-    for (const candidate of candidates) {
-      const probe = path.join(candidate, "animations", `${petAnimationPrefix}_squat`, "transparent_frames", "frame_000.png");
-      if (fs.existsSync(probe)) {
-        assetsRootCache = candidate;
-        log(`assets root: ${assetsRootCache}`);
-        return assetsRootCache;
-      }
-    }
-    log(`missing packaged assets for ${petRuntimeConfig.variant}: ${candidates.join("; ")}`);
-    assetsRootCache = candidates[0];
-    return assetsRootCache;
-  }
-  assetsRootCache = path.resolve(__dirname, "..", "..", "assets");
-  return assetsRootCache;
-}
-
 function toFileUrl(filePath) {
   return pathToFileURL(filePath).toString();
-}
-
-function listFrames(folder) {
-  const fullFolder = path.join(getAssetsRoot(), folder);
-  if (!fs.existsSync(fullFolder)) {
-    return [];
-  }
-  return fs
-    .readdirSync(fullFolder)
-    .filter((name) => /^frame_\d+\.png$/i.test(name))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
-    .map((name) => toFileUrl(path.join(fullFolder, name)));
-}
-
-function listFramePaths(folder) {
-  const fullFolder = path.join(getAssetsRoot(), folder);
-  if (!fs.existsSync(fullFolder)) {
-    return [];
-  }
-  if (framePathsCache.has(fullFolder)) {
-    return framePathsCache.get(fullFolder);
-  }
-  const framePaths = fs
-    .readdirSync(fullFolder)
-    .filter((name) => /^frame_\d+\.png$/i.test(name))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
-    .map((name) => path.join(fullFolder, name));
-  framePathsCache.set(fullFolder, framePaths);
-  return framePaths;
-}
-
-function listEyeTrackingFrames() {
-  if (!canToggleEyeTracking()) {
-    eyeTrackingLookFrameCount = 0;
-    return {};
-  }
-
-  const folder = path.join(getAssetsRoot(), "animations", `${petAnimationPrefix}_look`, "transparent_frames");
-  if (!fs.existsSync(folder)) {
-    eyeTrackingLookFrameCount = 0;
-    return {};
-  }
-
-  const frames = {};
-  const directionFrames = fs
-    .readdirSync(folder)
-    .map((name) => name.match(EYE_TRACKING_FRAME_NAME_PATTERN))
-    .filter(Boolean)
-    .sort((a, b) => Number(a[1]) - Number(b[1]));
-  for (const match of directionFrames) {
-    const name = `frame_${String(Number(match[1])).padStart(3, "0")}`;
-    frames[name] = toFileUrl(path.join(folder, `${name}.png`));
-  }
-  eyeTrackingLookFrameCount = directionFrames.length;
-  return frames;
-}
-
-function listTabbySounds(pattern) {
-  if (petRuntimeConfig.variant !== "tabby") {
-    return [];
-  }
-
-  const folder = path.join(getAssetsRoot(), "sounds", "tabby");
-  if (!fs.existsSync(folder)) {
-    return [];
-  }
-
-  return fs
-    .readdirSync(folder)
-    .filter((name) => pattern.test(name))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
-    .map((name) => toFileUrl(path.join(folder, name)));
-}
-
-function readMetadata(relativePath) {
-  const fullPath = path.join(getAssetsRoot(), relativePath);
-  if (!fs.existsSync(fullPath)) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(fs.readFileSync(fullPath, "utf8"));
-  } catch (error) {
-    log(`failed to read metadata ${relativePath}: ${error.stack || error.message}`);
-    return {};
-  }
-}
-
-function getAppIconPath() {
-  const candidates = [
-    path.join(__dirname, "..", APP_ICON_FILE),
-    path.join(__dirname, "..", "..", APP_ICON_FILE),
-    path.join(process.resourcesPath || "", APP_ICON_FILE),
-    path.join(__dirname, "..", "appIcon.ico"),
-    path.join(__dirname, "..", "..", "appIcon.ico"),
-    path.join(process.resourcesPath || "", "appIcon.ico")
-  ];
-  return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
-}
-
-function clampFrameIndex(index, maxFrame) {
-  return Math.min(Math.max(0, index), maxFrame);
-}
-
-function sanitizeFrameSequence(sequence, maxFrame) {
-  if (!sequence || typeof sequence !== "object") {
-    return null;
-  }
-
-  if (Array.isArray(sequence)) {
-    const timeline = sequence
-      .map((segment) => {
-        if (!segment || typeof segment !== "object") {
-          return null;
-        }
-        const start = Number.isInteger(segment.start) ? segment.start : null;
-        const end = Number.isInteger(segment.end) ? segment.end : null;
-        const times = Number.isInteger(segment.times) ? segment.times : 1;
-        if (start === null || end === null || times < 1) {
-          return null;
-        }
-        return {
-          start: clampFrameIndex(start, maxFrame),
-          end: clampFrameIndex(end, maxFrame),
-          times
-        };
-      })
-      .filter(Boolean);
-
-    return timeline.length > 0 ? timeline : null;
-  }
-
-  const repeatRangeStart = Number.isInteger(sequence.repeatRangeStart) ? sequence.repeatRangeStart : null;
-  const repeatRangeEnd = Number.isInteger(sequence.repeatRangeEnd) ? sequence.repeatRangeEnd : null;
-  const repeatCount = Number.isInteger(sequence.repeatCount) ? sequence.repeatCount : null;
-  const sequenceRepeatCount = Number.isInteger(sequence.sequenceRepeatCount) ? Math.max(1, sequence.sequenceRepeatCount) : 1;
-  if (repeatRangeStart === null || repeatRangeEnd === null || repeatCount === null || repeatCount <= 1) {
-    return null;
-  }
-
-  const start = clampFrameIndex(repeatRangeStart, maxFrame);
-  const end = Math.min(Math.max(start, repeatRangeEnd), maxFrame);
-  return {
-    repeatRangeStart: start,
-    repeatRangeEnd: end,
-    repeatCount,
-    sequenceRepeatCount
-  };
 }
 
 function buildPetConfig() {
@@ -6724,17 +6299,17 @@ function dockPetAfterDrag({ retry = false } = {}) {
 
     if (surface && applySurfaceScale(surface, activeState, walkDirection)) {
       const nextSurface = applyDockSurfaceAfterDrag(surface, draggedX);
-      if (windowRoamEnabledCache && nextSurface.type === "window") {
+      if (preferencesStore.getWindowRoamEnabled() && nextSurface.type === "window") {
         windowRoamLastTargetId = parseWindowHwnd(nextSurface.sourceWindowId);
         windowRoamPreferredTargetId = windowRoamLastTargetId;
         windowRoamDragFallbackSuppressedUntil = 0;
       }
       windowRoamSuppressedWindowId = "";
     } else {
-      if (windowRoamEnabledCache && previousWindowId) {
+      if (preferencesStore.getWindowRoamEnabled() && previousWindowId) {
         windowRoamSuppressedWindowId = previousWindowId;
       }
-      if (windowRoamEnabledCache) {
+      if (preferencesStore.getWindowRoamEnabled()) {
         windowRoamDragFallbackSuppressedUntil = Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS;
       }
       fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
@@ -6843,7 +6418,7 @@ function startWindowSurfacePolling() {
         return;
       }
     }
-    if (!windowRoamEnabledCache && !isPetStillDockedOnWindowSurface(currentSurface)) {
+    if (!preferencesStore.getWindowRoamEnabled() && !isPetStillDockedOnWindowSurface(currentSurface)) {
       fallbackCurrentSurfaceToTaskbar("window-surface-detached");
       return;
     }
@@ -6856,7 +6431,7 @@ function startWindowSurfacePolling() {
     lastWindowSurfaceHeavyCheckAt = now;
     if (!validateCurrentWindowSurface()) {
       const invalidWindowId = parseWindowHwnd(currentSurface?.sourceWindowId);
-      const roamSurface = windowRoamEnabledCache ? getTopWindowRoamSurface(invalidWindowId) : null;
+      const roamSurface = preferencesStore.getWindowRoamEnabled() ? getTopWindowRoamSurface(invalidWindowId) : null;
       if (roamSurface && attachPetToWindowRoamSurface(roamSurface)) {
         windowRoamLastTargetId = parseWindowHwnd(roamSurface.sourceWindowId);
         windowRoamSuppressedWindowId = "";

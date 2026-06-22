@@ -4,15 +4,18 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const appConstantsSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "app-constants.cjs"), "utf8");
+const runtimeConfigSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "runtime-config.cjs"), "utf8");
+const preferencesStoreSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "preferences-store.cjs"), "utf8");
 const installerSource = fs.readFileSync(path.join(__dirname, "..", "build", "installer.nsh"), "utf8");
 
 test("pet preferences are stored per variant in an encrypted file", () => {
   assert.match(mainSource, /const variantDataRoot = path\.join\(userDataRoot, "variants", petRuntimeConfig\.variant\);/);
-  assert.match(mainSource, /const PREFERENCES_FILE = "preferences\.dat";/);
-  assert.match(mainSource, /const preferencesFile = path\.join\(variantDataRoot, PREFERENCES_FILE\);/);
-  assert.match(mainSource, /const PREFERENCES_CIPHER = "aes-256-gcm";/);
-  assert.match(mainSource, /crypto\.createCipheriv\(PREFERENCES_CIPHER, getPreferencesKey\(\), iv\)/);
-  assert.match(mainSource, /writePreference\(\{ scale: preferredPetScale \}\);/);
+  assert.match(appConstantsSource, /const PREFERENCES_FILE = "preferences\.dat";/);
+  assert.match(preferencesStoreSource, /const preferencesFile = path\.join\(variantDataRoot, PREFERENCES_FILE\);/);
+  assert.match(appConstantsSource, /const PREFERENCES_CIPHER = "aes-256-gcm";/);
+  assert.match(preferencesStoreSource, /crypto\.createCipheriv\(PREFERENCES_CIPHER, getPreferencesKey\(\), iv\)/);
+  assert.match(preferencesStoreSource, /writePreference\(\{ scale: preferredPetScale \}\);/);
   assert.doesNotMatch(mainSource, /fs\.writeFileSync\([^)]*`scale-\$\{petRuntimeConfig\.variant\}\.json`/);
 });
 
@@ -22,7 +25,7 @@ test("pet stats are stored in the current variant data folder", () => {
 });
 
 test("packaged user data root follows the base variant", () => {
-  const userDataRootBody = mainSource.match(/function getUserDataRoot\(\) \{([\s\S]*?)const petActionIds/)?.[1] || "";
+  const userDataRootBody = runtimeConfigSource.match(/function getUserDataRoot\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
 
   assert.match(userDataRootBody, /APP_INTERNAL_NAME, basePetVariant/);
   assert.doesNotMatch(userDataRootBody, /APP_INTERNAL_NAME, petRuntimeConfig\.variant/);
@@ -35,7 +38,7 @@ test("pet scale preference is loaded before the pet window is created", () => {
 });
 
 test("split legacy preference files can migrate into preferences", () => {
-  const scalePreferenceBody = mainSource.match(/function readPetScalePreference\(\) \{([\s\S]*?)function writePetScalePreference/)?.[1] || "";
+  const scalePreferenceBody = preferencesStoreSource.match(/function readPetScalePreference\(\) \{([\s\S]*?)function writePetScalePreference/)?.[1] || "";
 
   assert.match(scalePreferenceBody, /legacyVariantScalePreferenceFile/);
   assert.match(scalePreferenceBody, /legacyScalePreferenceFile/);
@@ -44,7 +47,7 @@ test("split legacy preference files can migrate into preferences", () => {
 });
 
 test("legacy auto start json is migrated and cleaned up", () => {
-  const autoStartPreferenceBody = mainSource.match(/function readAutoStartPreference\(\) \{([\s\S]*?)function writeAutoStartPreference/)?.[1] || "";
+  const autoStartPreferenceBody = preferencesStoreSource.match(/function readAutoStartPreference\(\) \{([\s\S]*?)function writeAutoStartPreference/)?.[1] || "";
 
   assert.match(autoStartPreferenceBody, /legacyVariantAutoStartPreferenceFile/);
   assert.match(autoStartPreferenceBody, /legacyAutoStartPreferenceFile/);
@@ -60,7 +63,7 @@ test("installer no longer writes split auto start preference json", () => {
 test("auto start registry state is persisted into preferences", () => {
   const refreshBody = mainSource.match(/function refreshAutoStartCacheAsync\(\) \{([\s\S]*?)function setAutoStartEnabled/)?.[1] || "";
 
-  assert.match(refreshBody, /if \(!autoStartPreferenceLoaded\) \{[\s\S]*writeAutoStartPreference\(enabled\);/);
+  assert.match(refreshBody, /if \(!preferencesStore\.isAutoStartPreferenceLoaded\(\)\) \{[\s\S]*writeAutoStartPreference\(enabled\);/);
 });
 
 test("pet scale changes persist the preferred scale", () => {
@@ -77,8 +80,8 @@ test("window dock scale uses the surface-fitted scale", () => {
 });
 
 test("preferred variant is stored under the base variant local data folder", () => {
-  const preferredPathBody = mainSource.match(/function getPreferredVariantFilePath\(baseVariant = DEFAULT_PET_VARIANT\) \{([\s\S]*?)function getLegacyPreferredVariantFilePath/)?.[1] || "";
-  const runtimeConfigBody = mainSource.match(/function readPetRuntimeConfig\(\) \{([\s\S]*?)function getBasePetVariant/)?.[1] || "";
+  const preferredPathBody = runtimeConfigSource.match(/function getPreferredVariantFilePath\(baseVariant = DEFAULT_PET_VARIANT\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const runtimeConfigBody = runtimeConfigSource.match(/function readPetRuntimeConfig\(\) \{([\s\S]*?)function getBasePetVariant/)?.[1] || "";
   const switchVariantBody = mainSource.match(/ipcMain\.handle\("pet:switch-variant"[\s\S]*?\n\}\);/)?.[0] || "";
 
   assert.match(preferredPathBody, /process\.env\.LOCALAPPDATA[\s\S]*APP_INTERNAL_NAME, baseVariant, PREFERRED_VARIANT_FILE/);
@@ -87,7 +90,7 @@ test("preferred variant is stored under the base variant local data folder", () 
 });
 
 test("packaged preferred variant still reads the legacy roaming file", () => {
-  const readPreferredBody = mainSource.match(/function readPreferredVariant\(baseVariant = DEFAULT_PET_VARIANT\) \{([\s\S]*?)function writePreferredVariant/)?.[1] || "";
+  const readPreferredBody = runtimeConfigSource.match(/function readPreferredVariant\(baseVariant = DEFAULT_PET_VARIANT\) \{([\s\S]*?)function writePreferredVariant/)?.[1] || "";
 
   assert.match(readPreferredBody, /if \(app\.isPackaged\) \{\s*filePaths\.push\(getLegacyPreferredVariantFilePath\(\)\);/);
 });

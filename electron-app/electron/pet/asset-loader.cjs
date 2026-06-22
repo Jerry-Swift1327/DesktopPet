@@ -208,6 +208,10 @@ function createAssetLoader({
     };
   }
 
+  function getEyeTrackingLookFrameCount() {
+    return eyeTrackingLookFrameCount;
+  }
+
   return {
     getAssetsRoot,
     listFrames,
@@ -217,7 +221,8 @@ function createAssetLoader({
     readMetadata,
     getAppIconPath,
     clampFrameIndex,
-    sanitizeFrameSequence
+    sanitizeFrameSequence,
+    getEyeTrackingLookFrameCount
   };
 }
 

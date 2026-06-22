@@ -152,6 +152,8 @@ function createRuntimeConfig({ app, fs, path, petVariants, appConstants, log }) 
   const basePetVariant = getBasePetVariant();
 
   return {
+    petRuntimeConfig,
+    basePetVariant,
     readPetRuntimeConfigFile,
     getPackagedPetRuntimeConfigPaths,
     getPreferredVariantFilePath,
