@@ -3,6 +3,7 @@
 Thumbs.db
 .idea/
 .vscode/
+.trae/
 *.log
 
 # Local archives and transfer packages
