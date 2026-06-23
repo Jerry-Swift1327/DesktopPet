@@ -1195,11 +1195,15 @@ function setEyeTrackingPreference(enabled) {
   return buildEyeTrackingSummary();
 }
 
+function getInteractionPauseSummary() {
+  return Array.from(interactionPauseReasons).join(",") || "-";
+}
+
 function logInteractionPauseDiagnostic(action, reason) {
   if (!WALK_DIAGNOSTICS_ENABLED) {
     return;
   }
-  logWalkDiagnostic(`${action} reason=${reason} surface=${getCurrentSurface()?.type || "unknown"} activeState=${activeState}`);
+  logWalkDiagnostic(`${action} reason=${reason} reasons=${getInteractionPauseSummary()} surface=${getCurrentSurface()?.type || "unknown"} activeState=${activeState}`);
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -2792,6 +2796,7 @@ function buildPetConfig() {
     channel: petRuntimeConfig.channel,
     switchableVariants: SWITCHABLE_VARIANTS,
     features: buildMenuFeatures(),
+    walkDiagnosticsEnabled: WALK_DIAGNOSTICS_ENABLED,
     autoStart: buildAutoStartSummary(),
     windowRoam: buildWindowRoamSummary(),
     eyeTracking: buildEyeTrackingSummary(),
@@ -5236,6 +5241,7 @@ function finishWindowDockAfterDrag() {
   clearDragState({ notify: true });
   windowDockInProgress = false;
   refreshWindowSurfaceCandidatesAsync();
+  logWalkDiagnostic(`dock-finish state=${activeState} surface=${getCurrentSurface()?.type || "unknown"} paused=${isInteractionPaused()} reasons=${getInteractionPauseSummary()}`);
   if (petRuntimeConfig.variant === "tabby" && activeState !== STATE_SHAKE) {
     setState(STATE_SHAKE, false);
   }
@@ -5584,6 +5590,11 @@ ipcMain.on("pet:hover-action", (_event, state) => {
 ipcMain.on("pet:rendered-frame", (_event, info) => {
   updateRenderedFrame(info);
 });
+ipcMain.on("pet:renderer-diagnostic", (_event, message) => {
+  if (WALK_DIAGNOSTICS_ENABLED && typeof message === "string") {
+    logWalkDiagnostic(`renderer ${message}`);
+  }
+});
 ipcMain.on("pet:set-state", (_event, state) => {
   if (typeof state === "string") {
     setState(state);
@@ -5707,6 +5718,7 @@ ipcMain.on("pet:drag-end", () => {
       lastDragSample = dragState.lastSample;
     }
     log(`drag-end bounds=${bounds.x},${bounds.y},${bounds.width},${bounds.height}`);
+    logWalkDiagnostic(`drag-end dock-start state=${activeState} surface=${getCurrentSurface()?.type || "unknown"} paused=${isInteractionPaused()} reasons=${getInteractionPauseSummary()}`);
     setImmediate(() => {
       dockPetAfterDrag();
     });

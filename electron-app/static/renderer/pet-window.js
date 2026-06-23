@@ -24,6 +24,7 @@ async function renderPetWindow() {
   let rafHandle = 0;
   let tickAccumulator = 0;
   let lastTickAt = performance.now();
+  let lastAnimationSkipLogAt = 0;
   const decodedStates = new Set();
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
@@ -46,6 +47,13 @@ async function renderPetWindow() {
   let sleepStageSoundPlayed = false;
   const squatSounds = Array.isArray(config.squatSounds) ? config.squatSounds : [];
   const sleepSounds = Array.isArray(config.sleepSounds) ? config.sleepSounds : [];
+  const walkDiagnosticsEnabled = Boolean(config.walkDiagnosticsEnabled);
+
+  function logAnimationDiagnostic(message) {
+    if (walkDiagnosticsEnabled && window.desktopPet.rendererDiagnostic) {
+      window.desktopPet.rendererDiagnostic(message);
+    }
+  }
 
   function getStateFrameIndex(state) {
     if (!state || state.frames.length === 0) {
@@ -363,6 +371,7 @@ async function renderPetWindow() {
       return decodingStates.get(state.id);
     }
 
+    const startedAt = performance.now();
     const decodePromise = Promise.all(state.frames.map((frame) => new Promise((resolve) => {
       const image = new Image();
       image.onload = async () => {
@@ -380,6 +389,7 @@ async function renderPetWindow() {
     }))).then(() => {
       decodedStates.add(state.id);
       decodingStates.delete(state.id);
+      logAnimationDiagnostic(`decode state=${state.id} frames=${state.frames.length} elapsedMs=${Math.round(performance.now() - startedAt)}`);
       return true;
     });
     decodingStates.set(state.id, decodePromise);
@@ -512,6 +522,9 @@ async function renderPetWindow() {
             renderFrame();
           }
         }
+      } else if (walkDiagnosticsEnabled && tickAt - lastAnimationSkipLogAt >= 250) {
+        lastAnimationSkipLogAt = tickAt;
+        logAnimationDiagnostic(`tick-skip state=${state?.id || ""} dragging=${isDragging} paused=${isInteractionPaused} frameStep=${frameStep}`);
       }
     }
     scheduleAnimationTick();
@@ -535,6 +548,7 @@ async function renderPetWindow() {
   window.desktopPet.onStateChanged((state) => {
     const previousState = activeState;
     activeState = state;
+    logAnimationDiagnostic(`state-change from=${previousState} to=${state}`);
     if ((previousState === config.actionIds?.yawn || previousState === config.actionIds?.sleep) && state !== previousState) {
       stopSleepSound();
     }
@@ -574,11 +588,13 @@ async function renderPetWindow() {
 
   window.desktopPet.onDragStateChanged((nextIsDragging) => {
     isDragging = Boolean(nextIsDragging);
+    logAnimationDiagnostic(`drag-state dragging=${isDragging} state=${activeState} frameStep=${frameStep}`);
     renderFrame();
   });
 
   window.desktopPet.onPauseStateChanged((nextIsPaused) => {
     isInteractionPaused = Boolean(nextIsPaused);
+    logAnimationDiagnostic(`pause-state paused=${isInteractionPaused} state=${activeState} frameStep=${frameStep}`);
     if (isSleepStage() && sleepSound) {
       if (isInteractionPaused) {
         sleepSound.pause();

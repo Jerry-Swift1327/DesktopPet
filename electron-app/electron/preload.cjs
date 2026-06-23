@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("desktopPet", {
   wakeSleepingPet: () => ipcRenderer.send("pet:wake-sleeping-pet"),
   completeOneShot: (state) => ipcRenderer.send("pet:complete-one-shot", state),
   advanceWalkStep: (frameStep, elapsedMs) => ipcRenderer.invoke("pet:advance-walk-step", frameStep, elapsedMs),
+  rendererDiagnostic: (message) => ipcRenderer.send("pet:renderer-diagnostic", message),
   resetPosition: () => ipcRenderer.send("pet:reset-position"),
   resetScale: () => ipcRenderer.send("pet:reset-scale"),
   hideMenu: () => ipcRenderer.send("pet:hide-menu"),
