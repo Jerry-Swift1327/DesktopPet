@@ -44,6 +44,7 @@ const { createMenuController } = require("./windows/menu-controller.cjs");
 // 悬停面板控制器，管理悬停面板的创建、显示、隐藏、定位、轮询和可见性更新
 const { createHoverController } = require("./windows/hover-controller.cjs");
 const { createEyeTrackingController } = require("./behavior/eye-tracking-controller.cjs");
+const { createWindowRoamController } = require("./behavior/window-roam-controller.cjs");
 
 // 应用级常量集中管理
 const appConstants = require("./core/app-constants.cjs");

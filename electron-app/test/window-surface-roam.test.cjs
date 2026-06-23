@@ -7,6 +7,8 @@ const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.
 const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "window-roam-controller.cjs"), "utf8");
 
 test("window roam keeps the current window target when enabled from a window surface", () => {
+  assert.match(mainSource, /const \{ createWindowRoamController \} = require\("\.\/behavior\/window-roam-controller\.cjs"\);/);
+
   // controller 核心逻辑（函数缩进 2 空格，闭合 2 空格 + }）
   const tickBody = controllerSource.match(/function tickWindowRoam\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
   const prepareBody = controllerSource.match(/function prepareWindowRoamAfterPreferenceEnabled\(currentSurface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
