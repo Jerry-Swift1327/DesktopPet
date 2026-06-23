@@ -11,6 +11,7 @@ const PET_ACTIONS = Object.freeze({
   feed: Object.freeze({ id: "petFeed", asset: "feed" }),
   ball: Object.freeze({ id: "petBall", asset: "ball" }),
   lie: Object.freeze({ id: "petLie", asset: "lie" }),
+  spin: Object.freeze({ id: "petSpin", asset: "spin" }),
   lick: Object.freeze({ id: "petLick", asset: "lick" }),
   belly: Object.freeze({ id: "petBelly", asset: "belly" }),
   stretch: Object.freeze({ id: "petStretch", asset: "stretch" }),
@@ -22,6 +23,7 @@ const PET_ACTIONS = Object.freeze({
 
 const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
 const TABBY_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
+const RAGDOLL_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "belly"]);
 
 const PET_VARIANT_PROFILES = Object.freeze({
   dog: Object.freeze({
@@ -41,7 +43,7 @@ const PET_VARIANT_PROFILES = Object.freeze({
       autoStart: true,
       windowRoam: true,
       customization: true,
-      switchPet: false
+      switchPet: true
     })
   }),
   cat: Object.freeze({
@@ -61,7 +63,7 @@ const PET_VARIANT_PROFILES = Object.freeze({
       autoStart: true,
       windowRoam: true,
       customization: true,
-      switchPet: false
+      switchPet: true
     })
   }),
   shorthair: Object.freeze({
@@ -104,7 +106,36 @@ const PET_VARIANT_PROFILES = Object.freeze({
     features: Object.freeze({
       autoStart: true,
       windowRoam: true,
-      eyeTracking: true
+      eyeTracking: true,
+      idleYawn: true,
+      sleepPoseSwitch: true,
+      wakeHiss: true,
+      dockShake: true
+    })
+  }),
+  ragdoll: Object.freeze({
+    id: "ragdoll",
+    species: "cat",
+    audience: "internal",
+    baseVariant: "cat",
+    breedGroup: "ragdoll",
+    coatPattern: "blue-bicolor",
+    platforms: Object.freeze(["win32"]),
+    deliveryPathSegments: Object.freeze(["internal", "ragdoll"]),
+    deliveryVersion: "1.3",
+    animationPrefix: "ragdoll",
+    actions: RAGDOLL_ACTION_ORDER,
+    extraAnimationAssets: Object.freeze(["shake", "yawn", "hiss"]),
+    defaultScale: 1.1,
+    installerGuid: "7dd55ecf-0f7c-41f3-9e23-67ac126a0b83",
+    autoStartRegistryKey: "ChongbanDesktopPet-ragdoll",
+    singleInstanceKey: "com.chongban.desktoppet.ragdoll",
+    features: Object.freeze({
+      autoStart: true,
+      windowRoam: true,
+      idleYawn: true,
+      wakeHiss: true,
+      dockShake: true
     })
   }),
   brit: Object.freeze({
@@ -263,7 +294,8 @@ function buildPetRuntimeConfig(config = {}) {
     actionOrder,
     channelConfig: {
       showDebugTimers: channelProfile.showDebugTimers,
-      showYawnTimer: channelProfile.showDebugTimers && variant === "tabby",
+      showYawnTimer: channelProfile.showDebugTimers && Boolean(variantProfile.features.idleYawn),
+      showSleepPoseTimer: channelProfile.showDebugTimers && Boolean(variantProfile.features.sleepPoseSwitch),
       hoverPanelHeight: channelProfile.hoverPanelHeight + Math.max(0, Math.ceil(actionOrder.length / 4) - 1) * 45
     }
   };

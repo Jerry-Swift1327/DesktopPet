@@ -84,6 +84,7 @@ const PET_ACTION_DEFS = [
   { action: "feed", label: "喂食", moving: false, frameSequence: { repeatRangeStart: 0, repeatRangeEnd: 999, repeatCount: 2 } },
   { action: "ball", label: "玩耍", moving: false },
   { action: "lie", label: "趴下", moving: false },
+  { action: "spin", label: "转圈", moving: false },
   { action: "lick", label: "舔爪", moving: false },
   { action: "belly", label: "翻肚", moving: false },
   { action: "stretch", label: "伸展", moving: false },

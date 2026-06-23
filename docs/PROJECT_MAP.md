@@ -66,6 +66,7 @@ npm.cmd run pack:win
 | `cat` | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
 | `shorthair` | Windows | `squat`、`walk`、`feed`、`ball` |
 | `tabby` | Windows | `squat`、`walk`、`feed`、`ball`、`lie`、`lick`、`belly`、`stretch`，额外资源 `look`、`shake`、`yawn`、`sleep`、`hiss` |
+| `ragdoll` | Windows | `squat`、`walk`、`feed`、`ball`、`spin`、`lick`、`stretch`、`belly`，额外资源 `shake`、`yawn`、`hiss` |
 | `brit` | Windows | `squat`、`walk`、`feed`、`ball` |
 | `bshmitted` | Windows | `squat`、`walk`、`feed`、`ball` |
 | `van` | Windows | `squat`、`walk`、`feed`、`ball` |

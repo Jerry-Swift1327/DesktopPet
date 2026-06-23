@@ -28,6 +28,7 @@ test("pet runtime config defaults to dog release", () => {
     feed: "petFeed",
     ball: "petBall",
     lie: "petLie",
+    spin: "petSpin",
     lick: "petLick",
     belly: "petBelly",
     stretch: "petStretch",
@@ -47,6 +48,7 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   const catConfig = buildPetRuntimeConfig({ variant: "cat" });
   const shorthairConfig = buildPetRuntimeConfig({ variant: "shorthair" });
   const tabbyConfig = buildPetRuntimeConfig({ variant: "tabby" });
+  const ragdollConfig = buildPetRuntimeConfig({ variant: "ragdoll" });
   const britConfig = buildPetRuntimeConfig({ variant: "brit" });
   const bshmittedConfig = buildPetRuntimeConfig({ variant: "bshmitted" });
   const vanConfig = buildPetRuntimeConfig({ variant: "van" });
@@ -70,6 +72,7 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
   assert.equal(tabbyConfig.defaultScale, 1.1);
   assert.equal(tabbyConfig.autoStartRegistryKey, "ChongbanDesktopPet-tabby");
   assert.equal(tabbyConfig.channelConfig.showYawnTimer, true);
+  assert.equal(tabbyConfig.channelConfig.showSleepPoseTimer, true);
   assert.deepEqual(tabbyConfig.actionOrder, [
     "petSquat",
     "petWalk",
@@ -81,6 +84,22 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
     "petStretch"
   ]);
   assert.equal(tabbyConfig.channelConfig.hoverPanelHeight, 225);
+  assert.equal(ragdollConfig.features.autoStart, true);
+  assert.equal(ragdollConfig.features.windowRoam, true);
+  assert.equal(ragdollConfig.features.eyeTracking, undefined);
+  assert.equal(ragdollConfig.channelConfig.showYawnTimer, true);
+  assert.equal(ragdollConfig.channelConfig.showSleepPoseTimer, false);
+  assert.deepEqual(ragdollConfig.actionOrder, [
+    "petSquat",
+    "petWalk",
+    "petFeed",
+    "petBall",
+    "petSpin",
+    "petLick",
+    "petStretch",
+    "petBelly"
+  ]);
+  assert.equal(ragdollConfig.autoStartRegistryKey, "ChongbanDesktopPet-ragdoll");
   assert.equal(britConfig.features.autoStart, true);
   assert.equal(britConfig.features.windowRoam, true);
   assert.equal(britConfig.defaultScale, 1.1);
@@ -133,6 +152,8 @@ test("variant metadata describes delivery and supported platforms", () => {
   assert.deepEqual(getPetVariantProfile("bshmitted").deliveryPathSegments, ["custom", "cat", "bsh", "blue-mitted"]);
   assert.deepEqual(getPetVariantProfile("van").deliveryPathSegments, ["custom", "cat", "bsh", "red-van"]);
   assert.deepEqual(getPetVariantProfile("tabby").actions, ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
+  assert.deepEqual(getPetVariantProfile("ragdoll").deliveryPathSegments, ["internal", "ragdoll"]);
+  assert.deepEqual(getPetVariantProfile("ragdoll").actions, ["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "belly"]);
   assert.deepEqual(getPetVariantProfile("pomeranian").platforms, ["darwin"]);
 });
 
@@ -147,6 +168,8 @@ test("Windows build profile centralizes paths and package names", () => {
   assert.equal(getWindowsBuildProfile("van", "release").output, "deliverables/custom/cat/bsh/red-van/release");
   assert.equal(getWindowsBuildProfile("van", "release").deliveryVersion, "1.0");
   assert.equal(getWindowsBuildProfile("tabby", "release").deliveryVersion, "1.0");
+  assert.equal(getWindowsBuildProfile("ragdoll", "installer").output, "deliverables/internal/ragdoll/installer");
+  assert.equal(getWindowsBuildProfile("ragdoll", "installer").deliveryVersion, "1.3");
   assert.throws(() => getWindowsBuildProfile("pomeranian", "installer"), /does not support Windows packaging/);
 });
 
@@ -186,6 +209,13 @@ test("platform features hide Windows-only menu items on macOS", () => {
     autoStart: true,
     windowRoam: true,
     eyeTracking: true,
+    customization: false,
+    switchPet: false
+  });
+  assert.deepEqual(getPetPlatformFeatures({ variant: "ragdoll", platform: "win32" }), {
+    autoStart: true,
+    windowRoam: true,
+    eyeTracking: false,
     customization: false,
     switchPet: false
   });
@@ -251,6 +281,19 @@ test("variant assets follow the existing animation folder convention", () => {
     "tabby_sleep",
     "tabby_hiss"
   ]);
+  assert.deepEqual(getVariantAnimationFolders("ragdoll"), [
+    "ragdoll_squat",
+    "ragdoll_walk",
+    "ragdoll_feed",
+    "ragdoll_ball",
+    "ragdoll_spin",
+    "ragdoll_lick",
+    "ragdoll_stretch",
+    "ragdoll_belly",
+    "ragdoll_shake",
+    "ragdoll_yawn",
+    "ragdoll_hiss"
+  ]);
   assert.deepEqual(getVariantAnimationFolders("brit"), [
     "brit_squat",
     "brit_walk",
@@ -271,6 +314,7 @@ test("variant assets follow the existing animation folder convention", () => {
   ]);
   assert.equal(getVariantManifestName("cat"), "cat_actions_manifest.json");
   assert.equal(getVariantManifestName("tabby"), "tabby_actions_manifest.json");
+  assert.equal(getVariantManifestName("ragdoll"), "ragdoll_actions_manifest.json");
   assert.equal(getVariantManifestName("brit"), "brit_actions_manifest.json");
   assert.equal(getVariantManifestName("bshmitted"), "bshmitted_actions_manifest.json");
   assert.equal(getVariantManifestName("van"), "van_actions_manifest.json");

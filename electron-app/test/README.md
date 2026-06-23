@@ -24,6 +24,7 @@ node --test "test/**/*.test.cjs"
 | `bounds.test.cjs` | 纯几何工具函数 | `../electron/shared/bounds.cjs` |
 | `messaging.test.cjs` | webContents.send 安全发送和广播 | `../electron/shared/messaging.cjs` |
 | `pet-states.test.cjs` | 宠物状态工厂和状态数组构建 | `../electron/pet/pet-states.cjs` |
+| `ragdoll-assets.test.cjs` | ragdoll 动作资源、manifest 和 yawn 尾段循环元数据 | `../../assets/animations` |
 
 ## 何时补测试
 

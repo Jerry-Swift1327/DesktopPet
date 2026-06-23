@@ -75,6 +75,7 @@ const ACTION_IDS = {
   feed: "petFeed",
   ball: "petBall",
   lie: "petLie",
+  spin: "petSpin",
   lick: "petLick",
   belly: "petBelly",
   stretch: "petStretch",
@@ -84,13 +85,13 @@ const ACTION_IDS = {
   hiss: "petHiss"
 };
 
-const EXPECTED_ORDER = ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch", "shake", "yawn", "sleep", "hiss"];
-const EXPECTED_LABELS = ["蹲坐", "闲逛", "喂食", "玩耍", "趴下", "舔爪", "翻肚", "伸展", "抖身", "打哈欠", "睡觉", "哈气"];
+const EXPECTED_ORDER = ["squat", "walk", "feed", "ball", "lie", "spin", "lick", "belly", "stretch", "shake", "yawn", "sleep", "hiss"];
+const EXPECTED_LABELS = ["蹲坐", "闲逛", "喂食", "玩耍", "趴下", "转圈", "舔爪", "翻肚", "伸展", "抖身", "打哈欠", "睡觉", "哈气"];
 
-test("buildPetStates 生成 12 个状态", () => {
+test("buildPetStates 生成 13 个状态", () => {
   const states = buildPetStates(ACTION_IDS, "assets/animations", "dog");
 
-  assert.equal(states.length, 12);
+  assert.equal(states.length, 13);
 });
 
 test("buildPetStates 状态顺序与定义一致", () => {

@@ -46,7 +46,8 @@ async function renderHoverWindow() {
         <span data-timer="walk">Walk
 00:00</span>
         ${config.channelConfig?.showYawnTimer ? `<span data-timer="yawn">Yawn
-02:00</span><span data-timer="sleep-pose">Pose
+02:00</span>` : ""}
+        ${config.channelConfig?.showSleepPoseTimer ? `<span data-timer="sleep-pose">Pose
 00:00</span>` : ""}
       </div>
       <div class="hover-panel__actions" data-hover-actions></div>

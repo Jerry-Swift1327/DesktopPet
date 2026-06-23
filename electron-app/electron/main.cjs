@@ -310,6 +310,7 @@ const STATE_WALK = petActionIds.walk;
 const STATE_FEED = petActionIds.feed;
 const STATE_BALL = petActionIds.ball;
 const STATE_LIE = petActionIds.lie;
+const STATE_SPIN = petActionIds.spin;
 const STATE_LICK = petActionIds.lick;
 const STATE_BELLY = petActionIds.belly;
 const STATE_STRETCH = petActionIds.stretch;
@@ -321,7 +322,7 @@ const STATE_HISS = petActionIds.hiss;
 const HOVER_PANEL_HEIGHT = petRuntimeConfig.channelConfig.hoverPanelHeight;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_SPIN, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
 const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -2537,7 +2538,7 @@ function scheduleIdleGreeting(delayMs = IDLE_GREETING_DELAY_MS) {
 }
 
 function startTabbyIdlePolling() {
-  if (petRuntimeConfig.variant !== "tabby" || tabbyIdlePollTimer) {
+  if (!petRuntimeConfig.features.idleYawn || tabbyIdlePollTimer) {
     return;
   }
   tabbyIdlePollTimer = setInterval(updateTabbyIdleActions, 1000);
@@ -2545,7 +2546,7 @@ function startTabbyIdlePolling() {
 }
 
 function updateTabbyIdleActions() {
-  if (petRuntimeConfig.variant !== "tabby" || activeState !== DEFAULT_STATE) {
+  if (!petRuntimeConfig.features.idleYawn || activeState !== DEFAULT_STATE) {
     return;
   }
   if (Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
@@ -2563,7 +2564,7 @@ function clearTabbySleepPoseTimer() {
 }
 
 function scheduleTabbySleepPose(state) {
-  if (petRuntimeConfig.variant !== "tabby" || activeState !== state || (state !== STATE_YAWN && state !== STATE_SLEEP) || tabbySleepPoseTimer) {
+  if (!petRuntimeConfig.features.sleepPoseSwitch || activeState !== state || (state !== STATE_YAWN && state !== STATE_SLEEP) || tabbySleepPoseTimer) {
     return;
   }
   tabbySleepPoseSwitchAt = Date.now() + TABBY_SLEEP_POSE_MS;
@@ -3708,7 +3709,7 @@ function shouldSuppressHoverPanel() {
     || windowDockInProgress
     || getBubbleHoverSuppressionMs() > 0
     || getWindowDockHoverSuppressionMs() > 0
-    || (petRuntimeConfig.variant === "tabby" && activeState === STATE_HISS)
+    || (petRuntimeConfig.features.wakeHiss && activeState === STATE_HISS)
     || isCustomizationVisible();
 }
 
@@ -5242,7 +5243,7 @@ function finishWindowDockAfterDrag() {
   windowDockInProgress = false;
   refreshWindowSurfaceCandidatesAsync();
   logWalkDiagnostic(`dock-finish state=${activeState} surface=${getCurrentSurface()?.type || "unknown"} paused=${isInteractionPaused()} reasons=${getInteractionPauseSummary()}`);
-  if (petRuntimeConfig.variant === "tabby" && activeState !== STATE_SHAKE) {
+  if (petRuntimeConfig.features.dockShake && activeState !== STATE_SHAKE) {
     setState(STATE_SHAKE, false);
   }
 }
@@ -5601,7 +5602,7 @@ ipcMain.on("pet:set-state", (_event, state) => {
   }
 });
 ipcMain.on("pet:wake-sleeping-pet", () => {
-  if (petRuntimeConfig.variant !== "tabby" || (activeState !== STATE_YAWN && activeState !== STATE_SLEEP)) {
+  if (!petRuntimeConfig.features.wakeHiss || (activeState !== STATE_YAWN && activeState !== STATE_SLEEP)) {
     return;
   }
   recordUserOperation();

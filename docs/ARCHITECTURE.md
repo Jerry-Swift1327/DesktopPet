@@ -75,6 +75,7 @@ electron-app/package.json
 | `cat` | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
 | `shorthair` | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
 | `tabby` | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `ragdoll` | `ragdoll` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 | `brit` | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 | `bshmitted` | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 | `van` | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |

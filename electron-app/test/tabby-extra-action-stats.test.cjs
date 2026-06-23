@@ -86,7 +86,7 @@ test("sleeping tabby wakes from a short left click instead of double click", () 
 test("sleeping tabby hover pauses sleep instead of hissing", () => {
   const mouseEnterBody = rendererSource.match(/img\.addEventListener\("mouseenter", \(\) => \{([\s\S]*?)\n  \}\);/)?.[1] || "";
 
-  assert.match(mainSource, /petRuntimeConfig\.variant === "tabby" && activeState === STATE_HISS/);
+  assert.match(mainSource, /petRuntimeConfig\.features\.wakeHiss && activeState === STATE_HISS/);
   assert.match(mainSource, /clearHoverIntent\(\);\s*hideHoverPanel\(\);\s*setState\(STATE_HISS, false\)/);
   assert.match(rendererSource, /isSleepStage\(\) && sleepSound/);
 });
