@@ -43,6 +43,7 @@ const { createOverlayGeometry } = require("./windows/overlay-geometry.cjs");
 const { createMenuController } = require("./windows/menu-controller.cjs");
 // 悬停面板控制器，管理悬停面板的创建、显示、隐藏、定位、轮询和可见性更新
 const { createHoverController } = require("./windows/hover-controller.cjs");
+const { createEyeTrackingController } = require("./behavior/eye-tracking-controller.cjs");
 
 // 应用级常量集中管理
 const appConstants = require("./core/app-constants.cjs");
@@ -417,8 +418,6 @@ let windowRoamPreferredTargetId = "";
 let windowRoamSuppressedWindowId = "";
 let windowRoamDragFallbackSuppressedUntil = 0;
 let windowRoamMissingTicks = 0;
-let eyeTrackingPollTimer = null;
-let lastEyeTrackingLook = "off";
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
 const logDir = path.join(userDataRoot, "logs");
@@ -876,6 +875,42 @@ const {
   setIsPointerOverPet,
   setLastHoverBounds
 } = hoverController;
+
+// 接入 behavior/eye-tracking-controller.cjs：眼球追踪光标跟随、视线方向计算、pet:eye-tracking-look 发送
+// 运行时可变状态通过访问器注入，避免创建瞬间固化快照
+const eyeTrackingController = createEyeTrackingController({
+  // Electron 与运行时
+  screen,
+  // 窗口与状态访问器（实时读取，避免快照）
+  getPetWindow: () => petWindow,
+  getMenuWindow,
+  getHoverWindow,
+  getActiveState: () => activeState,
+  getDragState: () => dragState,
+  getEyeTrackingEnabled: () => preferencesStore.getEyeTrackingEnabled(),
+  getEyeTrackingLookFrameCount: () => assetLoader.getEyeTrackingLookFrameCount(),
+  canToggleEyeTracking: () => preferencesStore.canToggleEyeTracking(),
+  // 依赖函数
+  safeSend,
+  getRenderedFrameHeadRectFromBounds,
+  getRenderedFrameVisibleRect,
+  getVisiblePetRect,
+  getWindowRect,
+  isPointInsideRect,
+  isPointInsideRenderedFrame,
+  // 常量
+  STATE_SQUAT,
+  EYE_TRACKING_POLL_INTERVAL_MS
+});
+const {
+  sendEyeTrackingLook,
+  getEyeTrackingLookForCursor,
+  tickEyeTracking,
+  startEyeTrackingPolling,
+  stopEyeTrackingPolling,
+  updateEyeTrackingPolling,
+  getLastEyeTrackingLook
+} = eyeTrackingController;
 
 function getAutoStartCommand() {
   return `"${process.execPath}"`;
@@ -2285,73 +2320,6 @@ function updateWindowRoamPolling() {
     startWindowRoamPolling();
   } else {
     stopWindowRoamPolling();
-  }
-}
-
-function sendEyeTrackingLook(look) {
-  const nextLook = look || "off";
-  if (nextLook === lastEyeTrackingLook) {
-    return;
-  }
-  lastEyeTrackingLook = nextLook;
-  safeSend(petWindow, "pet:eye-tracking-look", nextLook);
-}
-
-function getEyeTrackingLookForCursor(point) {
-  const rect = getRenderedFrameHeadRectFromBounds(petWindow.getBounds()) || getRenderedFrameVisibleRect() || getVisiblePetRect();
-  const lookFrameCount = assetLoader.getEyeTrackingLookFrameCount();
-  if (!rect || lookFrameCount <= 0) {
-    return "off";
-  }
-
-  const dx = point.x - (rect.x + rect.width / 2);
-  const dy = point.y - (rect.y + rect.height / 2);
-  const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
-  const index = Math.round(((angle - Math.PI + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * lookFrameCount) % lookFrameCount;
-  return `frame_${String(index).padStart(3, "0")}`;
-}
-
-function tickEyeTracking() {
-  if (!preferencesStore.getEyeTrackingEnabled() || activeState !== STATE_SQUAT || dragState || !petWindow || petWindow.isDestroyed()) {
-    sendEyeTrackingLook("off");
-    return;
-  }
-
-  const menuWin = getMenuWindow();
-  const menuVisible = menuWin && !menuWin.isDestroyed() && menuWin.isVisible();
-  const hoverWindow = getHoverWindow();
-  const hoverVisible = hoverWindow && !hoverWindow.isDestroyed() && hoverWindow.isVisible();
-  const point = screen.getCursorScreenPoint();
-  if (menuVisible || hoverVisible || isPointInsideRect(point, getWindowRect(petWindow)) || isPointInsideRenderedFrame(point)) {
-    sendEyeTrackingLook("off");
-    return;
-  }
-
-  sendEyeTrackingLook(getEyeTrackingLookForCursor(point));
-}
-
-function startEyeTrackingPolling() {
-  if (eyeTrackingPollTimer || !preferencesStore.canToggleEyeTracking()) {
-    return;
-  }
-  tickEyeTracking();
-  eyeTrackingPollTimer = setInterval(tickEyeTracking, EYE_TRACKING_POLL_INTERVAL_MS);
-}
-
-function stopEyeTrackingPolling() {
-  if (!eyeTrackingPollTimer) {
-    return;
-  }
-  clearInterval(eyeTrackingPollTimer);
-  eyeTrackingPollTimer = null;
-  sendEyeTrackingLook("off");
-}
-
-function updateEyeTrackingPolling() {
-  if (preferencesStore.getEyeTrackingEnabled()) {
-    startEyeTrackingPolling();
-  } else {
-    stopEyeTrackingPolling();
   }
 }
 
@@ -3922,7 +3890,7 @@ function sendPetState() {
   broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:state-changed", activeState);
   broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:direction-changed", walkDirection);
   safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-  safeSend(petWindow, "pet:eye-tracking-look", lastEyeTrackingLook);
+  safeSend(petWindow, "pet:eye-tracking-look", getLastEyeTrackingLook());
   sendStats();
 }
 
