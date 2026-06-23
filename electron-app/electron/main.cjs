@@ -412,12 +412,6 @@ let windowDockInProgress = false;
 let lastWindowSurfaceBackgroundRefreshAt = 0;
 let windowDockHoverSuppressedUntil = 0;
 let autoStartRefreshInFlight = false;
-let windowRoamPollTimer = null;
-let windowRoamLastTargetId = "";
-let windowRoamPreferredTargetId = "";
-let windowRoamSuppressedWindowId = "";
-let windowRoamDragFallbackSuppressedUntil = 0;
-let windowRoamMissingTicks = 0;
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
 const logDir = path.join(userDataRoot, "logs");
@@ -912,6 +906,61 @@ const {
   getLastEyeTrackingLook
 } = eyeTrackingController;
 
+// 接入 behavior/window-roam-controller.cjs：窗口漫游目标选取、附着、回退与轮询
+// 运行时可变状态通过访问器注入，避免创建瞬间固化快照；漫游私有状态由 controller 管理
+const windowRoamController = createWindowRoamController({
+  // 窗口与状态访问器（实时读取，避免快照）
+  getPetWindow: () => petWindow,
+  getActiveState: () => activeState,
+  getWalkDirection: () => walkDirection,
+  getDragState: () => dragState,
+  getWindowDockInProgress: () => windowDockInProgress,
+  getWindowRoamEnabled: () => preferencesStore.getWindowRoamEnabled(),
+  canToggleWindowRoam: () => preferencesStore.canToggleWindowRoam(),
+  // 依赖函数
+  refreshWindowSurfaceCandidatesAsync,
+  parseWindowHwnd,
+  getCachedWindowSurfaceCandidates,
+  buildWindowSurfaceFromItem,
+  applySurfaceScale,
+  setCurrentSurface,
+  groundPetToSurface,
+  getVisibleSpriteInsets,
+  getPetSpriteSize,
+  getPetWindowPositionForVisibleRect,
+  getSurfaceVisibleTop,
+  clampPetWindowPositionToSurface,
+  setPetWindowPosition,
+  syncWalkTrackX,
+  isWalkingState,
+  refreshWalkLoopAfterSurfaceChange,
+  safeSend,
+  buildScaleSummary,
+  getCurrentSurface,
+  fallbackCurrentSurfaceToTaskbar,
+  getWindowRoamSurfaceById,
+  // 常量
+  WINDOW_ROAM_MAX_MISSING_TICKS,
+  WINDOW_ROAM_POLL_INTERVAL_MS
+});
+const {
+  getTopWindowRoamSurface,
+  attachPetToWindowRoamSurface,
+  fallbackWindowRoamToTaskbar,
+  tickWindowRoam,
+  startWindowRoamPolling,
+  stopWindowRoamPolling,
+  updateWindowRoamPolling,
+  prepareWindowRoamAfterPreferenceEnabled,
+  resetWindowRoamState,
+  rememberDockedWindowRoamTarget,
+  suppressPreviousWindowAfterDockMiss,
+  clearWindowRoamSuppression,
+  markWindowRoamAttached,
+  suppressCurrentWindowForSettle,
+  setDragFallbackSuppressionUntil
+} = windowRoamController;
+
 function getAutoStartCommand() {
   return `"${process.execPath}"`;
 }
@@ -1123,14 +1172,10 @@ function setWindowRoamPreference(enabled) {
   const roamEnabled = Boolean(enabled);
   preferencesStore.setWindowRoamEnabled(roamEnabled);
   writeWindowRoamPreference(roamEnabled);
-  windowRoamPreferredTargetId = "";
-  if (roamEnabled && currentSurface?.type === "window") {
-    windowRoamPreferredTargetId = parseWindowHwnd(currentSurface.sourceWindowId);
-    windowRoamLastTargetId = windowRoamPreferredTargetId;
+  resetWindowRoamState();
+  if (roamEnabled) {
+    prepareWindowRoamAfterPreferenceEnabled(currentSurface);
   }
-  windowRoamSuppressedWindowId = "";
-  windowRoamDragFallbackSuppressedUntil = 0;
-  windowRoamMissingTicks = 0;
   updateWindowRoamPolling();
   sendMenuConfig();
   return buildWindowRoamSummary();
@@ -2198,129 +2243,10 @@ function diagnoseDockTargetFromCache(bounds = petWindow?.getBounds()) {
   return { ok: false, reason: "no-window-candidates", surface: null, elapsedMs: Date.now() - startedAt };
 }
 
-function getTopWindowRoamSurface(excludedWindowId = "") {
-  refreshWindowSurfaceCandidatesAsync();
-  const excludedId = parseWindowHwnd(excludedWindowId);
-  const candidates = getCachedWindowSurfaceCandidates();
-  for (const item of candidates) {
-    const itemWindowId = parseWindowHwnd(item.hwnd);
-    if (itemWindowId === windowRoamSuppressedWindowId || (excludedId && itemWindowId === excludedId)) {
-      continue;
-    }
-    const built = buildWindowSurfaceFromItem(item);
-    if (built.surface) {
-      return built.surface;
-    }
-  }
-  return null;
-}
-
 function getWindowRoamSurfaceById(windowId) {
   const candidate = findCandidateByHwnd(windowId, { cacheOnly: true })
     || findCandidateByHwnd(windowId, { useCache: false });
   return candidate ? buildWindowSurfaceFromItem(candidate).surface : null;
-}
-
-function attachPetToWindowRoamSurface(surface) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return false;
-  }
-  if (!surface || !applySurfaceScale(surface, activeState, walkDirection)) {
-    return false;
-  }
-
-  const nextSurface = setCurrentSurface(surface);
-  groundPetToSurface(activeState, walkDirection, nextSurface);
-  const visibleInsets = getVisibleSpriteInsets(activeState, walkDirection);
-  const visibleWidth = getPetSpriteSize() - visibleInsets.left - visibleInsets.right;
-  const visibleLeft = nextSurface.right - visibleWidth;
-  const target = getPetWindowPositionForVisibleRect(
-    visibleLeft,
-    getSurfaceVisibleTop(nextSurface, activeState, walkDirection),
-    activeState,
-    walkDirection
-  );
-  const next = clampPetWindowPositionToSurface(target.x, target.y, nextSurface, activeState, walkDirection);
-  setPetWindowPosition(next.x, next.y);
-  syncWalkTrackX(next.x);
-  lastWindowSurfaceHeavyCheckAt = Date.now();
-  if (isWalkingState()) {
-    refreshWalkLoopAfterSurfaceChange();
-  } else {
-    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-  }
-  return true;
-}
-
-function fallbackWindowRoamToTaskbar(reason = "window-roam-no-target") {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  if (getCurrentSurface().type === "window") {
-    fallbackCurrentSurfaceToTaskbar(reason);
-  }
-}
-
-function tickWindowRoam() {
-  if (!preferencesStore.getWindowRoamEnabled() || dragState || windowDockInProgress || !petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  if (Date.now() < windowRoamDragFallbackSuppressedUntil) {
-    return;
-  }
-
-  const preferredSurface = windowRoamPreferredTargetId
-    ? getWindowRoamSurfaceById(windowRoamPreferredTargetId)
-    : null;
-  windowRoamPreferredTargetId = "";
-  const surface = preferredSurface || getTopWindowRoamSurface();
-  if (!surface) {
-    windowRoamMissingTicks += 1;
-    if (windowRoamMissingTicks >= WINDOW_ROAM_MAX_MISSING_TICKS) {
-      windowRoamLastTargetId = "";
-      fallbackWindowRoamToTaskbar();
-    }
-    return;
-  }
-
-  windowRoamMissingTicks = 0;
-  const targetId = parseWindowHwnd(surface.sourceWindowId);
-  if (targetId === windowRoamLastTargetId && getCurrentSurface().type === "window") {
-    setCurrentSurface(surface);
-    groundPetToSurface(activeState, walkDirection, getCurrentSurface());
-    return;
-  }
-
-  if (attachPetToWindowRoamSurface(surface)) {
-    windowRoamLastTargetId = targetId;
-    windowRoamSuppressedWindowId = "";
-  }
-}
-
-function startWindowRoamPolling() {
-  if (windowRoamPollTimer || !preferencesStore.canToggleWindowRoam()) {
-    return;
-  }
-  tickWindowRoam();
-  windowRoamPollTimer = setInterval(tickWindowRoam, WINDOW_ROAM_POLL_INTERVAL_MS);
-}
-
-function stopWindowRoamPolling() {
-  if (!windowRoamPollTimer) {
-    return;
-  }
-  clearInterval(windowRoamPollTimer);
-  windowRoamPollTimer = null;
-  windowRoamLastTargetId = "";
-  windowRoamPreferredTargetId = "";
-}
-
-function updateWindowRoamPolling() {
-  if (preferencesStore.getWindowRoamEnabled()) {
-    startWindowRoamPolling();
-  } else {
-    stopWindowRoamPolling();
-  }
 }
 
 function getScaleForSurface(surface, requestedScale = preferredPetScale, stateId = activeState, direction = walkDirection) {
@@ -4184,8 +4110,7 @@ function settlePetQuietly() {
   hideHoverPanel();
   const surface = getCurrentSurface();
   if (surface.type === "window") {
-    windowRoamSuppressedWindowId = parseWindowHwnd(surface.sourceWindowId);
-    windowRoamLastTargetId = "";
+    suppressCurrentWindowForSettle(surface);
     resetToTaskbarSurface(petWindow.getBounds());
   }
   resetWalkRuntime();
@@ -5344,18 +5269,12 @@ function dockPetAfterDrag({ retry = false } = {}) {
 
     if (surface && applySurfaceScale(surface, activeState, walkDirection)) {
       const nextSurface = applyDockSurfaceAfterDrag(surface, draggedX);
-      if (preferencesStore.getWindowRoamEnabled() && nextSurface.type === "window") {
-        windowRoamLastTargetId = parseWindowHwnd(nextSurface.sourceWindowId);
-        windowRoamPreferredTargetId = windowRoamLastTargetId;
-        windowRoamDragFallbackSuppressedUntil = 0;
-      }
-      windowRoamSuppressedWindowId = "";
+      rememberDockedWindowRoamTarget(nextSurface);
+      clearWindowRoamSuppression();
     } else {
-      if (preferencesStore.getWindowRoamEnabled() && previousWindowId) {
-        windowRoamSuppressedWindowId = previousWindowId;
-      }
+      suppressPreviousWindowAfterDockMiss(previousWindowId);
       if (preferencesStore.getWindowRoamEnabled()) {
-        windowRoamDragFallbackSuppressedUntil = Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS;
+        setDragFallbackSuppressionUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS);
       }
       fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
     }
@@ -5478,9 +5397,7 @@ function startWindowSurfacePolling() {
       const invalidWindowId = parseWindowHwnd(currentSurface?.sourceWindowId);
       const roamSurface = preferencesStore.getWindowRoamEnabled() ? getTopWindowRoamSurface(invalidWindowId) : null;
       if (roamSurface && attachPetToWindowRoamSurface(roamSurface)) {
-        windowRoamLastTargetId = parseWindowHwnd(roamSurface.sourceWindowId);
-        windowRoamSuppressedWindowId = "";
-        windowRoamMissingTicks = 0;
+        markWindowRoamAttached(roamSurface);
         return;
       }
       const fallback = resetToTaskbarSurface(petWindow.getBounds());

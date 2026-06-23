@@ -114,7 +114,7 @@ Windows 贴靠逻辑使用：
 
 - `window-surfaces.ps1` 获取可贴靠窗口候选。
 - `window-from-point.ps1` 辅助拖拽命中判断。
-- `main.cjs` 中的 `WINDOW_DOCK_*`、`WINDOW_SURFACE_*`、`windowRoam*` 相关逻辑做缓存、验证、回退。
+- `main.cjs` 中的 `WINDOW_DOCK_*`、`WINDOW_SURFACE_*` 相关逻辑做缓存、验证、回退；`windowRoam*` 状态与目标选取由 `behavior/window-roam-controller.cjs` 负责。
 
 上述窗口候选和命中逻辑当前属于 Windows 实现。进入 macOS 适配时，不应直接复用 PowerShell/Win32 路径；建议新增平台适配层，将窗口枚举、窗口命中、Dock/任务栏边界、自启动等系统能力收口到平台 provider 中。macOS provider 未完成前，相关功能应降级或隐藏，避免影响基础桌宠启动、动画、拖拽、菜单和缩放。
 

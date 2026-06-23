@@ -4,20 +4,51 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "window-roam-controller.cjs"), "utf8");
 
 test("window roam keeps the current window target when enabled from a window surface", () => {
-  const setRoamBody = mainSource.match(/function setWindowRoamPreference\(enabled\) \{([\s\S]*?)function setEyeTrackingPreference/)?.[1] || "";
-  const tickBody = mainSource.match(/function tickWindowRoam\(\) \{([\s\S]*?)function startWindowRoamPolling/)?.[1] || "";
-  const dockBody = mainSource.match(/function dockPetAfterDrag\(\{ retry = false \} = \{\}\) \{([\s\S]*?)function validateCurrentWindowSurface/)?.[1] || "";
+  // controller 核心逻辑（函数缩进 2 空格，闭合 2 空格 + }）
+  const tickBody = controllerSource.match(/function tickWindowRoam\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+  const prepareBody = controllerSource.match(/function prepareWindowRoamAfterPreferenceEnabled\(currentSurface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+  const resetBody = controllerSource.match(/function resetWindowRoamState\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+  const rememberBody = controllerSource.match(/function rememberDockedWindowRoamTarget\(surface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+  const suppressPrevBody = controllerSource.match(/function suppressPreviousWindowAfterDockMiss\(previousWindowId\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+  const setDragBody = controllerSource.match(/function setDragFallbackSuppressionUntil\(timestamp\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 
-  assert.match(setRoamBody, /if \(roamEnabled && currentSurface\?\.type === "window"\) \{[\s\S]*windowRoamPreferredTargetId = parseWindowHwnd\(currentSurface\.sourceWindowId\);[\s\S]*windowRoamLastTargetId = windowRoamPreferredTargetId;/);
-  assert.match(setRoamBody, /windowRoamDragFallbackSuppressedUntil = 0;/);
+  // main.cjs 触发链（顶层函数，闭合 } 在行首）
+  const setRoamBody = mainSource.match(/function setWindowRoamPreference\(enabled\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const dockBody = mainSource.match(/function dockPetAfterDrag\(\{ retry = false \} = \{\}\) \{([\s\S]*?)\nfunction validateCurrentWindowSurface/)?.[1] || "";
+
+  // controller: tickWindowRoam 拖拽回退抑制 + 优先目标选取 + 同窗附着
   assert.match(tickBody, /if \(Date\.now\(\) < windowRoamDragFallbackSuppressedUntil\) \{[\s\S]*return;[\s\S]*\}/);
   assert.match(tickBody, /const preferredSurface = windowRoamPreferredTargetId[\s\S]*\? getWindowRoamSurfaceById\(windowRoamPreferredTargetId\)[\s\S]*: null;/);
   assert.match(tickBody, /const surface = preferredSurface \|\| getTopWindowRoamSurface\(\);/);
   assert.match(tickBody, /if \(targetId === windowRoamLastTargetId && getCurrentSurface\(\)\.type === "window"\) \{[\s\S]*setCurrentSurface\(surface\);[\s\S]*groundPetToSurface\(activeState, walkDirection, getCurrentSurface\(\)\);/);
-  assert.match(dockBody, /windowRoamLastTargetId = parseWindowHwnd\(nextSurface\.sourceWindowId\);[\s\S]*windowRoamPreferredTargetId = windowRoamLastTargetId;[\s\S]*windowRoamDragFallbackSuppressedUntil = 0;/);
-  assert.match(dockBody, /windowRoamDragFallbackSuppressedUntil = Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS;/);
+
+  // controller: prepareWindowRoamAfterPreferenceEnabled 记录当前窗口为优先目标
+  assert.match(prepareBody, /windowRoamPreferredTargetId = "";/);
+  assert.match(prepareBody, /if \(currentSurface\?\.type === "window"\) \{[\s\S]*windowRoamPreferredTargetId = parseWindowHwnd\(currentSurface\.sourceWindowId\);[\s\S]*windowRoamLastTargetId = windowRoamPreferredTargetId;/);
+
+  // controller: resetWindowRoamState 清空回退抑制
+  assert.match(resetBody, /windowRoamDragFallbackSuppressedUntil = 0;/);
+
+  // controller: rememberDockedWindowRoamTarget 贴靠成功后记录目标
+  assert.match(rememberBody, /windowRoamLastTargetId = parseWindowHwnd\(surface\.sourceWindowId\);[\s\S]*windowRoamPreferredTargetId = windowRoamLastTargetId;[\s\S]*windowRoamDragFallbackSuppressedUntil = 0;/);
+
+  // controller: suppressPreviousWindowAfterDockMiss 贴靠失败后抑制旧窗口
+  assert.match(suppressPrevBody, /windowRoamSuppressedWindowId = previousWindowId;/);
+
+  // controller: setDragFallbackSuppressionUntil 设置回退抑制时间戳
+  assert.match(setDragBody, /windowRoamDragFallbackSuppressedUntil = timestamp;/);
+
+  // main.cjs: setWindowRoamPreference 调用 controller 方法链
+  assert.match(setRoamBody, /resetWindowRoamState\(\);/);
+  assert.match(setRoamBody, /prepareWindowRoamAfterPreferenceEnabled\(currentSurface\);/);
+  assert.match(setRoamBody, /updateWindowRoamPolling\(\);/);
+
+  // main.cjs: dockPetAfterDrag 成功/失败分支调用 controller 方法
+  assert.match(dockBody, /rememberDockedWindowRoamTarget\(nextSurface\);[\s\S]*clearWindowRoamSuppression\(\);/);
+  assert.match(dockBody, /suppressPreviousWindowAfterDockMiss\(previousWindowId\);[\s\S]*setDragFallbackSuppressionUntil\(Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS\);/);
 });
 
 test("window surface polling falls back when a non-roaming pet is no longer docked", () => {
