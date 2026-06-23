@@ -1,12 +1,15 @@
 // 气泡窗口控制器，管理启动气泡的创建、显示、隐藏和定位。
 // 从 main.cjs 提取的气泡窗口逻辑，依赖通过 createBubbleController(context) 注入。
 
-const { BrowserWindow } = require("electron");
-const path = require("path");
 const { createOverlayWindow } = require("./overlay-window.cjs");
 
 function createBubbleController(context) {
   const {
+    // Electron 与运行时
+    BrowserWindow,
+    path,
+    __dirname,
+    process,
     // 依赖函数
     getAppIconPath,
     getAppPageUrl,

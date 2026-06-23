@@ -530,6 +530,11 @@ const {
 // 接入 windows/bubble-controller.cjs：气泡窗口创建、显示、隐藏、定位、计时器
 // context 中的函数引用依赖函数声明提升（hoisting），在运行时调用时已全部可用
 const bubbleController = createBubbleController({
+  // Electron 与运行时
+  BrowserWindow,
+  path,
+  __dirname,
+  process,
   // 资源和页面
   getAppIconPath,
   getAppPageUrl,
