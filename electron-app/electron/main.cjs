@@ -33,11 +33,22 @@ const { safeSend, broadcastToWindows } = require("./shared/messaging.cjs");
 const { sharedGreetings, buildPetStates } = require("./pet/pet-states.cjs");
 // overlay 窗口公共创建 helper，供 createXxxWindow 共享 BrowserWindow 创建逻辑
 const { createOverlayWindow } = require("./windows/overlay-window.cjs");
+// 气泡窗口控制器，管理启动气泡的创建、显示、隐藏和定位
+const { createBubbleController } = require("./windows/bubble-controller.cjs");
+ // 自定义面板控制器，管理联系作者面板的创建、显示、隐藏和定位
+const { createCustomizationController } = require("./windows/customization-controller.cjs");
+// overlay 窗口定位几何，含菜单/悬停/气泡/自定义面板的位置计算
+const { createOverlayGeometry } = require("./windows/overlay-geometry.cjs");
+// 菜单窗口控制器，管理快捷菜单的创建、显示、隐藏、定位和计时器
+const { createMenuController } = require("./windows/menu-controller.cjs");
+// 悬停面板控制器，管理悬停面板的创建、显示、隐藏、定位、轮询和可见性更新
+const { createHoverController } = require("./windows/hover-controller.cjs");
 
 // 应用级常量集中管理
 const appConstants = require("./core/app-constants.cjs");
 const { createRuntimeConfig } = require("./core/runtime-config.cjs");
 const { createPreferencesStore } = require("./core/preferences-store.cjs");
+const { createLogger } = require("./core/logger.cjs");
 const { createAssetLoader } = require("./pet/asset-loader.cjs");
 const {
   APP_INTERNAL_NAME,
@@ -205,6 +216,11 @@ app.commandLine.appendSwitch("disable-software-rasterizer");
 app.commandLine.appendSwitch("disable-features", "VizDisplayCompositor");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
+// 日志函数为稳定引用，供各工厂闭包捕获；实现在 logDir 确定后由 createLogger 接入
+let _logger = { log: () => {}, logWalkDiagnostic: () => {} };
+const log = (message) => _logger.log(message);
+const logWalkDiagnostic = (message) => _logger.logWalkDiagnostic(message);
+
 // 运行时配置：变体配置读取、首选变体持久化、用户数据目录定位
 const runtimeConfig = createRuntimeConfig({
   app,
@@ -338,36 +354,7 @@ const statMessages = {
 };
 
 let petWindow;
-let startupBubbleWindow;
-let startupBubbleWindowReady = false;
-let startupBubbleTimer = null;
-let startupBubbleHideAt = 0;
-let startupBubbleAnchorRect = null;
-let pendingWalkBubbleMessage = null;
-let menuWindow;
-let menuWindowReady = false;
-let menuHideTimer = null;
-let isPointerOverMenuPanel = false;
-let hoverWindow;
-let hoverWindowReady = false;
-let hoverHideTimer = null;
-let hoverIntentTimer = null;
-let hoverPollTimer = null;
-let isPointerOverPet = false;
-let isPointerOverHoverPanel = false;
 const interactionPauseReasons = new Set();
-let lastMenuBounds = null;
-let lastHoverBounds = null;
-let menuAnchorRect = null;
-let menuFrozenPetRect = null;
-let menuPlacementSnapshot = null;
-let hoverAnchorRect = null;
-let hoverFrozenPetRect = null;
-let customizationWindow;
-let customizationWindowReady = false;
-let customizationAnchorRect = null;
-let customizationFrozenPetRect = null;
-let currentMenuHeight = PET_MENU_COLLAPSED_HEIGHT;
 let activeState = DEFAULT_STATE;
 let selectedState = DEFAULT_STATE;
 let walkDirection = -1;
@@ -422,7 +409,6 @@ let lastWalkSurfaceSignature = "";
 let lastWindowSurfaceAsyncRefreshAt = 0;
 let windowDockInProgress = false;
 let lastWindowSurfaceBackgroundRefreshAt = 0;
-let bubbleHoverSuppressedUntil = 0;
 let windowDockHoverSuppressedUntil = 0;
 let autoStartRefreshInFlight = false;
 let windowRoamPollTimer = null;
@@ -436,25 +422,455 @@ let lastEyeTrackingLook = "off";
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
 const logDir = path.join(userDataRoot, "logs");
-const logFile = path.join(logDir, "main.log");
 const visibleBoundsCache = new Map();
 const headBoundsCache = new Map();
 const framePixelCache = new Map();
 
-function log(message) {
-  try {
-    fs.mkdirSync(logDir, { recursive: true });
-    fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${message}\n`);
-  } catch {
-    // Logging must never prevent the pet from starting in packaged installs.
-  }
-}
+// 接入 core/logger.cjs：文件日志与行走诊断日志
+_logger = createLogger(logDir, { walkDiagnosticsEnabled: WALK_DIAGNOSTICS_ENABLED });
 
-function logWalkDiagnostic(message) {
-  if (WALK_DIAGNOSTICS_ENABLED) {
-    log(`walk-diagnostic ${message}`);
-  }
-}
+// 接入 windows/overlay-geometry.cjs：overlay 窗口定位几何统一收口
+// state accessor 间接层：menu 状态通过延迟访问器读 menuController（之后创建）
+// hover 状态读 main.cjs 本地状态；customization 状态通过延迟访问器读 customizationController
+const overlayGeometry = createOverlayGeometry({
+  // 全局状态访问器
+  getActiveState: () => activeState,
+  getWalkDirection: () => walkDirection,
+  getCurrentSurface,
+  getPetWindow: () => petWindow,
+  getPetScale: () => petScale,
+  getMenuFrozenPetRect: () => menuController ? menuController.getMenuFrozenPetRect() : null,
+  getHoverFrozenPetRect: () => hoverController ? hoverController.getHoverFrozenPetRect() : null,
+  getCustomizationFrozenPetRect: () => customizationController ? customizationController.getCustomizationAnchorRect() : null,
+  getTaskbarWalkRunway: () => taskbarWalkRunway,
+  getCurrentMenuHeight: () => menuController ? menuController.getCurrentMenuHeight() : PET_MENU_COLLAPSED_HEIGHT,
+  getMenuPlacementSnapshot: () => menuController ? menuController.getMenuPlacementSnapshot() : null,
+  // 缓存锚点访问器（读状态变量）
+  getMenuAnchorRect: () => menuController ? menuController.getMenuAnchorRectValue() : null,
+  getHoverAnchorRect: () => hoverController ? hoverController.getHoverAnchorRectValue() : null,
+  getCustomizationAnchorRect: () => customizationController ? customizationController.getCustomizationAnchorRect() : null,
+  // 依赖函数（main.cjs 内部实现，函数声明提升）
+  getPetSpriteRect,
+  getScaledOverlayCollisionPadding,
+  getScaledHoverBodyHitPadding,
+  getScaledHoverAvoidPadding,
+  getWindowRect,
+  isResolvedOverlayPetRect,
+  getVisiblePetRect,
+  getRenderedFrameVisibleRect,
+  getRenderedFrameVisibleRectFromBounds,
+  getVisiblePetRectFromBounds,
+  getRenderedFrameHeadRectFromBounds,
+  getSpriteRectFromBounds,
+  getStateVisibleBounds,
+  getStateHeadBounds,
+  getState,
+  getTaskbarWalkOverlayPetRect,
+  isTaskbarWalkActive,
+  // 纯工具函数（来自 shared/bounds.cjs）
+  expandRect,
+  clamp,
+  rectsOverlap,
+  rectFitsInArea,
+  getRectClosestEdgeDistance,
+  getRectCenterDistance,
+  cloneRect,
+  // 常量
+  OVERLAY_BASE_GAP,
+  OVERLAY_GAP_MIN,
+  OVERLAY_GAP_MAX,
+  OVERLAY_VERTICAL_OFFSET,
+  PET_MENU_HEAD_X_OFFSET,
+  PET_MENU_HEAD_Y_OFFSET,
+  PET_MENU_SCALE_UP_VERTICAL_FACTOR,
+  PET_MENU_SCALE_DOWN_VERTICAL_FACTOR,
+  PET_MENU_BASE_VERTICAL_LIFT,
+  PET_MENU_VERTICAL_OFFSET,
+  PET_MENU_VERTICAL_LIFT_MIN,
+  PET_MENU_VERTICAL_LIFT_MAX,
+  PET_MENU_GAP_OFFSET,
+  PET_MENU_SCALE_GAP_FACTOR,
+  PET_MENU_WIDTH,
+  PET_MENU_COLLAPSED_HEIGHT,
+  PET_MENU_MIN_HEIGHT,
+  PET_MENU_MAX_HEIGHT,
+  HOVER_PANEL_GAP_OFFSET,
+  HOVER_PANEL_SCALE_GAP_FACTOR,
+  HOVER_PANEL_WIDTH,
+  HOVER_PANEL_HEIGHT,
+  HOVER_PANEL_VERTICAL_OFFSET,
+  CUSTOMIZATION_PANEL_WIDTH,
+  CUSTOMIZATION_PANEL_HEIGHT
+});
+const {
+  getOverlayWorkArea,
+  getOverlayPlacementRect,
+  getMenuHeadAnchorRect,
+  getMenuAnchorRect,
+  getHoverAnchorRect,
+  getOverlayScaleDelta,
+  getOverlayVisualGap,
+  getHoverBodyHitPaddingForState,
+  getOverlayVerticalOffset,
+  getMenuVerticalLift,
+  getHoverHitRect,
+  getOverlayAvoidRect,
+  getHoverAvoidRect,
+  getMenuPlacementArea,
+  getMenuCandidateGaps,
+  getMenuPosition,
+  getHoverPosition,
+  getOverlaySafeArea,
+  getCustomizationAnchorRect: getCustomizationAnchorRectGeometry,
+  getCustomizationPosition: getCustomizationPositionGeometry,
+  clampPanelRect,
+  pickBestOverlayCandidate
+} = overlayGeometry;
+
+// 接入 windows/bubble-controller.cjs：气泡窗口创建、显示、隐藏、定位、计时器
+// context 中的函数引用依赖函数声明提升（hoisting），在运行时调用时已全部可用
+const bubbleController = createBubbleController({
+  // 资源和页面
+  getAppIconPath,
+  getAppPageUrl,
+  log,
+  safeSend,
+  buildPetConfig,
+  // 共享几何（从 overlay-geometry 注入）
+  getOverlayPlacementRect,
+  expandRect,
+  getOverlayWorkArea,
+  getOverlaySafeArea,
+  getOverlayVisualGap,
+  getOverlayVerticalOffset,
+  getScaledOverlayCollisionPadding,
+  setFixedWindowBounds,
+  clampPanelRect,
+  pickBestOverlayCandidate,
+  // 窗口访问器
+  getPetWindow: () => petWindow,
+  getMenuWindow: () => menuController ? menuController.getMenuWindow() : null,
+  getHoverWindow: () => hoverController ? hoverController.getHoverWindow() : null,
+  // 状态访问器
+  getActiveState: () => activeState,
+  getWalkDirection: () => walkDirection,
+  getCurrentSurface,
+  // 行走和任务栏
+  isWalkingState,
+  getTaskbarWalkRunway: () => taskbarWalkRunway,
+  isTaskbarWalkActive,
+  getTaskbarWalkOverlayPetRect,
+  // 宠物可视区域
+  getCurrentPetVisualRect,
+  getRenderedFrameVisibleRect,
+  getVisiblePetRect,
+  getPetSpriteRect,
+  // 交互暂停
+  addInteractionPause,
+  removeInteractionPause,
+  // 跨控制器互斥
+  hidePetMenu: () => menuController.hidePetMenu(),
+  hideHoverPanel: () => hoverController.hideHoverPanel(),
+  restoreHoverAfterBubbleIfNeeded,
+  // 几何工具
+  clamp,
+  cloneRect,
+  rectsOverlap,
+  rectFitsInArea,
+  // 问候语
+  sharedGreetings,
+  // 常量
+  STARTUP_BUBBLE_DEFAULT_WIDTH,
+  STARTUP_BUBBLE_MIN_WIDTH,
+  STARTUP_BUBBLE_MAX_WIDTH,
+  STARTUP_BUBBLE_HEIGHT,
+  STARTUP_BUBBLE_GAP_OFFSET,
+  STARTUP_BUBBLE_SCALE_GAP_FACTOR,
+  STARTUP_BUBBLE_DURATION_MS,
+  STARTUP_BUBBLE_HOVER_LOCK_MS,
+  DEFAULT_STATE
+});
+const {
+  createStartupBubbleWindow,
+  getStartupBubblePosition,
+  resizeStartupBubble,
+  repositionStartupBubbleWindow,
+  showStartupBubble,
+  showBubbleMessage,
+  hideStartupBubble,
+  showPendingWalkBubbleMessage,
+  isStartupBubbleVisible,
+  getBubbleHoverSuppressionMs,
+  getBubbleAnchorRect,
+  clearPendingWalkBubbleMessage,
+  clearStartupBubbleTimer
+} = bubbleController;
+
+// 接入 windows/customization-controller.cjs：自定义面板创建、显示、隐藏、定位
+const customizationController = createCustomizationController({
+  // Electron 与运行时
+  BrowserWindow,
+  path,
+  __dirname,
+  process,
+  // 资源和页面
+  getAppIconPath,
+  getAppPageUrl,
+  log,
+  // 窗口和状态访问器
+  getPetWindow: () => petWindow,
+  // 跨控制器互斥
+  hidePetMenu: () => menuController.hidePetMenu(),
+  hideHoverPanel: () => hoverController.hideHoverPanel(),
+  // 交互暂停
+  addInteractionPause,
+  removeInteractionPause,
+  // 宠物可视区域
+  getPetSpriteRect,
+  getVisiblePetRect,
+  getWindowRect,
+  // 任务栏行走
+  isTaskbarWalkActive,
+  getTaskbarWalkOverlayPetRect,
+  getTaskbarWalkRunway: () => taskbarWalkRunway,
+  // 共享几何（从 overlay-geometry 注入）
+  getOverlayPlacementRect,
+  expandRect,
+  getOverlayWorkArea,
+  getOverlaySafeArea,
+  getOverlayVisualGap,
+  getOverlayVerticalOffset,
+  getScaledOverlayCollisionPadding,
+  setFixedWindowBounds,
+  clamp,
+  rectsOverlap,
+  clampPanelRect,
+  pickBestOverlayCandidate,
+  // 常量
+  CUSTOMIZATION_PANEL_WIDTH,
+  CUSTOMIZATION_PANEL_HEIGHT,
+  HOVER_PANEL_SCALE_GAP_FACTOR
+});
+const {
+  createCustomizationWindow,
+  showCustomizationPanel,
+  hideCustomizationPanel,
+  getCustomizationPosition,
+  getCustomizationAnchorRect,
+  freezeCustomizationPetRect,
+  isCustomizationVisible,
+  refreshCustomizationAnchorAfterScale
+} = customizationController;
+
+// 接入 windows/menu-controller.cjs：菜单窗口创建、显示、隐藏、定位、计时器
+const menuController = createMenuController({
+  // Electron 与运行时
+  BrowserWindow,
+  path,
+  __dirname,
+  process,
+  screen,
+  // 资源和页面
+  getAppIconPath,
+  getAppPageUrl,
+  log,
+  safeSend,
+  buildPetConfig,
+  // 菜单特性
+  buildMenuFeatures,
+  // 窗口和状态访问器
+  getPetWindow: () => petWindow,
+  getActiveState: () => activeState,
+  getWalkDirection: () => walkDirection,
+  isCustomizationVisible,
+  // 几何方法（从 overlay-geometry 注入）
+  getMenuPosition,
+  getMenuPlacementArea,
+  getMenuCandidateGaps,
+  getMenuHeadAnchorRect,
+  getMenuAnchorRect,
+  // overlay 辅助函数
+  getOverlayVisualGap,
+  // 帧与可视区域辅助
+  isResolvedOverlayPetRect,
+  getFrameVisibleRectFromBounds,
+  getVisiblePetRectFromBounds,
+  getRenderedFrameInfo,
+  // 光标辅助
+  isCursorInsidePetVisibleRect,
+  // 窗口 bounds 辅助
+  setFixedWindowBounds,
+  // 交互暂停
+  addInteractionPause,
+  removeInteractionPause,
+  // 跨控制器动作
+  refreshAutoStartCacheAsync,
+  clearHoverIntent: () => hoverController.clearHoverIntent(),
+  hideStartupBubble: (...args) => bubbleController.hideStartupBubble(...args),
+  hideHoverPanel: () => hoverController.hideHoverPanel(),
+  // bounds 工具
+  clamp,
+  cloneRect,
+  expandRect,
+  isPointInsideRect,
+  // 常量
+  PET_MENU_WIDTH,
+  PET_MENU_COLLAPSED_HEIGHT,
+  PET_MENU_MIN_HEIGHT,
+  PET_MENU_MAX_HEIGHT,
+  PET_MENU_PADDING_Y,
+  PET_MENU_ITEM_HEIGHT,
+  PET_MENU_HIDE_DELAY_MS,
+  PET_MENU_GAP_OFFSET,
+  PET_MENU_SCALE_GAP_FACTOR
+});
+const {
+  createMenuWindow,
+  resizePetMenu,
+  showPetMenu,
+  hidePetMenu,
+  scheduleHidePetMenu,
+  repositionMenuWindow,
+  updateMenuVisibilityFromCursor,
+  getQuickMenuHeight,
+  freezeMenuPetRect,
+  buildMenuPlacementSnapshot,
+  refreshMenuAnchorAfterScale,
+  clearMenuHideTimer,
+  getMenuWindow,
+  getMenuWindowReady,
+  getMenuAnchorRectValue,
+  setMenuAnchorRect,
+  getMenuFrozenPetRect,
+  getMenuPlacementSnapshot,
+  getCurrentMenuHeight,
+  getIsPointerOverMenuPanel,
+  setIsPointerOverMenuPanel,
+  getLastMenuBounds,
+  setLastMenuBounds
+} = menuController;
+
+// 接入 windows/hover-controller.cjs：悬停面板创建、显示、隐藏、定位、轮询
+const hoverController = createHoverController({
+  // Electron 与运行时
+  BrowserWindow,
+  path,
+  __dirname,
+  process,
+  screen,
+  // 应用基础
+  getAppIconPath,
+  getAppPageUrl,
+  log,
+  safeSend,
+  buildPetConfig,
+  // 宠物窗口与状态访问器
+  getPetWindow: () => petWindow,
+  getActiveState: () => activeState,
+  getCurrentSurface,
+  getDragState: () => dragState,
+  getMenuWindow,
+  // 几何计算（从 overlay-geometry 注入）
+  getHoverPosition,
+  getHoverAnchorRect,
+  getHoverHitRect,
+  getHoverAvoidRect,
+  getHoverBodyHitPaddingForState,
+  // 共享几何辅助
+  getOverlayPlacementRect,
+  expandRect,
+  getOverlayWorkArea,
+  getOverlaySafeArea,
+  getOverlayVisualGap,
+  getOverlayVerticalOffset,
+  getScaledHoverBodyHitPadding,
+  getScaledHoverAvoidPadding,
+  clamp,
+  cloneRect,
+  rectsOverlap,
+  rectFitsInArea,
+  clampPanelRect,
+  pickBestOverlayCandidate,
+  // bounds 工具
+  isPointInsideRect,
+  // 宠物精灵
+  getPetSpriteRect,
+  getVisiblePetRect,
+  getWindowRect,
+  getState,
+  getRenderedFrameVisibleRect,
+  // 任务栏行走
+  isTaskbarWalkActive,
+  getTaskbarWalkOverlayPetRect,
+  getTaskbarWalkRunway: () => taskbarWalkRunway,
+  // 光标检测
+  isCursorInsidePetVisibleRect,
+  isCursorInsideHoverIntentTarget,
+  isCursorInsideSpriteRect,
+  // 悬停面板辅助
+  shouldSuppressHoverPanel,
+  updatePetWindowMousePassthrough,
+  updateMenuVisibilityFromCursor,
+  // 交互暂停
+  addInteractionPause,
+  removeInteractionPause,
+  // 窗口 bounds 辅助
+  setFixedWindowBounds,
+  // 其他窗口（跨控制器，使用 lazy wrapper 避免 TDZ）
+  hideStartupBubble,
+  hidePetMenu,
+  repositionStartupBubbleWindow,
+  repositionMenuWindow,
+  // 诊断
+  logWalkDiagnostic,
+  // 常量
+  HOVER_PANEL_WIDTH,
+  HOVER_PANEL_HEIGHT,
+  HOVER_PANEL_GAP_OFFSET,
+  HOVER_PANEL_VERTICAL_OFFSET,
+  HOVER_PANEL_SCALE_GAP_FACTOR,
+  HOVER_POLL_INTERVAL_MS,
+  HOVER_HIDE_DELAY_MS,
+  HOVER_INTENT_DELAY_MS,
+  TASKBAR_WALK_HOVER_INTENT_DELAY_MS,
+  WALK_DIAGNOSTICS_ENABLED
+});
+const {
+  createHoverWindow,
+  showHoverPanel,
+  hideHoverPanel,
+  repositionHoverWindow,
+  beginHoverFromPointer,
+  scheduleHoverIntent,
+  startHoverPolling,
+  stopHoverPolling,
+  updateHoverVisibilityFromCursor,
+  freezeHoverPetRect,
+  clearHoverIntent,
+  scheduleHideHoverPanel,
+  refreshHoverAnchorAfterScale,
+  clearHoverHideTimer,
+  getHoverWindow,
+  getHoverWindowReady,
+  getHoverAnchorRectValue,
+  getHoverFrozenPetRect,
+  getHoverHideTimer,
+  getHoverIntentTimer,
+  getHoverPollTimer,
+  getIsPointerOverHoverPanel,
+  getIsPointerOverPet,
+  getLastHoverBounds,
+  setHoverWindow,
+  setHoverWindowReady,
+  setHoverAnchorRect,
+  setHoverFrozenPetRect,
+  setHoverHideTimer,
+  setHoverIntentTimer,
+  setHoverPollTimer,
+  setIsPointerOverHoverPanel,
+  setIsPointerOverPet,
+  setLastHoverBounds
+} = hoverController;
 
 function getAutoStartCommand() {
   return `"${process.execPath}"`;
@@ -628,39 +1044,10 @@ function buildMenuFeatures() {
 }
 
 function sendMenuConfig() {
-  if (menuWindow && !menuWindow.isDestroyed() && menuWindowReady && !menuWindow.webContents.isLoading()) {
-    safeSend(menuWindow, "pet:menu-data", buildPetConfig());
+  const menuWin = getMenuWindow();
+  if (menuWin && !menuWin.isDestroyed() && getMenuWindowReady() && !menuWin.webContents.isLoading()) {
+    safeSend(menuWin, "pet:menu-data", buildPetConfig());
   }
-}
-
-function getQuickMenuItemCount() {
-  const features = buildMenuFeatures();
-  let itemCount = 3;
-  if (features.windowRoam) {
-    itemCount += 1;
-  }
-  if (features.autoStart) {
-    itemCount += 1;
-  }
-  if (features.eyeTracking) {
-    itemCount += 1;
-  }
-  if (features.customization) {
-    itemCount += 1;
-  }
-  if (features.switchPet) {
-    itemCount += 1;
-  }
-  return itemCount;
-}
-
-function getQuickMenuHeight() {
-  const menuChromeHeight = PET_MENU_COLLAPSED_HEIGHT - PET_MENU_PADDING_Y - 3 * PET_MENU_ITEM_HEIGHT;
-  return clamp(
-    PET_MENU_PADDING_Y + getQuickMenuItemCount() * PET_MENU_ITEM_HEIGHT + menuChromeHeight,
-    PET_MENU_MIN_HEIGHT,
-    PET_MENU_MAX_HEIGHT
-  );
 }
 
 function setAutoStartPreference(enabled) {
@@ -1925,7 +2312,9 @@ function tickEyeTracking() {
     return;
   }
 
-  const menuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
+  const menuWin = getMenuWindow();
+  const menuVisible = menuWin && !menuWin.isDestroyed() && menuWin.isVisible();
+  const hoverWindow = getHoverWindow();
   const hoverVisible = hoverWindow && !hoverWindow.isDestroyed() && hoverWindow.isVisible();
   const point = screen.getCursorScreenPoint();
   if (menuVisible || hoverVisible || isPointInsideRect(point, getWindowRect(petWindow)) || isPointInsideRenderedFrame(point)) {
@@ -2236,7 +2625,7 @@ function sendStats() {
     return;
   }
   const stats = buildStatsSummary();
-  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:stats-changed", stats);
+  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:stats-changed", stats);
 }
 
 function scheduleIdleGreeting(delayMs = IDLE_GREETING_DELAY_MS) {
@@ -3030,13 +3419,6 @@ function getGroundedWindowY(area, stateId = activeState, direction = walkDirecti
   return Math.round(visibleTop - verticalInset - visibleInsets.top);
 }
 
-function getOverlayWorkArea(rect) {
-  if (!rect) {
-    return screen.getPrimaryDisplay().workArea;
-  }
-  return screen.getDisplayMatching(rect).workArea;
-}
-
 function getRenderedFrameSnapshot(stateId = activeState, direction = walkDirection) {
   const frameInfo = getRenderedFrameInfo();
   if (!frameInfo || frameInfo.stateId !== stateId || !Number.isFinite(frameInfo.frameIndex)) {
@@ -3096,60 +3478,6 @@ function getRenderedFrameHeadRectFromBounds(bounds, stateId = activeState, direc
   };
 }
 
-function getOverlayPlacementRect(anchorRect = null, stateId = activeState, direction = walkDirection) {
-  const fullRect = anchorRect || getWindowRect(petWindow);
-  if (isResolvedOverlayPetRect(fullRect)) {
-    return cloneRect(fullRect);
-  }
-  if (fullRect) {
-    const frameRect = getRenderedFrameVisibleRectFromBounds(fullRect, stateId, direction);
-    if (frameRect) {
-      return frameRect;
-    }
-    return getVisiblePetRectFromBounds(fullRect, stateId, direction);
-  }
-  return getVisiblePetRect() || getPetSpriteRect();
-}
-
-function getMenuHeadAnchorRect(anchorRect = null, stateId = activeState, direction = walkDirection) {
-  const fullRect = anchorRect || getWindowRect(petWindow);
-  if (isResolvedOverlayPetRect(fullRect)) {
-    return cloneRect(fullRect);
-  }
-  if (!fullRect) {
-    return getOverlayPlacementRect(anchorRect, stateId, direction);
-  }
-
-  const frameHeadRect = getRenderedFrameHeadRectFromBounds(fullRect, stateId, direction);
-  if (frameHeadRect) {
-    return frameHeadRect;
-  }
-
-  const spriteRect = getSpriteRectFromBounds(fullRect);
-  const visibleBounds = getStateVisibleBounds(stateId);
-  const headBounds = getStateHeadBounds(stateId) || visibleBounds;
-  if (!headBounds || !headBounds.imageWidth || !headBounds.imageHeight) {
-    return getOverlayPlacementRect(fullRect, stateId, direction);
-  }
-
-  const state = getState(stateId);
-  const shouldMirror = state?.defaultFacing === "left" ? direction > 0 : direction < 0;
-  const rawLeft = shouldMirror
-    ? headBounds.imageWidth - 1 - headBounds.right
-    : headBounds.left;
-  const rawRight = shouldMirror
-    ? headBounds.imageWidth - 1 - headBounds.left
-    : headBounds.right;
-  const xScale = spriteRect.width / headBounds.imageWidth;
-  const yScale = spriteRect.height / headBounds.imageHeight;
-  return {
-    x: Math.round(spriteRect.x + rawLeft * xScale + PET_MENU_HEAD_X_OFFSET),
-    y: Math.round(spriteRect.y + headBounds.top * yScale + PET_MENU_HEAD_Y_OFFSET),
-    width: Math.max(1, Math.round((rawRight - rawLeft + 1) * xScale)),
-    height: Math.max(1, Math.round((headBounds.bottom - headBounds.top + 1) * yScale))
-  };
-}
-
 function getWindowRect(targetWindow) {
   if (!targetWindow || targetWindow.isDestroyed()) {
     return null;
@@ -3189,32 +3517,6 @@ function getTaskbarWalkOverlayPetRect() {
       || getTaskbarRunwayVisualRect(activeState, walkDirection)
       || getCurrentPetVisualRect(activeState, walkDirection)
   );
-}
-
-function getMenuAnchorRect(anchorRect = null) {
-  if (anchorRect) {
-    return anchorRect;
-  }
-  if (menuFrozenPetRect) {
-    return menuFrozenPetRect;
-  }
-  if (taskbarWalkRunway && isTaskbarWalkActive()) {
-    return getTaskbarWalkOverlayPetRect() || getPetSpriteRect() || getVisiblePetRect();
-  }
-  return getWindowRect(petWindow) || getPetSpriteRect() || getVisiblePetRect();
-}
-
-function getHoverAnchorRect(anchorRect = null) {
-  if (anchorRect) {
-    return anchorRect;
-  }
-  if (hoverFrozenPetRect) {
-    return hoverFrozenPetRect;
-  }
-  if (taskbarWalkRunway && isTaskbarWalkActive()) {
-    return getTaskbarWalkOverlayPetRect() || getPetSpriteRect() || getVisiblePetRect();
-  }
-  return getWindowRect(petWindow) || getPetSpriteRect() || getVisiblePetRect();
 }
 
 function isInteractionPaused() {
@@ -3275,27 +3577,7 @@ function removeInteractionPause(reason) {
   sendInteractionPauseState();
 }
 
-function clearHoverIntent({ keepFrozenRect = false } = {}) {
-  if (hoverIntentTimer) {
-    clearTimeout(hoverIntentTimer);
-    hoverIntentTimer = null;
-  }
-  if (!keepFrozenRect && (!hoverWindow || hoverWindow.isDestroyed() || !hoverWindow.isVisible())) {
-    hoverFrozenPetRect = null;
-  }
-  removeInteractionPause("hover-intent");
-}
-
 // expandRect 已从 shared/bounds.cjs 导入
-
-function getOverlayScaleDelta() {
-  return petScale - 1;
-}
-
-function getOverlayVisualGap(offset = 0, scaleFactor = 0) {
-  const scaledGap = OVERLAY_BASE_GAP + getOverlayScaleDelta() * scaleFactor;
-  return Math.round(clamp(scaledGap + offset, OVERLAY_GAP_MIN, OVERLAY_GAP_MAX));
-}
 
 function getScaledOverlayCollisionPadding() {
   return Math.round(clamp(
@@ -3313,45 +3595,8 @@ function getScaledHoverBodyHitPadding() {
   ));
 }
 
-function getHoverBodyHitPaddingForState(stateId = activeState) {
-  const basePadding = getScaledHoverBodyHitPadding();
-  const state = getState(stateId);
-  if (!state?.moving) {
-    return basePadding;
-  }
-  if (isTaskbarWalkActive()) {
-    return Math.max(0, basePadding - 1);
-  }
-  // Moving states are sampled while the sprite keeps shifting, so use a
-  // slightly wider tolerance to avoid hover misses between poll ticks.
-  return basePadding + 2;
-}
-
 function getScaledHoverAvoidPadding() {
   return Math.max(HOVER_PANEL_AVOID_PADDING_MIN, Math.round(getPetSpriteSize() * HOVER_PANEL_AVOID_PADDING_SCALE));
-}
-
-function getOverlayVerticalOffset(offset = 0, scaleFactor = 0) {
-  return Math.round(OVERLAY_VERTICAL_OFFSET + offset - getOverlayScaleDelta() * scaleFactor);
-}
-
-function getMenuVerticalLift() {
-  const scaleDelta = getOverlayScaleDelta();
-  const scaleAdjustment = scaleDelta >= 0
-    ? scaleDelta * PET_MENU_SCALE_UP_VERTICAL_FACTOR
-    : scaleDelta * PET_MENU_SCALE_DOWN_VERTICAL_FACTOR;
-  return Math.round(clamp(
-    PET_MENU_BASE_VERTICAL_LIFT + scaleAdjustment + PET_MENU_VERTICAL_OFFSET,
-    PET_MENU_VERTICAL_LIFT_MIN,
-    PET_MENU_VERTICAL_LIFT_MAX
-  ));
-}
-
-function getHoverHitRect() {
-  const rect = hoverFrozenPetRect
-    ? getOverlayPlacementRect(hoverFrozenPetRect)
-    : getRenderedFrameVisibleRect() || getVisiblePetRect();
-  return expandRect(rect, getHoverBodyHitPaddingForState());
 }
 
 function getCurrentPetHitRect() {
@@ -3359,16 +3604,6 @@ function getCurrentPetHitRect() {
     return null;
   }
   return expandRect(getRenderedFrameVisibleRect() || getVisiblePetRect(), getHoverBodyHitPaddingForState());
-}
-
-function getOverlayAvoidRect(anchorRect = null) {
-  const rect = getOverlayPlacementRect(anchorRect);
-  return expandRect(rect, getScaledOverlayCollisionPadding());
-}
-
-function getHoverAvoidRect(anchorRect = null) {
-  const rect = getOverlayPlacementRect(anchorRect);
-  return expandRect(rect, getScaledHoverAvoidPadding());
 }
 
 function isCursorInsidePetVisibleRect() {
@@ -3442,16 +3677,6 @@ function isPointInsideRenderedFrame(point, frameInfo = null) {
   return false;
 }
 
-function freezeHoverPetRect() {
-  hoverFrozenPetRect = getHoverAnchorRect(null);
-  return hoverFrozenPetRect;
-}
-
-function freezeMenuPetRect() {
-  menuFrozenPetRect = getMenuAnchorRect(null);
-  return menuFrozenPetRect;
-}
-
 // normalizeBounds 已从 shared/bounds.cjs 导入
 
 // boundsAreEqual 已从 shared/bounds.cjs 导入
@@ -3462,16 +3687,16 @@ function setFixedWindowBounds(targetWindow, bounds, width, height, cacheKey) {
   }
 
   const nextBounds = normalizeBounds(bounds, width, height);
-  const lastBounds = cacheKey === "menu" ? lastMenuBounds : lastHoverBounds;
+  const lastBounds = cacheKey === "menu" ? getLastMenuBounds() : getLastHoverBounds();
   if (boundsAreEqual(lastBounds, nextBounds)) {
     return;
   }
 
   targetWindow.setBounds(nextBounds, false);
   if (cacheKey === "menu") {
-    lastMenuBounds = nextBounds;
+    setLastMenuBounds(nextBounds);
   } else {
-    lastHoverBounds = nextBounds;
+    setLastHoverBounds(nextBounds);
   }
 }
 
@@ -3557,248 +3782,16 @@ function createPetWindow() {
   });
 }
 
-function createStartupBubbleWindow() {
-  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
-  startupBubbleWindow = createOverlayWindow({
-    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
-    hash: "bubble",
-    width: STARTUP_BUBBLE_DEFAULT_WIDTH,
-    height: STARTUP_BUBBLE_HEIGHT,
-    movable: false,
-    focusable: false,
-    onReady: () => {
-      startupBubbleWindowReady = true;
-      if (startupBubbleWindow?.isVisible()) {
-        safeSend(startupBubbleWindow, "pet:bubble-data", {
-          ...buildPetConfig(),
-          message: startupBubbleWindow.__pendingMessage || null
-        });
-      }
-    },
-    onClose: () => {
-      startupBubbleWindow = null;
-      startupBubbleWindowReady = false;
-    }
-  });
-}
-
-function getStartupBubblePosition(width = STARTUP_BUBBLE_DEFAULT_WIDTH, height = STARTUP_BUBBLE_HEIGHT, anchorRect = startupBubbleAnchorRect) {
-  const bubbleWidth = clamp(Math.ceil(Number(width) || STARTUP_BUBBLE_DEFAULT_WIDTH), STARTUP_BUBBLE_MIN_WIDTH, STARTUP_BUBBLE_MAX_WIDTH);
-  const bubbleHeight = Math.ceil(Number(height) || STARTUP_BUBBLE_HEIGHT);
-  const petRect = cloneRect(anchorRect || getBubbleAnchorRect());
-  const rawArea = getOverlayWorkArea(petRect);
-  const bubbleGap = getOverlayVisualGap(STARTUP_BUBBLE_GAP_OFFSET, STARTUP_BUBBLE_SCALE_GAP_FACTOR);
-  const area = getOverlaySafeArea(rawArea, bubbleGap);
-  const areaRight = area.x + area.width;
-  if (!petRect) {
-    return clampPanelRect({
-      x: area.x + Math.round((area.width - bubbleWidth) / 2),
-      y: area.y,
-      width: bubbleWidth,
-      height: bubbleHeight
-    }, area, bubbleWidth, bubbleHeight);
-  }
-
-  const avoidRect = expandRect(petRect, getScaledOverlayCollisionPadding());
-  const centeredX = petRect.x + Math.round((petRect.width - bubbleWidth) / 2);
-  const sideY = Math.round(petRect.y);
-  const candidates = [
-    {
-      kind: "top",
-      rect: {
-        x: clamp(centeredX, area.x, areaRight - bubbleWidth),
-        y: Math.round(avoidRect.y - bubbleHeight - bubbleGap),
-        width: bubbleWidth,
-        height: bubbleHeight
-      }
-    },
-    {
-      kind: "right",
-      rect: {
-        x: Math.round(avoidRect.x + avoidRect.width + bubbleGap),
-        y: sideY,
-        width: bubbleWidth,
-        height: bubbleHeight
-      }
-    },
-    {
-      kind: "left",
-      rect: {
-        x: Math.round(avoidRect.x - bubbleWidth - bubbleGap),
-        y: sideY,
-        width: bubbleWidth,
-        height: bubbleHeight
-      }
-    }
-  ];
-
-  if (rectFitsInArea(candidates[0].rect, area) && !rectsOverlap(candidates[0].rect, avoidRect)) {
-    return candidates[0].rect;
-  }
-
-  const rightFits = rectFitsInArea(candidates[1].rect, area) && !rectsOverlap(candidates[1].rect, avoidRect);
-  const leftFits = rectFitsInArea(candidates[2].rect, area) && !rectsOverlap(candidates[2].rect, avoidRect);
-  if (rightFits && leftFits) {
-    const rightSpace = areaRight - (avoidRect.x + avoidRect.width);
-    const leftSpace = avoidRect.x - area.x;
-    return rightSpace >= leftSpace ? candidates[1].rect : candidates[2].rect;
-  } else if (rightFits) {
-    return candidates[1].rect;
-  } else if (leftFits) {
-    return candidates[2].rect;
-  }
-
-  const clampedCandidates = candidates.map((candidate) => {
-    const clamped = clampPanelRect(candidate.rect, area, bubbleWidth, bubbleHeight);
-    return {
-      ...candidate,
-      rect: clamped,
-      shift: Math.abs(clamped.x - candidate.rect.x) + Math.abs(clamped.y - candidate.rect.y)
-    };
-  });
-  const nonOverlappingCandidates = clampedCandidates.filter((candidate) => !rectsOverlap(candidate.rect, avoidRect));
-  if (nonOverlappingCandidates.length > 0) {
-    return pickBestOverlayCandidate(nonOverlappingCandidates, candidates[0].rect, area, rawArea, Math.max(8, Math.round(bubbleGap * 0.45)));
-  }
-
-  return clampPanelRect(candidates[0].rect, area, bubbleWidth, bubbleHeight);
-}
-
-function getBubbleAnchorRect() {
-  if (taskbarWalkRunway && isTaskbarWalkActive()) {
-    return getTaskbarWalkOverlayPetRect() || getCurrentPetVisualRect() || getVisiblePetRect() || getPetSpriteRect();
-  }
-  return getRenderedFrameVisibleRect() || getVisiblePetRect() || getPetSpriteRect();
-}
-
-function refreshStartupBubbleAnchor() {
-  startupBubbleAnchorRect = cloneRect(getBubbleAnchorRect());
-}
-
-function resizeStartupBubble(width, height = STARTUP_BUBBLE_HEIGHT) {
-  if (!startupBubbleWindow || startupBubbleWindow.isDestroyed() || !startupBubbleWindow.isVisible()) {
-    return;
-  }
-
-  startupBubbleWindow.__lastWidth = width;
-  startupBubbleWindow.__lastHeight = height;
-  const bubbleBounds = getStartupBubblePosition(width, height);
-  startupBubbleWindow.setBounds(bubbleBounds, false);
-  log(`startup-bubble resize target=${bubbleBounds.x},${bubbleBounds.y},${bubbleBounds.width},${bubbleBounds.height}`);
-}
-
-function repositionStartupBubbleWindow({ refreshAnchor = false } = {}) {
-  if (!startupBubbleWindow || startupBubbleWindow.isDestroyed() || !startupBubbleWindow.isVisible()) {
-    return;
-  }
-  if (refreshAnchor || !startupBubbleAnchorRect) {
-    refreshStartupBubbleAnchor();
-  }
-  const width = startupBubbleWindow.__lastWidth || startupBubbleWindow.getBounds().width;
-  const height = startupBubbleWindow.__lastHeight || startupBubbleWindow.getBounds().height;
-  const bubbleBounds = getStartupBubblePosition(width, height);
-  startupBubbleWindow.setBounds(bubbleBounds, false);
-}
-
-function showStartupBubble() {
-  showBubbleMessage(sharedGreetings[0]);
-}
-
-function showBubbleMessage(message = null, durationMs = STARTUP_BUBBLE_DURATION_MS, options = {}) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return false;
-  }
-  if (isWalkingState()) {
-    pendingWalkBubbleMessage = { message, durationMs, options };
-    return true;
-  }
-  const isMenuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
-  const isHoverVisible = hoverWindow && !hoverWindow.isDestroyed() && hoverWindow.isVisible();
-  if (isMenuVisible || isHoverVisible) {
-    if (!options.forceHideOverlays) {
-      return false;
-    }
-    hidePetMenu();
-    hideHoverPanel();
-  }
-
-  if (!startupBubbleWindow || startupBubbleWindow.isDestroyed()) {
-    createStartupBubbleWindow();
-  }
-
-  startupBubbleWindow.__pendingMessage = message;
-  refreshStartupBubbleAnchor();
-  if (Number.isFinite(options.suppressHoverMs) && options.suppressHoverMs > 0) {
-    bubbleHoverSuppressedUntil = Date.now() + Math.round(options.suppressHoverMs);
-  }
-  const bubbleBounds = getStartupBubblePosition();
-  startupBubbleWindow.setBounds(bubbleBounds, false);
-  log(`startup-bubble target=${bubbleBounds.x},${bubbleBounds.y},${bubbleBounds.width},${bubbleBounds.height}`);
-  startupBubbleWindow.showInactive();
-  if (startupBubbleWindowReady && !startupBubbleWindow.webContents.isLoading()) {
-    safeSend(startupBubbleWindow, "pet:bubble-data", {
-      ...buildPetConfig(),
-      message
-    });
-  }
-
-  if (startupBubbleTimer) {
-    clearTimeout(startupBubbleTimer);
-  }
-  startupBubbleHideAt = Date.now() + durationMs;
-  startupBubbleTimer = setTimeout(() => {
-    startupBubbleTimer = null;
-    hideStartupBubble({ force: true });
-    restoreHoverAfterBubbleIfNeeded();
-  }, durationMs);
-  return true;
-}
-
-function hideStartupBubble(options = {}) {
-  if (options.force) {
-    pendingWalkBubbleMessage = null;
-  }
-  if (!options.force && startupBubbleTimer && Date.now() < startupBubbleHideAt) {
-    return;
-  }
-  if (startupBubbleTimer) {
-    clearTimeout(startupBubbleTimer);
-    startupBubbleTimer = null;
-  }
-  startupBubbleHideAt = 0;
-  startupBubbleAnchorRect = null;
-  if (!startupBubbleWindow || startupBubbleWindow.isDestroyed()) {
-    return;
-  }
-  startupBubbleWindow.hide();
-}
-
-function showPendingWalkBubbleMessage() {
-  if (!pendingWalkBubbleMessage || activeState !== DEFAULT_STATE) {
-    return;
-  }
-  const next = pendingWalkBubbleMessage;
-  pendingWalkBubbleMessage = null;
-  showBubbleMessage(next.message, next.durationMs, next.options);
-}
-
-function isStartupBubbleVisible() {
-  return Boolean(startupBubbleWindow && !startupBubbleWindow.isDestroyed() && startupBubbleWindow.isVisible());
-}
-
 function restoreHoverAfterBubbleIfNeeded() {
   if (!petWindow || petWindow.isDestroyed() || dragState || shouldSuppressHoverPanel()) {
     return;
   }
-  const isMenuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
+  const menuWin = getMenuWindow();
+  const isMenuVisible = menuWin && !menuWin.isDestroyed() && menuWin.isVisible();
   if (isMenuVisible || !isCursorInsideHoverIntentTarget()) {
     return;
   }
   beginHoverFromPointer();
-}
-
-function getBubbleHoverSuppressionMs() {
-  return Math.max(0, bubbleHoverSuppressedUntil - Date.now());
 }
 
 function getWindowDockHoverSuppressionMs() {
@@ -3811,7 +3804,7 @@ function shouldSuppressHoverPanel() {
     || getBubbleHoverSuppressionMs() > 0
     || getWindowDockHoverSuppressionMs() > 0
     || (petRuntimeConfig.variant === "tabby" && activeState === STATE_HISS)
-    || (customizationWindow && !customizationWindow.isDestroyed() && customizationWindow.isVisible());
+    || isCustomizationVisible();
 }
 
 function scheduleRandomGreeting(delayMs = null) {
@@ -3862,362 +3855,10 @@ function showRandomActionGreeting() {
 
 // cloneRect 已从 shared/bounds.cjs 导入（原本地版本调用 isResolvedOverlayPetRect，导入版本已内联等价检查）
 
-function buildMenuPlacementSnapshot(anchorRect = menuAnchorRect) {
-  const baseAnchorRect = cloneRect(anchorRect || getMenuAnchorRect(null));
-  if (!baseAnchorRect) {
-    return null;
-  }
-
-  const frameInfo = getRenderedFrameInfo();
-  const snapshotState = frameInfo?.stateId || activeState;
-  const snapshotDirection = Number.isFinite(frameInfo?.direction) ? frameInfo.direction : walkDirection;
-  const snapshotFrameIndex = Number.isFinite(frameInfo?.frameIndex) ? Math.max(0, Math.round(frameInfo.frameIndex)) : 0;
-  const frameRect = isResolvedOverlayPetRect(baseAnchorRect)
-    ? baseAnchorRect
-    : getFrameVisibleRectFromBounds(
-      baseAnchorRect,
-      snapshotState,
-      snapshotFrameIndex,
-      snapshotDirection
-    );
-  const petRect = cloneRect(frameRect || getVisiblePetRectFromBounds(baseAnchorRect, snapshotState, snapshotDirection));
-  if (!petRect) {
-    return null;
-  }
-
-  return {
-    anchorRect: baseAnchorRect,
-    petRect,
-    stateId: snapshotState,
-    direction: snapshotDirection,
-    frameIndex: snapshotFrameIndex
-  };
-}
-
-function getMenuPlacementArea(area, surface, edgeGap) {
-  const safeGap = Math.max(0, Math.round(edgeGap));
-  const isWindowSurface = surface?.type === "window";
-  const inset = {
-    left: safeGap,
-    right: safeGap,
-    top: safeGap,
-    bottom: isWindowSurface ? safeGap : Math.max(safeGap, safeGap + 4)
-  };
-  const width = Math.max(1, area.width - inset.left - inset.right);
-  const height = Math.max(1, area.height - inset.top - inset.bottom);
-  if (width <= 36 || height <= 36) {
-    return area;
-  }
-  return {
-    x: area.x + inset.left,
-    y: area.y + inset.top,
-    width,
-    height
-  };
-}
-
-function getMenuCandidateGaps(rect, kind, petRect) {
-  const horizontalGap = kind.startsWith("right")
-    ? rect.x - (petRect.x + petRect.width)
-    : petRect.x - (rect.x + rect.width);
-  const verticalGap = kind.endsWith("up")
-    ? petRect.y - (rect.y + rect.height)
-    : rect.y - (petRect.y + petRect.height);
-  return {
-    horizontal: Math.round(horizontalGap),
-    vertical: Math.round(verticalGap)
-  };
-}
-
-function isMenuCandidateSpacingValid(rect, kind, petRect, minHorizontalGap, minVerticalGap) {
-  const gaps = getMenuCandidateGaps(rect, kind, petRect);
-  return gaps.horizontal >= minHorizontalGap && gaps.vertical >= minVerticalGap;
-}
-
-function scoreMenuCandidate(entry, petRect, minHorizontalGap, minVerticalGap, area) {
-  const gaps = getMenuCandidateGaps(entry.rect, entry.kind, petRect);
-  const horizontalShortfall = Math.max(0, minHorizontalGap - gaps.horizontal);
-  const verticalShortfall = Math.max(0, minVerticalGap - gaps.vertical);
-  const edgeDistance = getRectClosestEdgeDistance(entry.rect, area);
-  const edgePenalty = edgeDistance < 8 ? (8 - edgeDistance) * 36 : 0;
-  return entry.priority * 1200
-    + horizontalShortfall * 120
-    + verticalShortfall * 120
-    + Math.max(0, entry.shift || 0) * 12
-    + edgePenalty;
-}
-
-function getMenuPosition(anchorRect = menuAnchorRect, height = currentMenuHeight) {
-  const snapshot = menuPlacementSnapshot
-    && menuPlacementSnapshot.anchorRect
-    && anchorRect
-    && menuPlacementSnapshot.anchorRect.x === Math.round(anchorRect.x)
-    && menuPlacementSnapshot.anchorRect.y === Math.round(anchorRect.y)
-    && menuPlacementSnapshot.anchorRect.width === Math.round(anchorRect.width)
-    && menuPlacementSnapshot.anchorRect.height === Math.round(anchorRect.height)
-      ? menuPlacementSnapshot
-      : null;
-  const fullPetRect = snapshot?.anchorRect || getMenuAnchorRect(anchorRect);
-  const petRect = snapshot?.petRect || getOverlayPlacementRect(fullPetRect);
-  const baseGap = getOverlayVisualGap(PET_MENU_GAP_OFFSET, PET_MENU_SCALE_GAP_FACTOR);
-  const horizontalGap = clamp(Math.round(baseGap * 0.95), 14, 36);
-  const verticalGap = clamp(Math.round(baseGap * 0.7), 10, 28);
-  const minHorizontalGap = Math.max(10, Math.round(horizontalGap * 0.78));
-  const minVerticalGap = Math.max(8, Math.round(verticalGap * 0.78));
-  const edgeGap = clamp(Math.round(verticalGap * 0.7), 8, 16);
-  const avoidRect = expandRect(petRect, getScaledOverlayCollisionPadding());
-  const surface = getCurrentSurface();
-  const rawArea = getOverlayWorkArea(petRect);
-  const area = getMenuPlacementArea(rawArea, surface, edgeGap);
-  const menuHeight = clamp(Math.ceil(Number(height) || PET_MENU_COLLAPSED_HEIGHT), PET_MENU_MIN_HEIGHT, PET_MENU_MAX_HEIGHT);
-  const candidates = [
-    {
-      kind: "right-up",
-      x: petRect.x + petRect.width + horizontalGap,
-      y: petRect.y - menuHeight - verticalGap,
-      width: PET_MENU_WIDTH,
-      height: menuHeight,
-      priority: 0
-    },
-    {
-      kind: "left-up",
-      x: petRect.x - PET_MENU_WIDTH - horizontalGap,
-      y: petRect.y - menuHeight - verticalGap,
-      width: PET_MENU_WIDTH,
-      height: menuHeight,
-      priority: 1
-    },
-    {
-      kind: "right-down",
-      x: petRect.x + petRect.width + horizontalGap,
-      y: petRect.y + petRect.height + verticalGap,
-      width: PET_MENU_WIDTH,
-      height: menuHeight,
-      priority: 2
-    },
-    {
-      kind: "left-down",
-      x: petRect.x - PET_MENU_WIDTH - horizontalGap,
-      y: petRect.y + petRect.height + verticalGap,
-      width: PET_MENU_WIDTH,
-      height: menuHeight,
-      priority: 3
-    }
-  ];
-
-  const normalizedCandidates = candidates.map((candidate) => ({
-    ...candidate,
-    rect: {
-      x: Math.round(candidate.x),
-      y: Math.round(candidate.y),
-      width: PET_MENU_WIDTH,
-      height: menuHeight
-    }
-  }));
-
-  for (const candidate of normalizedCandidates) {
-    if (!rectFitsInArea(candidate.rect, area)) {
-      continue;
-    }
-    if (rectsOverlap(candidate.rect, avoidRect)) {
-      continue;
-    }
-    if (!isMenuCandidateSpacingValid(candidate.rect, candidate.kind, petRect, minHorizontalGap, minVerticalGap)) {
-      continue;
-    }
-    return candidate.rect;
-  }
-
-  const clampedCandidates = normalizedCandidates.map((candidate) => {
-    const clamped = clampPanelRect(candidate.rect, area, PET_MENU_WIDTH, menuHeight);
-    const shift = Math.abs(clamped.x - candidate.rect.x) + Math.abs(clamped.y - candidate.rect.y);
-    return {
-      ...candidate,
-      rect: clamped,
-      shift
-    };
-  });
-
-  for (const candidate of clampedCandidates) {
-    if (rectsOverlap(candidate.rect, avoidRect)) {
-      continue;
-    }
-    if (!isMenuCandidateSpacingValid(candidate.rect, candidate.kind, petRect, minHorizontalGap, minVerticalGap)) {
-      continue;
-    }
-    return candidate.rect;
-  }
-
-  const nonOverlappingCandidates = clampedCandidates.filter((candidate) => !rectsOverlap(candidate.rect, avoidRect));
-  if (nonOverlappingCandidates.length > 0) {
-    return nonOverlappingCandidates
-      .map((candidate) => ({
-        rect: candidate.rect,
-        score: scoreMenuCandidate(candidate, petRect, minHorizontalGap, minVerticalGap, area)
-      }))
-      .sort((left, right) => left.score - right.score)[0].rect;
-  }
-
-  for (const candidate of candidates) {
-    const forced = clampPanelRect(candidate, area, PET_MENU_WIDTH, menuHeight);
-    if (!rectsOverlap(forced, avoidRect)) {
-      return forced;
-    }
-  }
-
-  return clampPanelRect(candidates[0], area, PET_MENU_WIDTH, menuHeight);
-}
-
-function getHoverPosition(anchorRect = hoverAnchorRect) {
-  const fullPetRect = getHoverAnchorRect(anchorRect);
-  const petRect = getOverlayPlacementRect(fullPetRect);
-  const avoidRect = getHoverAvoidRect(fullPetRect);
-  const panelGap = getOverlayVisualGap(HOVER_PANEL_GAP_OFFSET, HOVER_PANEL_SCALE_GAP_FACTOR);
-  const rawArea = getOverlayWorkArea(avoidRect);
-  const area = getOverlaySafeArea(rawArea, panelGap);
-  const areaRight = area.x + area.width;
-  const areaBottom = area.y + area.height;
-  const verticalOffset = getOverlayVerticalOffset(HOVER_PANEL_VERTICAL_OFFSET);
-  const centeredX = petRect.x + Math.round((petRect.width - HOVER_PANEL_WIDTH) / 2);
-  const sideY = petRect.y + Math.round((petRect.height - HOVER_PANEL_HEIGHT) / 2) + verticalOffset;
-
-  const above = {
-    x: clamp(centeredX, area.x, areaRight - HOVER_PANEL_WIDTH),
-    y: Math.round(avoidRect.y - HOVER_PANEL_HEIGHT - panelGap + verticalOffset),
-    width: HOVER_PANEL_WIDTH,
-    height: HOVER_PANEL_HEIGHT
-  };
-  if (above.y >= area.y && !rectsOverlap(above, avoidRect)) {
-    return above;
-  }
-
-  const right = {
-    x: Math.round(avoidRect.x + avoidRect.width + panelGap),
-    y: clamp(sideY, area.y, areaBottom - HOVER_PANEL_HEIGHT),
-    width: HOVER_PANEL_WIDTH,
-    height: HOVER_PANEL_HEIGHT
-  };
-  const left = {
-    x: Math.round(avoidRect.x - HOVER_PANEL_WIDTH - panelGap),
-    y: clamp(sideY, area.y, areaBottom - HOVER_PANEL_HEIGHT),
-    width: HOVER_PANEL_WIDTH,
-    height: HOVER_PANEL_HEIGHT
-  };
-  const rightFits = right.x + HOVER_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect);
-  const leftFits = left.x >= area.x && !rectsOverlap(left, avoidRect);
-  if (rightFits && leftFits) {
-    const rightSpace = areaRight - (avoidRect.x + avoidRect.width);
-    const leftSpace = avoidRect.x - area.x;
-    return rightSpace >= leftSpace ? right : left;
-  } else if (rightFits) {
-    return right;
-  } else if (leftFits) {
-    return left;
-  }
-
-  const below = {
-    x: clamp(centeredX, area.x, areaRight - HOVER_PANEL_WIDTH),
-    y: Math.round(avoidRect.y + avoidRect.height + panelGap + verticalOffset),
-    width: HOVER_PANEL_WIDTH,
-    height: HOVER_PANEL_HEIGHT
-  };
-  if (below.y + HOVER_PANEL_HEIGHT <= areaBottom && !rectsOverlap(below, avoidRect)) {
-    return below;
-  }
-
-  const preferred = {
-    x: Math.round(above.x),
-    y: Math.round(above.y),
-    width: HOVER_PANEL_WIDTH,
-    height: HOVER_PANEL_HEIGHT
-  };
-  const fallbackCandidates = [above, right, left, below]
-    .map((candidate) => {
-      const rounded = {
-        x: Math.round(candidate.x),
-        y: Math.round(candidate.y),
-        width: HOVER_PANEL_WIDTH,
-        height: HOVER_PANEL_HEIGHT
-      };
-      const clamped = clampPanelRect(rounded, area, HOVER_PANEL_WIDTH, HOVER_PANEL_HEIGHT);
-      const shift = Math.abs(clamped.x - rounded.x) + Math.abs(clamped.y - rounded.y);
-      return { rect: clamped, shift };
-    })
-    .filter((entry) => !rectsOverlap(entry.rect, avoidRect));
-  if (fallbackCandidates.length > 0) {
-    return pickBestOverlayCandidate(
-      fallbackCandidates,
-      preferred,
-      area,
-      rawArea,
-      Math.max(8, Math.round(panelGap * 0.45))
-    );
-  }
-
-  const forcedRightX = Math.min(Math.max(avoidRect.x + avoidRect.width + panelGap, area.x), areaRight - HOVER_PANEL_WIDTH);
-  const forcedLeftX = Math.max(Math.min(avoidRect.x - HOVER_PANEL_WIDTH - panelGap, areaRight - HOVER_PANEL_WIDTH), area.x);
-  const forcedSide = avoidRect.x - area.x > areaRight - (avoidRect.x + avoidRect.width)
-    ? { ...left, x: forcedLeftX }
-    : { ...right, x: forcedRightX };
-  const forcedY = avoidRect.y >= area.y + Math.round(area.height / 2)
-    ? Math.max(area.y, avoidRect.y - HOVER_PANEL_HEIGHT - panelGap + verticalOffset)
-    : Math.min(areaBottom - HOVER_PANEL_HEIGHT, avoidRect.y + avoidRect.height + panelGap + verticalOffset);
-  return {
-    x: Math.round(forcedSide.x),
-    y: Math.round(forcedY),
-    width: HOVER_PANEL_WIDTH,
-    height: HOVER_PANEL_HEIGHT
-  };
-}
-
-function repositionMenuWindow() {
-  if (!menuWindow || menuWindow.isDestroyed() || !menuWindow.isVisible()) {
-    return;
-  }
-  setFixedWindowBounds(menuWindow, getMenuPosition(), PET_MENU_WIDTH, currentMenuHeight, "menu");
-}
-
-function repositionHoverWindow() {
-  if (!hoverWindow || hoverWindow.isDestroyed() || !hoverWindow.isVisible()) {
-    return;
-  }
-  setFixedWindowBounds(hoverWindow, getHoverPosition(), HOVER_PANEL_WIDTH, HOVER_PANEL_HEIGHT, "hover");
-}
-
 function repositionOverlays() {
   repositionMenuWindow();
   repositionHoverWindow();
   repositionStartupBubbleWindow();
-}
-
-function refreshHoverAnchorAfterScale() {
-  if (!hoverWindow || hoverWindow.isDestroyed() || !hoverWindow.isVisible()) {
-    return;
-  }
-
-  hoverFrozenPetRect = null;
-  hoverAnchorRect = freezeHoverPetRect();
-  repositionHoverWindow();
-}
-
-function refreshMenuAnchorAfterScale() {
-  if (!menuWindow || menuWindow.isDestroyed() || !menuWindow.isVisible()) {
-    return;
-  }
-
-  menuFrozenPetRect = null;
-  menuAnchorRect = freezeMenuPetRect();
-  menuPlacementSnapshot = buildMenuPlacementSnapshot(menuAnchorRect);
-  repositionMenuWindow();
-}
-
-function refreshCustomizationAnchorAfterScale() {
-  if (!customizationWindow || customizationWindow.isDestroyed() || !customizationWindow.isVisible()) {
-    return;
-  }
-  customizationFrozenPetRect = null;
-  customizationAnchorRect = freezeCustomizationPetRect();
-  setFixedWindowBounds(customizationWindow, getCustomizationPosition(customizationAnchorRect), CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT, "customization");
 }
 
 // isPointInsideRect 已从 shared/bounds.cjs 导入
@@ -4226,54 +3867,11 @@ function refreshCustomizationAnchorAfterScale() {
 
 // rectFitsInArea 已从 shared/bounds.cjs 导入
 
-function getOverlaySafeArea(area, referenceGap = OVERLAY_BASE_GAP) {
-  const inset = clamp(Math.round(Math.max(8, referenceGap * 0.55)), 8, 18);
-  if (area.width <= inset * 2 + 40 || area.height <= inset * 2 + 40) {
-    return area;
-  }
-  return {
-    x: area.x + inset,
-    y: area.y + inset,
-    width: Math.max(1, area.width - inset * 2),
-    height: Math.max(1, area.height - inset * 2)
-  };
-}
-
 // getRectCenter 已从 shared/bounds.cjs 导入
 
 // getRectCenterDistance 已从 shared/bounds.cjs 导入
 
 // getRectClosestEdgeDistance 已从 shared/bounds.cjs 导入
-
-function pickBestOverlayCandidate(entries, preferredRect, safeArea, rawArea, minEdgeGap = 8) {
-  if (!entries || entries.length === 0) {
-    return null;
-  }
-  return entries
-    .map((entry) => {
-      const centerDistance = getRectCenterDistance(entry.rect, preferredRect);
-      const edgeDistance = getRectClosestEdgeDistance(entry.rect, rawArea);
-      const edgePenalty = edgeDistance < minEdgeGap ? (minEdgeGap - edgeDistance) * 16 : 0;
-      const clampPenalty = Math.max(0, entry.shift || 0) * 10;
-      const safeAreaPenalty = rectFitsInArea(entry.rect, safeArea) ? 0 : 1200;
-      return {
-        rect: entry.rect,
-        score: clampPenalty + centerDistance + edgePenalty + safeAreaPenalty
-      };
-    })
-    .sort((a, b) => a.score - b.score)[0].rect;
-}
-
-function clampPanelRect(rect, area, width = rect.width, height = rect.height) {
-  const maxX = area.x + Math.max(0, area.width - width);
-  const maxY = area.y + Math.max(0, area.height - height);
-  return {
-    x: clamp(Math.round(rect.x), area.x, maxX),
-    y: clamp(Math.round(rect.y), area.y, maxY),
-    width,
-    height
-  };
-}
 
 function isCursorInsideSpriteRect() {
   const rect = getPetSpriteRect();
@@ -4294,535 +3892,9 @@ function isCursorInsideHoverIntentTarget() {
   return isCursorInsidePetVisibleRect();
 }
 
-function isCursorInsideHoverPanel() {
-  if (!hoverWindow || hoverWindow.isDestroyed() || !hoverWindow.isVisible()) {
-    return false;
-  }
-  return isPointInsideRect(screen.getCursorScreenPoint(), hoverWindow.getBounds());
-}
-
-function isCursorInsidePetForMenu() {
-  const point = screen.getCursorScreenPoint();
-  const padding = getOverlayVisualGap(PET_MENU_GAP_OFFSET, PET_MENU_SCALE_GAP_FACTOR);
-  return isCursorInsidePetVisibleRect()
-    || isPointInsideRect(point, expandRect(getMenuAnchorRect(), padding));
-}
-
-function isCursorInsideMenuPanel() {
-  if (!menuWindow || menuWindow.isDestroyed() || !menuWindow.isVisible()) {
-    return false;
-  }
-  return isPointInsideRect(screen.getCursorScreenPoint(), menuWindow.getBounds());
-}
-
-function scheduleHidePetMenu() {
-  if (menuHideTimer) {
-    clearTimeout(menuHideTimer);
-  }
-  menuHideTimer = setTimeout(() => {
-    menuHideTimer = null;
-    if (isCursorInsidePetForMenu() || isPointerOverMenuPanel || isCursorInsideMenuPanel()) {
-      return;
-    }
-    hidePetMenu();
-  }, PET_MENU_HIDE_DELAY_MS);
-}
-
-function updateMenuVisibilityFromCursor() {
-  if (!menuWindow || menuWindow.isDestroyed() || !menuWindow.isVisible()) {
-    return;
-  }
-  if (isCursorInsidePetForMenu() || isPointerOverMenuPanel || isCursorInsideMenuPanel()) {
-    if (menuHideTimer) {
-      clearTimeout(menuHideTimer);
-      menuHideTimer = null;
-    }
-    return;
-  }
-  if (!menuHideTimer) {
-    scheduleHidePetMenu();
-  }
-}
-
-function updateHoverVisibilityFromCursor() {
-  updatePetWindowMousePassthrough();
-  const cursorInsideSprite = isCursorInsideHoverIntentTarget();
-  const menuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
-  if (shouldSuppressHoverPanel()) {
-    return;
-  }
-  if (!hoverWindow || hoverWindow.isDestroyed() || !hoverWindow.isVisible()) {
-    if (!dragState && !menuVisible && cursorInsideSprite && !hoverIntentTimer) {
-      beginHoverFromPointer();
-    } else if (!cursorInsideSprite) {
-      isPointerOverPet = false;
-      if (hoverIntentTimer) {
-        clearHoverIntent();
-      }
-    }
-    return;
-  }
-  const cursorInsideHover = isCursorInsideHoverPanel();
-  if (cursorInsideSprite || isPointerOverHoverPanel || cursorInsideHover) {
-    if (cursorInsideSprite) {
-      isPointerOverPet = true;
-    }
-    if (hoverHideTimer) {
-      clearTimeout(hoverHideTimer);
-      hoverHideTimer = null;
-    }
-    return;
-  }
-
-  isPointerOverPet = false;
-  if (!hoverHideTimer) {
-    scheduleHideHoverPanel();
-  }
-}
-
-function startHoverPolling() {
-  if (hoverPollTimer) {
-    return;
-  }
-  hoverPollTimer = setInterval(() => {
-    if (!petWindow || petWindow.isDestroyed()) {
-      return;
-    }
-    updateMenuVisibilityFromCursor();
-    updateHoverVisibilityFromCursor();
-  }, HOVER_POLL_INTERVAL_MS);
-}
-
-function stopHoverPolling() {
-  if (!hoverPollTimer) {
-    return;
-  }
-  clearInterval(hoverPollTimer);
-  hoverPollTimer = null;
-}
-
-function createMenuWindow() {
-  menuWindowReady = false;
-  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
-  menuWindow = createOverlayWindow({
-    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
-    hash: "menu",
-    width: PET_MENU_WIDTH,
-    height: getQuickMenuHeight(),
-    movable: false,
-    focusable: true,
-    onReady: () => {
-      menuWindowReady = true;
-      if (menuWindow?.isVisible()) {
-        safeSend(menuWindow, "pet:menu-data", buildPetConfig());
-      }
-    },
-    onBlur: () => {
-      scheduleHidePetMenu();
-    },
-    onClose: () => {
-      removeInteractionPause("menu");
-      menuWindow = null;
-      menuWindowReady = false;
-      lastMenuBounds = null;
-      menuAnchorRect = null;
-      menuFrozenPetRect = null;
-      menuPlacementSnapshot = null;
-      isPointerOverMenuPanel = false;
-    }
-  });
-}
-
-function resizePetMenu(height) {
-  if (!menuWindow || menuWindow.isDestroyed() || !menuWindow.isVisible()) {
-    return;
-  }
-  const nextHeight = clamp(Math.ceil(Number(height) || getQuickMenuHeight()), PET_MENU_MIN_HEIGHT, PET_MENU_MAX_HEIGHT);
-  currentMenuHeight = nextHeight;
-  setFixedWindowBounds(menuWindow, getMenuPosition(menuAnchorRect, currentMenuHeight), PET_MENU_WIDTH, currentMenuHeight, "menu");
-}
-
-function createHoverWindow() {
-  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
-  hoverWindow = createOverlayWindow({
-    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
-    hash: "hover",
-    width: HOVER_PANEL_WIDTH,
-    height: HOVER_PANEL_HEIGHT,
-    movable: false,
-    focusable: false,
-    onReady: () => {
-      hoverWindowReady = true;
-      if (hoverWindow?.isVisible()) {
-        safeSend(hoverWindow, "pet:hover-data", buildPetConfig());
-      }
-    },
-    onBlur: () => {
-      if (!isCursorInsideHoverPanel() && !isCursorInsideSpriteRect()) {
-        scheduleHideHoverPanel();
-      }
-    },
-    onClose: () => {
-      removeInteractionPause("hover");
-      removeInteractionPause("hover-intent");
-      hoverWindow = null;
-      hoverWindowReady = false;
-      lastHoverBounds = null;
-      isPointerOverHoverPanel = false;
-    }
-  });
-}
-
-function showPetMenu() {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  if (customizationWindow && !customizationWindow.isDestroyed() && customizationWindow.isVisible()) {
-    return;
-  }
-  refreshAutoStartCacheAsync();
-  if (menuHideTimer) {
-    clearTimeout(menuHideTimer);
-    menuHideTimer = null;
-  }
-  clearHoverIntent();
-  addInteractionPause("menu");
-  hideStartupBubble({ force: true });
-  hideHoverPanel();
-  menuFrozenPetRect = freezeMenuPetRect();
-  menuAnchorRect = menuFrozenPetRect;
-  menuPlacementSnapshot = buildMenuPlacementSnapshot(menuAnchorRect);
-  currentMenuHeight = getQuickMenuHeight();
-  if (!menuWindow || menuWindow.isDestroyed()) {
-    createMenuWindow();
-  }
-
-  setFixedWindowBounds(menuWindow, getMenuPosition(menuAnchorRect, currentMenuHeight), PET_MENU_WIDTH, currentMenuHeight, "menu");
-  menuWindow.show();
-  menuWindow.focus();
-  if (menuWindowReady && !menuWindow.webContents.isLoading()) {
-    safeSend(menuWindow, "pet:menu-data", buildPetConfig());
-  }
-}
-
-function showHoverPanel() {
-  if (!petWindow || petWindow.isDestroyed() || dragState) {
-    return;
-  }
-  if (shouldSuppressHoverPanel()) {
-    return;
-  }
-
-  clearHoverIntent({ keepFrozenRect: true });
-  addInteractionPause("hover");
-  if (hoverHideTimer) {
-    clearTimeout(hoverHideTimer);
-    hoverHideTimer = null;
-  }
-  hideStartupBubble();
-  hidePetMenu();
-  hoverAnchorRect = hoverFrozenPetRect || freezeHoverPetRect();
-
-  if (!hoverWindow || hoverWindow.isDestroyed()) {
-    createHoverWindow();
-  }
-
-  setFixedWindowBounds(hoverWindow, getHoverPosition(hoverAnchorRect), HOVER_PANEL_WIDTH, HOVER_PANEL_HEIGHT, "hover");
-  hoverWindow.showInactive();
-  if (hoverWindowReady && !hoverWindow.webContents.isLoading()) {
-    safeSend(hoverWindow, "pet:hover-data", buildPetConfig());
-  }
-}
-
-function hidePetMenu() {
-  if (!menuWindow || menuWindow.isDestroyed()) {
-    removeInteractionPause("menu");
-    menuFrozenPetRect = null;
-    return;
-  }
-  if (menuHideTimer) {
-    clearTimeout(menuHideTimer);
-    menuHideTimer = null;
-  }
-  menuWindow.hide();
-  menuAnchorRect = null;
-  menuFrozenPetRect = null;
-  menuPlacementSnapshot = null;
-  isPointerOverMenuPanel = false;
-  currentMenuHeight = getQuickMenuHeight();
-  removeInteractionPause("menu");
-}
-
-function hideHoverPanel() {
-  if (!hoverWindow || hoverWindow.isDestroyed()) {
-    removeInteractionPause("hover");
-    removeInteractionPause("hover-intent");
-    hoverFrozenPetRect = null;
-    return;
-  }
-  hoverWindow.hide();
-  hoverAnchorRect = null;
-  hoverFrozenPetRect = null;
-  isPointerOverHoverPanel = false;
-  removeInteractionPause("hover");
-  removeInteractionPause("hover-intent");
-}
-
-function scheduleHideHoverPanel() {
-  if (hoverHideTimer) {
-    clearTimeout(hoverHideTimer);
-  }
-  hoverHideTimer = setTimeout(() => {
-    hoverHideTimer = null;
-    if (dragState) {
-      hideHoverPanel();
-      return;
-    }
-    if (isPointerOverPet || isPointerOverHoverPanel || isCursorInsidePetVisibleRect() || isCursorInsideHoverPanel()) {
-      return;
-    }
-    hideHoverPanel();
-  }, HOVER_HIDE_DELAY_MS);
-}
-
-function freezeCustomizationPetRect() {
-  customizationFrozenPetRect = getCustomizationAnchorRect(null);
-  return customizationFrozenPetRect;
-}
-
-function getCustomizationAnchorRect(anchorRect = null) {
-  if (anchorRect) {
-    return anchorRect;
-  }
-  if (customizationFrozenPetRect) {
-    return customizationFrozenPetRect;
-  }
-  if (taskbarWalkRunway && isTaskbarWalkActive()) {
-    return getTaskbarWalkOverlayPetRect() || getPetSpriteRect() || getVisiblePetRect();
-  }
-  return getWindowRect(petWindow) || getPetSpriteRect() || getVisiblePetRect();
-}
-
-function createCustomizationWindow() {
-  customizationWindowReady = false;
-  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
-  customizationWindow = createOverlayWindow({
-    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
-    hash: "customization",
-    title: "联系作者",
-    width: CUSTOMIZATION_PANEL_WIDTH,
-    height: CUSTOMIZATION_PANEL_HEIGHT,
-    frame: true,
-    transparent: false,
-    hasShadow: true,
-    backgroundColor: "#fff9f0",
-    minimizable: false,
-    maximizable: false,
-    movable: false,
-    focusable: true,
-    onReady: () => {
-      customizationWindowReady = true;
-      customizationWindow.setMenu(null);
-      customizationWindow.setTitle("联系创作者");
-    },
-    onClose: () => {
-      removeInteractionPause("customization");
-      customizationWindow = null;
-      customizationWindowReady = false;
-      customizationAnchorRect = null;
-      customizationFrozenPetRect = null;
-    }
-  });
-}
-
-function showCustomizationPanel() {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  hidePetMenu();
-  hideHoverPanel();
-  addInteractionPause("customization");
-  customizationAnchorRect = freezeCustomizationPetRect();
-
-  if (!customizationWindow || customizationWindow.isDestroyed()) {
-    createCustomizationWindow();
-  }
-
-  setFixedWindowBounds(customizationWindow, getCustomizationPosition(customizationAnchorRect), CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT, "customization");
-  customizationWindow.show();
-  customizationWindow.focus();
-}
-
-function hideCustomizationPanel() {
-  if (!customizationWindow || customizationWindow.isDestroyed()) {
-    removeInteractionPause("customization");
-    customizationFrozenPetRect = null;
-    return;
-  }
-  customizationWindow.hide();
-  customizationAnchorRect = null;
-  customizationFrozenPetRect = null;
-  removeInteractionPause("customization");
-}
-
-function getCustomizationPosition(anchorRect = customizationAnchorRect) {
-  const fullPetRect = getCustomizationAnchorRect(anchorRect);
-  const petRect = getOverlayPlacementRect(fullPetRect);
-  const avoidRect = expandRect(petRect, getScaledOverlayCollisionPadding());
-  const panelGap = getOverlayVisualGap(0, HOVER_PANEL_SCALE_GAP_FACTOR);
-  const rawArea = getOverlayWorkArea(avoidRect);
-  const area = getOverlaySafeArea(rawArea, panelGap);
-  const areaRight = area.x + area.width;
-  const areaBottom = area.y + area.height;
-  const verticalOffset = getOverlayVerticalOffset(0);
-  const centeredX = petRect.x + Math.round((petRect.width - CUSTOMIZATION_PANEL_WIDTH) / 2);
-  const sideY = petRect.y + Math.round((petRect.height - CUSTOMIZATION_PANEL_HEIGHT) / 2) + verticalOffset;
-
-  const above = {
-    x: clamp(centeredX, area.x, areaRight - CUSTOMIZATION_PANEL_WIDTH),
-    y: Math.round(avoidRect.y - CUSTOMIZATION_PANEL_HEIGHT - panelGap + verticalOffset),
-    width: CUSTOMIZATION_PANEL_WIDTH,
-    height: CUSTOMIZATION_PANEL_HEIGHT
-  };
-  if (above.y >= area.y && !rectsOverlap(above, avoidRect)) {
-    return above;
-  }
-
-  const right = {
-    x: Math.round(avoidRect.x + avoidRect.width + panelGap),
-    y: clamp(sideY, area.y, areaBottom - CUSTOMIZATION_PANEL_HEIGHT),
-    width: CUSTOMIZATION_PANEL_WIDTH,
-    height: CUSTOMIZATION_PANEL_HEIGHT
-  };
-  const left = {
-    x: Math.round(avoidRect.x - CUSTOMIZATION_PANEL_WIDTH - panelGap),
-    y: clamp(sideY, area.y, areaBottom - CUSTOMIZATION_PANEL_HEIGHT),
-    width: CUSTOMIZATION_PANEL_WIDTH,
-    height: CUSTOMIZATION_PANEL_HEIGHT
-  };
-  const rightFits = right.x + CUSTOMIZATION_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect);
-  const leftFits = left.x >= area.x && !rectsOverlap(left, avoidRect);
-  if (rightFits && leftFits) {
-    const rightSpace = areaRight - (avoidRect.x + avoidRect.width);
-    const leftSpace = avoidRect.x - area.x;
-    return rightSpace >= leftSpace ? right : left;
-  } else if (rightFits) {
-    return right;
-  } else if (leftFits) {
-    return left;
-  }
-
-  const below = {
-    x: clamp(centeredX, area.x, areaRight - CUSTOMIZATION_PANEL_WIDTH),
-    y: Math.round(avoidRect.y + avoidRect.height + panelGap + verticalOffset),
-    width: CUSTOMIZATION_PANEL_WIDTH,
-    height: CUSTOMIZATION_PANEL_HEIGHT
-  };
-  if (below.y + CUSTOMIZATION_PANEL_HEIGHT <= areaBottom && !rectsOverlap(below, avoidRect)) {
-    return below;
-  }
-
-  const preferred = {
-    x: Math.round(above.x),
-    y: Math.round(above.y),
-    width: CUSTOMIZATION_PANEL_WIDTH,
-    height: CUSTOMIZATION_PANEL_HEIGHT
-  };
-  const fallbackCandidates = [above, right, left, below]
-    .map((candidate) => {
-      const rounded = {
-        x: Math.round(candidate.x),
-        y: Math.round(candidate.y),
-        width: CUSTOMIZATION_PANEL_WIDTH,
-        height: CUSTOMIZATION_PANEL_HEIGHT
-      };
-      const clamped = clampPanelRect(rounded, area, CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT);
-      const shift = Math.abs(clamped.x - rounded.x) + Math.abs(clamped.y - rounded.y);
-      return { rect: clamped, shift };
-    })
-    .filter((entry) => !rectsOverlap(entry.rect, avoidRect));
-  if (fallbackCandidates.length > 0) {
-    return pickBestOverlayCandidate(
-      fallbackCandidates,
-      preferred,
-      area,
-      rawArea,
-      Math.max(8, Math.round(panelGap * 0.45))
-    );
-  }
-
-  return clampPanelRect(preferred, area, CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT);
-}
-
-function beginHoverFromPointer() {
-  if (!isCursorInsideHoverIntentTarget()) {
-    isPointerOverPet = false;
-    clearHoverIntent();
-    return;
-  }
-  isPointerOverPet = true;
-  if (dragState) {
-    hideHoverPanel();
-    return;
-  }
-  if (hoverWindow && !hoverWindow.isDestroyed() && hoverWindow.isVisible()) {
-    if (hoverHideTimer) {
-      clearTimeout(hoverHideTimer);
-      hoverHideTimer = null;
-    }
-    return;
-  }
-  if (!hoverIntentTimer) {
-    scheduleHoverIntent();
-  }
-}
-
-function scheduleHoverIntent() {
-  clearHoverIntent();
-  if (dragState || shouldSuppressHoverPanel() || !isCursorInsideHoverIntentTarget()) {
-    return;
-  }
-  const taskbarWalkIntent = isTaskbarWalkActive();
-  if (!taskbarWalkIntent) {
-    addInteractionPause("hover-intent");
-    freezeHoverPetRect();
-  }
-  const menuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
-  if (menuVisible) {
-    hoverFrozenPetRect = null;
-    if (!taskbarWalkIntent) {
-      removeInteractionPause("hover-intent");
-    }
-    return;
-  }
-  if (WALK_DIAGNOSTICS_ENABLED) {
-    logWalkDiagnostic(`hover-intent schedule surface=${getCurrentSurface()?.type || "unknown"} activeState=${activeState} taskbarWalk=${taskbarWalkIntent}`);
-  }
-  const intentDelayMs = taskbarWalkIntent ? TASKBAR_WALK_HOVER_INTENT_DELAY_MS : HOVER_INTENT_DELAY_MS;
-  hoverIntentTimer = setTimeout(() => {
-    hoverIntentTimer = null;
-    if (dragState || shouldSuppressHoverPanel() || !isCursorInsideHoverIntentTarget()) {
-      hoverFrozenPetRect = null;
-      if (!taskbarWalkIntent) {
-        removeInteractionPause("hover-intent");
-      }
-      return;
-    }
-    const nextMenuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
-    if (nextMenuVisible) {
-      hoverFrozenPetRect = null;
-      if (!taskbarWalkIntent) {
-        removeInteractionPause("hover-intent");
-      }
-      return;
-    }
-    hideStartupBubble();
-    showHoverPanel();
-  }, intentDelayMs);
-}
-
 function togglePetMenu() {
-  if (menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible()) {
+  const menuWin = getMenuWindow();
+  if (menuWin && !menuWin.isDestroyed() && menuWin.isVisible()) {
     hidePetMenu();
   } else {
     showPetMenu();
@@ -4842,8 +3914,8 @@ function sendPetState() {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
-  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:state-changed", activeState);
-  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:direction-changed", walkDirection);
+  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:state-changed", activeState);
+  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:direction-changed", walkDirection);
   safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
   safeSend(petWindow, "pet:eye-tracking-look", lastEyeTrackingLook);
   sendStats();
@@ -4853,7 +3925,7 @@ function sendWalkDirection() {
   if (!petWindow || petWindow.isDestroyed()) {
     return;
   }
-  broadcastToWindows([petWindow, menuWindow, hoverWindow], "pet:direction-changed", walkDirection);
+  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:direction-changed", walkDirection);
 }
 
 function sendDragState(isDragging) {
@@ -5052,7 +4124,7 @@ function setState(state, shouldRecordInteraction = true) {
     clearTabbySleepPoseTimer();
   }
   if (previousState === STATE_WALK && activeState !== DEFAULT_STATE) {
-    pendingWalkBubbleMessage = null;
+    clearPendingWalkBubbleMessage();
   }
   if (getState(activeState)?.moving) {
     hideStartupBubble({ force: true });
@@ -6530,18 +5602,9 @@ app.on("before-quit", () => {
   stopIntimacyDecayTimer();
   clearHoverIntent();
   clearDragState({ notify: false });
-  if (startupBubbleTimer) {
-    clearTimeout(startupBubbleTimer);
-    startupBubbleTimer = null;
-  }
-  if (hoverHideTimer) {
-    clearTimeout(hoverHideTimer);
-    hoverHideTimer = null;
-  }
-  if (menuHideTimer) {
-    clearTimeout(menuHideTimer);
-    menuHideTimer = null;
-  }
+  clearStartupBubbleTimer();
+  clearHoverHideTimer();
+  clearMenuHideTimer();
   if (randomGreetingTimer) {
     clearTimeout(randomGreetingTimer);
     randomGreetingTimer = null;
@@ -6583,14 +5646,11 @@ ipcMain.on("pet:resize-menu", (_event, height) => {
   resizePetMenu(height);
 });
 ipcMain.on("pet:menu-panel-enter", () => {
-  isPointerOverMenuPanel = true;
-  if (menuHideTimer) {
-    clearTimeout(menuHideTimer);
-    menuHideTimer = null;
-  }
+  setIsPointerOverMenuPanel(true);
+  clearMenuHideTimer();
 });
 ipcMain.on("pet:menu-panel-leave", () => {
-  isPointerOverMenuPanel = false;
+  setIsPointerOverMenuPanel(false);
   scheduleHidePetMenu();
 });
 ipcMain.on("pet:resize-bubble", (_event, size) => {
@@ -6608,19 +5668,16 @@ ipcMain.on("pet:hover-leave", () => {
     return;
   }
 
-  isPointerOverPet = false;
+  setIsPointerOverPet(false);
   clearHoverIntent();
   scheduleHideHoverPanel();
 });
 ipcMain.on("pet:hover-panel-enter", () => {
-  isPointerOverHoverPanel = true;
-  if (hoverHideTimer) {
-    clearTimeout(hoverHideTimer);
-    hoverHideTimer = null;
-  }
+  setIsPointerOverHoverPanel(true);
+  clearHoverHideTimer();
 });
 ipcMain.on("pet:hover-panel-leave", () => {
-  isPointerOverHoverPanel = false;
+  setIsPointerOverHoverPanel(false);
   scheduleHideHoverPanel();
 });
 ipcMain.on("pet:hover-action", (_event, state) => {
@@ -6716,7 +5773,7 @@ ipcMain.on("pet:drag-start", (_event, point) => {
   if (!petWindow || petWindow.isDestroyed() || !isScreenPoint(point)) {
     return;
   }
-  if (customizationWindow && !customizationWindow.isDestroyed() && customizationWindow.isVisible()) {
+  if (isCustomizationVisible()) {
     return;
   }
 
@@ -6732,7 +5789,7 @@ ipcMain.on("pet:drag-start", (_event, point) => {
   hidePetMenu();
   hideHoverPanel();
   hideCustomizationPanel();
-  isPointerOverHoverPanel = false;
+  setIsPointerOverHoverPanel(false);
   const now = Date.now();
 
   dragState = {

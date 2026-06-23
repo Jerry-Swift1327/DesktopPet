@@ -3,7 +3,6 @@
 // 函数实现与 main.cjs 保持一致，窗口创建复用 overlay-window.cjs 的 createOverlayWindow。
 
 const { createOverlayWindow } = require("./overlay-window.cjs");
-const { normalizeBounds, boundsAreEqual } = require("../shared/bounds.cjs");
 
 function createHoverController(context) {
   const {
@@ -12,6 +11,7 @@ function createHoverController(context) {
     path,
     __dirname,
     process,
+    screen,
     // 应用基础
     getAppIconPath,
     getAppPageUrl,
@@ -39,6 +39,12 @@ function createHoverController(context) {
     rectFitsInArea,
     clampPanelRect,
     pickBestOverlayCandidate,
+    // 几何计算（从 overlay-geometry 注入）
+    getHoverPosition,
+    getHoverAnchorRect,
+    getHoverHitRect,
+    getHoverAvoidRect,
+    getHoverBodyHitPaddingForState,
     // 宠物精灵
     getPetSpriteRect,
     getVisiblePetRect,
@@ -52,8 +58,9 @@ function createHoverController(context) {
     // 光标检测
     isCursorInsidePetVisibleRect,
     isCursorInsideHoverIntentTarget,
-    isCursorInsideHoverPanel,
     isCursorInsideSpriteRect,
+    // bounds 工具
+    isPointInsideRect,
     // 悬停面板辅助
     shouldSuppressHoverPanel,
     updatePetWindowMousePassthrough,
@@ -61,6 +68,8 @@ function createHoverController(context) {
     // 交互暂停
     addInteractionPause,
     removeInteractionPause,
+    // 窗口 bounds 辅助
+    setFixedWindowBounds,
     // 其他窗口
     hideStartupBubble,
     hidePetMenu,
@@ -92,28 +101,6 @@ function createHoverController(context) {
   let isPointerOverHoverPanel = false;
   let isPointerOverPet = false;
   let lastHoverBounds = null;
-  // 仅用于保持与 main.cjs setFixedWindowBounds 签名一致，本控制器不使用 menu 缓存
-  let lastMenuBounds = null;
-
-  // 与 main.cjs setFixedWindowBounds 实现一致，缓存 lastHoverBounds 避免重复 setBounds
-  function setFixedWindowBounds(targetWindow, bounds, width, height, cacheKey) {
-    if (!targetWindow || targetWindow.isDestroyed()) {
-      return;
-    }
-
-    const nextBounds = normalizeBounds(bounds, width, height);
-    const lastBounds = cacheKey === "menu" ? lastMenuBounds : lastHoverBounds;
-    if (boundsAreEqual(lastBounds, nextBounds)) {
-      return;
-    }
-
-    targetWindow.setBounds(nextBounds, false);
-    if (cacheKey === "menu") {
-      lastMenuBounds = nextBounds;
-    } else {
-      lastHoverBounds = nextBounds;
-    }
-  }
 
   function clearHoverIntent({ keepFrozenRect = false } = {}) {
     if (hoverIntentTimer) {
@@ -143,150 +130,9 @@ function createHoverController(context) {
     }, HOVER_HIDE_DELAY_MS);
   }
 
-  function getHoverAnchorRect(anchorRect = null) {
-    if (anchorRect) {
-      return anchorRect;
-    }
-    if (hoverFrozenPetRect) {
-      return hoverFrozenPetRect;
-    }
-    if (getTaskbarWalkRunway() && isTaskbarWalkActive()) {
-      return getTaskbarWalkOverlayPetRect() || getPetSpriteRect() || getVisiblePetRect();
-    }
-    return getWindowRect(getPetWindow()) || getPetSpriteRect() || getVisiblePetRect();
-  }
-
-  function getHoverBodyHitPaddingForState(stateId = getActiveState()) {
-    const basePadding = getScaledHoverBodyHitPadding();
-    const state = getState(stateId);
-    if (!state?.moving) {
-      return basePadding;
-    }
-    if (isTaskbarWalkActive()) {
-      return Math.max(0, basePadding - 1);
-    }
-    // Moving states are sampled while the sprite keeps shifting, so use a
-    // slightly wider tolerance to avoid hover misses between poll ticks.
-    return basePadding + 2;
-  }
-
-  function getHoverHitRect() {
-    const rect = hoverFrozenPetRect
-      ? getOverlayPlacementRect(hoverFrozenPetRect)
-      : getRenderedFrameVisibleRect() || getVisiblePetRect();
-    return expandRect(rect, getHoverBodyHitPaddingForState());
-  }
-
-  function getHoverAvoidRect(anchorRect = null) {
-    const rect = getOverlayPlacementRect(anchorRect);
-    return expandRect(rect, getScaledHoverAvoidPadding());
-  }
-
   function freezeHoverPetRect() {
     hoverFrozenPetRect = getHoverAnchorRect(null);
     return hoverFrozenPetRect;
-  }
-
-  function getHoverPosition(anchorRect = hoverAnchorRect) {
-    const fullPetRect = getHoverAnchorRect(anchorRect);
-    const petRect = getOverlayPlacementRect(fullPetRect);
-    const avoidRect = getHoverAvoidRect(fullPetRect);
-    const panelGap = getOverlayVisualGap(HOVER_PANEL_GAP_OFFSET, HOVER_PANEL_SCALE_GAP_FACTOR);
-    const rawArea = getOverlayWorkArea(avoidRect);
-    const area = getOverlaySafeArea(rawArea, panelGap);
-    const areaRight = area.x + area.width;
-    const areaBottom = area.y + area.height;
-    const verticalOffset = getOverlayVerticalOffset(HOVER_PANEL_VERTICAL_OFFSET);
-    const centeredX = petRect.x + Math.round((petRect.width - HOVER_PANEL_WIDTH) / 2);
-    const sideY = petRect.y + Math.round((petRect.height - HOVER_PANEL_HEIGHT) / 2) + verticalOffset;
-
-    const above = {
-      x: clamp(centeredX, area.x, areaRight - HOVER_PANEL_WIDTH),
-      y: Math.round(avoidRect.y - HOVER_PANEL_HEIGHT - panelGap + verticalOffset),
-      width: HOVER_PANEL_WIDTH,
-      height: HOVER_PANEL_HEIGHT
-    };
-    if (above.y >= area.y && !rectsOverlap(above, avoidRect)) {
-      return above;
-    }
-
-    const right = {
-      x: Math.round(avoidRect.x + avoidRect.width + panelGap),
-      y: clamp(sideY, area.y, areaBottom - HOVER_PANEL_HEIGHT),
-      width: HOVER_PANEL_WIDTH,
-      height: HOVER_PANEL_HEIGHT
-    };
-    const left = {
-      x: Math.round(avoidRect.x - HOVER_PANEL_WIDTH - panelGap),
-      y: clamp(sideY, area.y, areaBottom - HOVER_PANEL_HEIGHT),
-      width: HOVER_PANEL_WIDTH,
-      height: HOVER_PANEL_HEIGHT
-    };
-    const rightFits = right.x + HOVER_PANEL_WIDTH <= areaRight && !rectsOverlap(right, avoidRect);
-    const leftFits = left.x >= area.x && !rectsOverlap(left, avoidRect);
-    if (rightFits && leftFits) {
-      const rightSpace = areaRight - (avoidRect.x + avoidRect.width);
-      const leftSpace = avoidRect.x - area.x;
-      return rightSpace >= leftSpace ? right : left;
-    } else if (rightFits) {
-      return right;
-    } else if (leftFits) {
-      return left;
-    }
-
-    const below = {
-      x: clamp(centeredX, area.x, areaRight - HOVER_PANEL_WIDTH),
-      y: Math.round(avoidRect.y + avoidRect.height + panelGap + verticalOffset),
-      width: HOVER_PANEL_WIDTH,
-      height: HOVER_PANEL_HEIGHT
-    };
-    if (below.y + HOVER_PANEL_HEIGHT <= areaBottom && !rectsOverlap(below, avoidRect)) {
-      return below;
-    }
-
-    const preferred = {
-      x: Math.round(above.x),
-      y: Math.round(above.y),
-      width: HOVER_PANEL_WIDTH,
-      height: HOVER_PANEL_HEIGHT
-    };
-    const fallbackCandidates = [above, right, left, below]
-      .map((candidate) => {
-        const rounded = {
-          x: Math.round(candidate.x),
-          y: Math.round(candidate.y),
-          width: HOVER_PANEL_WIDTH,
-          height: HOVER_PANEL_HEIGHT
-        };
-        const clamped = clampPanelRect(rounded, area, HOVER_PANEL_WIDTH, HOVER_PANEL_HEIGHT);
-        const shift = Math.abs(clamped.x - rounded.x) + Math.abs(clamped.y - rounded.y);
-        return { rect: clamped, shift };
-      })
-      .filter((entry) => !rectsOverlap(entry.rect, avoidRect));
-    if (fallbackCandidates.length > 0) {
-      return pickBestOverlayCandidate(
-        fallbackCandidates,
-        preferred,
-        area,
-        rawArea,
-        Math.max(8, Math.round(panelGap * 0.45))
-      );
-    }
-
-    const forcedRightX = Math.min(Math.max(avoidRect.x + avoidRect.width + panelGap, area.x), areaRight - HOVER_PANEL_WIDTH);
-    const forcedLeftX = Math.max(Math.min(avoidRect.x - HOVER_PANEL_WIDTH - panelGap, areaRight - HOVER_PANEL_WIDTH), area.x);
-    const forcedSide = avoidRect.x - area.x > areaRight - (avoidRect.x + avoidRect.width)
-      ? { ...left, x: forcedLeftX }
-      : { ...right, x: forcedRightX };
-    const forcedY = avoidRect.y >= area.y + Math.round(area.height / 2)
-      ? Math.max(area.y, avoidRect.y - HOVER_PANEL_HEIGHT - panelGap + verticalOffset)
-      : Math.min(areaBottom - HOVER_PANEL_HEIGHT, avoidRect.y + avoidRect.height + panelGap + verticalOffset);
-    return {
-      x: Math.round(forcedSide.x),
-      y: Math.round(forcedY),
-      width: HOVER_PANEL_WIDTH,
-      height: HOVER_PANEL_HEIGHT
-    };
   }
 
   function repositionHoverWindow() {
@@ -296,10 +142,11 @@ function createHoverController(context) {
     setFixedWindowBounds(hoverWindow, getHoverPosition(), HOVER_PANEL_WIDTH, HOVER_PANEL_HEIGHT, "hover");
   }
 
-  function repositionOverlays() {
-    repositionMenuWindow();
-    repositionHoverWindow();
-    repositionStartupBubbleWindow();
+  function isCursorInsideHoverPanel() {
+    if (!hoverWindow || hoverWindow.isDestroyed() || !hoverWindow.isVisible()) {
+      return false;
+    }
+    return isPointInsideRect(screen.getCursorScreenPoint(), hoverWindow.getBounds());
   }
 
   function updateHoverVisibilityFromCursor() {
@@ -501,25 +348,39 @@ function createHoverController(context) {
     }, intentDelayMs);
   }
 
+  // 缩放后刷新悬停锚点（对照 main.cjs refreshHoverAnchorAfterScale）
+  function refreshHoverAnchorAfterScale() {
+    if (!hoverWindow || hoverWindow.isDestroyed() || !hoverWindow.isVisible()) {
+      return;
+    }
+    hoverFrozenPetRect = null;
+    hoverAnchorRect = freezeHoverPetRect();
+    repositionHoverWindow();
+  }
+
+  // before-quit 清理悬停隐藏计时器
+  function clearHoverHideTimer() {
+    if (hoverHideTimer) {
+      clearTimeout(hoverHideTimer);
+      hoverHideTimer = null;
+    }
+  }
+
   return {
     createHoverWindow,
     showHoverPanel,
     hideHoverPanel,
     repositionHoverWindow,
-    getHoverPosition,
-    getHoverAnchorRect,
-    getHoverHitRect,
-    getHoverAvoidRect,
-    getHoverBodyHitPaddingForState,
     beginHoverFromPointer,
     scheduleHoverIntent,
     startHoverPolling,
     stopHoverPolling,
     updateHoverVisibilityFromCursor,
     freezeHoverPetRect,
-    repositionOverlays,
     clearHoverIntent,
     scheduleHideHoverPanel,
+    refreshHoverAnchorAfterScale,
+    clearHoverHideTimer,
     getHoverWindow: () => hoverWindow,
     getHoverWindowReady: () => hoverWindowReady,
     getHoverAnchorRectValue: () => hoverAnchorRect,

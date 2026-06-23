@@ -40,14 +40,13 @@ function createOverlayGeometry(context) {
     getState,
     getTaskbarWalkOverlayPetRect,
     isTaskbarWalkActive,
-    clampPanelRect,
-    pickBestOverlayCandidate,
     // 纯工具函数（来自 shared/bounds.cjs）
     expandRect,
     clamp,
     rectsOverlap,
     rectFitsInArea,
     getRectClosestEdgeDistance,
+    getRectCenterDistance,
     cloneRect,
     // 常量
     OVERLAY_BASE_GAP,
@@ -511,6 +510,36 @@ function createOverlayGeometry(context) {
     };
   }
 
+  function clampPanelRect(rect, area, width = rect.width, height = rect.height) {
+    const maxX = area.x + Math.max(0, area.width - width);
+    const maxY = area.y + Math.max(0, area.height - height);
+    return {
+      x: clamp(Math.round(rect.x), area.x, maxX),
+      y: clamp(Math.round(rect.y), area.y, maxY),
+      width,
+      height
+    };
+  }
+
+  function pickBestOverlayCandidate(entries, preferredRect, safeArea, rawArea, minEdgeGap = 8) {
+    if (!entries || entries.length === 0) {
+      return null;
+    }
+    return entries
+      .map((entry) => {
+        const centerDistance = getRectCenterDistance(entry.rect, preferredRect);
+        const edgeDistance = getRectClosestEdgeDistance(entry.rect, rawArea);
+        const edgePenalty = edgeDistance < minEdgeGap ? (minEdgeGap - edgeDistance) * 16 : 0;
+        const clampPenalty = Math.max(0, entry.shift || 0) * 10;
+        const safeAreaPenalty = rectFitsInArea(entry.rect, safeArea) ? 0 : 1200;
+        return {
+          rect: entry.rect,
+          score: clampPenalty + centerDistance + edgePenalty + safeAreaPenalty
+        };
+      })
+      .sort((a, b) => a.score - b.score)[0].rect;
+  }
+
   function getCustomizationAnchorRect(anchorRect = null) {
     if (anchorRect) {
       return anchorRect;
@@ -633,7 +662,9 @@ function createOverlayGeometry(context) {
     getHoverPosition,
     getOverlaySafeArea,
     getCustomizationAnchorRect,
-    getCustomizationPosition
+    getCustomizationPosition,
+    clampPanelRect,
+    pickBestOverlayCandidate
   };
 }
 

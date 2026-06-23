@@ -22,19 +22,30 @@ function createBubbleController(context) {
     getScaledOverlayCollisionPadding,
     setFixedWindowBounds,
     getPetWindow,
+    getMenuWindow,
+    getHoverWindow,
     getActiveState,
     getWalkDirection,
     getCurrentSurface,
     addInteractionPause,
     removeInteractionPause,
+    isWalkingState,
+    hidePetMenu,
+    hideHoverPanel,
+    restoreHoverAfterBubbleIfNeeded,
+    getTaskbarWalkRunway,
+    isTaskbarWalkActive,
+    getTaskbarWalkOverlayPetRect,
+    getCurrentPetVisualRect,
+    getRenderedFrameVisibleRect,
+    getVisiblePetRect,
+    getPetSpriteRect,
     clamp,
     cloneRect,
     rectsOverlap,
     rectFitsInArea,
     clampPanelRect,
     pickBestOverlayCandidate,
-    getBubbleAnchorRect,
-    showBubbleMessage,
     sharedGreetings,
     // 常量
     STARTUP_BUBBLE_DEFAULT_WIDTH,
@@ -45,7 +56,7 @@ function createBubbleController(context) {
     STARTUP_BUBBLE_SCALE_GAP_FACTOR,
     STARTUP_BUBBLE_DURATION_MS,
     STARTUP_BUBBLE_HOVER_LOCK_MS,
-    APP_DISPLAY_NAME
+    DEFAULT_STATE
   } = context;
 
   // 气泡相关状态
@@ -55,8 +66,10 @@ function createBubbleController(context) {
   let startupBubbleTimer = null;
   let startupBubbleHideAt = 0;
   let pendingWalkBubbleMessage = null;
+  let bubbleHoverSuppressedUntil = 0;
 
   function createStartupBubbleWindow() {
+    // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
     startupBubbleWindow = createOverlayWindow({
       BrowserWindow,
       path,
@@ -68,7 +81,8 @@ function createBubbleController(context) {
       hash: "bubble",
       width: STARTUP_BUBBLE_DEFAULT_WIDTH,
       height: STARTUP_BUBBLE_HEIGHT,
-      title: APP_DISPLAY_NAME,
+      movable: false,
+      focusable: false,
       onReady: () => {
         startupBubbleWindowReady = true;
         if (startupBubbleWindow?.isVisible()) {
@@ -167,6 +181,13 @@ function createBubbleController(context) {
     return clampPanelRect(candidates[0].rect, area, bubbleWidth, bubbleHeight);
   }
 
+  function getBubbleAnchorRect() {
+    if (getTaskbarWalkRunway() && isTaskbarWalkActive()) {
+      return getTaskbarWalkOverlayPetRect() || getCurrentPetVisualRect() || getVisiblePetRect() || getPetSpriteRect();
+    }
+    return getRenderedFrameVisibleRect() || getVisiblePetRect() || getPetSpriteRect();
+  }
+
   function refreshStartupBubbleAnchor() {
     startupBubbleAnchorRect = cloneRect(getBubbleAnchorRect());
   }
@@ -200,6 +221,59 @@ function createBubbleController(context) {
     showBubbleMessage(sharedGreetings[0]);
   }
 
+  function showBubbleMessage(message = null, durationMs = STARTUP_BUBBLE_DURATION_MS, options = {}) {
+    const petWindow = getPetWindow();
+    if (!petWindow || petWindow.isDestroyed()) {
+      return false;
+    }
+    if (isWalkingState()) {
+      pendingWalkBubbleMessage = { message, durationMs, options };
+      return true;
+    }
+    const menuWindow = getMenuWindow();
+    const hoverWindow = getHoverWindow();
+    const isMenuVisible = menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible();
+    const isHoverVisible = hoverWindow && !hoverWindow.isDestroyed() && hoverWindow.isVisible();
+    if (isMenuVisible || isHoverVisible) {
+      if (!options.forceHideOverlays) {
+        return false;
+      }
+      hidePetMenu();
+      hideHoverPanel();
+    }
+
+    if (!startupBubbleWindow || startupBubbleWindow.isDestroyed()) {
+      createStartupBubbleWindow();
+    }
+
+    startupBubbleWindow.__pendingMessage = message;
+    refreshStartupBubbleAnchor();
+    if (Number.isFinite(options.suppressHoverMs) && options.suppressHoverMs > 0) {
+      bubbleHoverSuppressedUntil = Date.now() + Math.round(options.suppressHoverMs);
+    }
+    const bubbleBounds = getStartupBubblePosition();
+    startupBubbleWindow.setBounds(bubbleBounds, false);
+    log(`startup-bubble target=${bubbleBounds.x},${bubbleBounds.y},${bubbleBounds.width},${bubbleBounds.height}`);
+    startupBubbleWindow.showInactive();
+    if (startupBubbleWindowReady && !startupBubbleWindow.webContents.isLoading()) {
+      safeSend(startupBubbleWindow, "pet:bubble-data", {
+        ...buildPetConfig(),
+        message
+      });
+    }
+
+    if (startupBubbleTimer) {
+      clearTimeout(startupBubbleTimer);
+    }
+    startupBubbleHideAt = Date.now() + durationMs;
+    startupBubbleTimer = setTimeout(() => {
+      startupBubbleTimer = null;
+      hideStartupBubble({ force: true });
+      restoreHoverAfterBubbleIfNeeded();
+    }, durationMs);
+    return true;
+  }
+
   function hideStartupBubble(options = {}) {
     if (options.force) {
       pendingWalkBubbleMessage = null;
@@ -217,6 +291,34 @@ function createBubbleController(context) {
       return;
     }
     startupBubbleWindow.hide();
+  }
+
+  function showPendingWalkBubbleMessage() {
+    if (!pendingWalkBubbleMessage || getActiveState() !== DEFAULT_STATE) {
+      return;
+    }
+    const next = pendingWalkBubbleMessage;
+    pendingWalkBubbleMessage = null;
+    showBubbleMessage(next.message, next.durationMs, next.options);
+  }
+
+  function isStartupBubbleVisible() {
+    return Boolean(startupBubbleWindow && !startupBubbleWindow.isDestroyed() && startupBubbleWindow.isVisible());
+  }
+
+  function getBubbleHoverSuppressionMs() {
+    return Math.max(0, bubbleHoverSuppressedUntil - Date.now());
+  }
+
+  function clearPendingWalkBubbleMessage() {
+    pendingWalkBubbleMessage = null;
+  }
+
+  function clearStartupBubbleTimer() {
+    if (startupBubbleTimer) {
+      clearTimeout(startupBubbleTimer);
+      startupBubbleTimer = null;
+    }
   }
 
   function getStartupBubbleWindow() {
@@ -238,10 +340,17 @@ function createBubbleController(context) {
   return {
     createStartupBubbleWindow,
     getStartupBubblePosition,
+    getBubbleAnchorRect,
     resizeStartupBubble,
     repositionStartupBubbleWindow,
     showStartupBubble,
+    showBubbleMessage,
+    showPendingWalkBubbleMessage,
+    isStartupBubbleVisible,
+    getBubbleHoverSuppressionMs,
     hideStartupBubble,
+    clearPendingWalkBubbleMessage,
+    clearStartupBubbleTimer,
     getStartupBubbleWindow,
     getStartupBubbleWindowReady,
     setStartupBubbleWindow,

@@ -136,6 +136,19 @@ function createCustomizationController(context) {
     removeInteractionPause("customization");
   }
 
+  function isCustomizationVisible() {
+    return Boolean(customizationWindow && !customizationWindow.isDestroyed() && customizationWindow.isVisible());
+  }
+
+  function refreshCustomizationAnchorAfterScale() {
+    if (!customizationWindow || customizationWindow.isDestroyed() || !customizationWindow.isVisible()) {
+      return;
+    }
+    customizationFrozenPetRect = null;
+    customizationAnchorRect = freezeCustomizationPetRect();
+    setFixedWindowBounds(customizationWindow, getCustomizationPosition(customizationAnchorRect), CUSTOMIZATION_PANEL_WIDTH, CUSTOMIZATION_PANEL_HEIGHT, "customization");
+  }
+
   function getCustomizationPosition(anchorRect = customizationAnchorRect) {
     const fullPetRect = getCustomizationAnchorRect(anchorRect);
     const petRect = getOverlayPlacementRect(fullPetRect);
@@ -232,6 +245,8 @@ function createCustomizationController(context) {
     getCustomizationPosition,
     getCustomizationAnchorRect,
     freezeCustomizationPetRect,
+    isCustomizationVisible,
+    refreshCustomizationAnchorAfterScale,
     getCustomizationWindow: () => customizationWindow,
     getCustomizationWindowReady: () => customizationWindowReady,
     setCustomizationWindow: (value) => { customizationWindow = value; },
