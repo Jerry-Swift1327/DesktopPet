@@ -48,6 +48,7 @@ const { createWindowRoamController } = require("./behavior/window-roam-controlle
 const { createWalkController } = require("./behavior/walk-controller.cjs");
 const { createDockController } = require("./behavior/dock-controller.cjs");
 const { registerIpcHandlers } = require("./ipc/register-ipc-handlers.cjs");
+const { createContactQrCodeResolver } = require("./ipc/contact-qrcode.cjs");
 
 // 应用级常量集中管理
 const appConstants = require("./core/app-constants.cjs");
@@ -5163,35 +5164,17 @@ function handleSwitchVariant(_event, variant) {
   return { success: true };
 }
 
+const contactQrCodeResolver = createContactQrCodeResolver({
+  fs: require("fs"),
+  path,
+  os: require("os"),
+  app,
+  process,
+  __dirname
+});
+
 function handleGetContactQrCode() {
-  const fs = require("fs");
-  const os = require("os");
-  // 优先从应用内运行资源查找（打包后可用），fallback 到项目根目录和用户 Downloads 目录
-  const candidates = [];
-  if (app.isPackaged) {
-    candidates.push(
-      path.join(process.resourcesPath, "app", ".runtime-assets", "contact_qr_code.jpg"),
-      path.join(process.resourcesPath, "app.asar", ".runtime-assets", "contact_qr_code.jpg"),
-      path.join(process.resourcesPath, "contact_qr_code.jpg")
-    );
-  } else {
-    candidates.push(
-      path.join(__dirname, "..", ".runtime-assets", "contact_qr_code.jpg"),
-      path.join(__dirname, "..", "..", "contact_qr_code.jpg")
-    );
-  }
-  candidates.push(path.join(os.homedir(), "Downloads", "contact_qr_code.jpg"));
-  for (const qrPath of candidates) {
-    try {
-      if (fs.existsSync(qrPath)) {
-        const data = fs.readFileSync(qrPath);
-        return { success: true, data: data.toString("base64"), mimeType: "image/jpeg" };
-      }
-    } catch (_) {
-      continue;
-    }
-  }
-  return { success: false, error: "QR code file not found" };
+  return contactQrCodeResolver.resolveContactQrCode();
 }
 
 function handleShowMenu() {

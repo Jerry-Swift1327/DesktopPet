@@ -23,7 +23,8 @@ node --test "test/**/*.test.cjs"
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |
 | `walk-controller-accessor.test.cjs` | walk-controller 访问器与 main.cjs 接线结构断言 | `../electron/behavior/walk-controller.cjs`、`../electron/main.cjs` |
 | `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除与 main.cjs 薄包装接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |
-| `ipc-contract.test.cjs` | IPC 契约一致性结构断言（preload invoke/send/onXxx、main ipcMain 注册、renderer 调用、高风险 channel 名称、main→renderer 事件推送） | `../electron/preload.cjs`、`../electron/main.cjs`、`../static/renderer/**` |
+| `ipc-contract.test.cjs` | IPC 契约一致性结构断言（preload invoke/send/onXxx、register-ipc-handlers.cjs 注册模块、renderer 调用、高风险 channel 名称、main→renderer 事件推送） | `../electron/preload.cjs`、`../electron/main.cjs`、`../electron/ipc/register-ipc-handlers.cjs`、`../static/renderer/**` |
+| `contact-qrcode.test.cjs` | 联系二维码查找辅助模块结构断言（开发/打包路径构造、Downloads fallback、文件存在/不存在、读取异常跳过、返回结构） | `../electron/ipc/contact-qrcode.cjs` |
 | `bounds.test.cjs` | 纯几何工具函数 | `../electron/shared/bounds.cjs` |
 | `messaging.test.cjs` | webContents.send 安全发送和广播 | `../electron/shared/messaging.cjs` |
 | `pet-states.test.cjs` | 宠物状态工厂和状态数组构建 | `../electron/pet/pet-states.cjs` |

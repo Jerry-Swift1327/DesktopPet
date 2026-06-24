@@ -158,3 +158,17 @@ test("main -> renderer 事件推送 channel 在 preload 中有监听", () => {
     assert.match(preloadSource, pattern, `preload.cjs 应监听 main->renderer 推送 channel ${channel}`);
   }
 });
+
+test("main.cjs 不再直接注册 ipcMain.handle", () => {
+  // 移除注释行后检查（允许注释中提及 ipcMain.handle）
+  const codeLines = mainSource.split("\n").filter((line) => !line.trim().startsWith("//"));
+  const codeWithoutComments = codeLines.join("\n");
+  assert.doesNotMatch(codeWithoutComments, /ipcMain\.handle\(/, "main.cjs 不应直接调用 ipcMain.handle，IPC 注册应集中在 register-ipc-handlers.cjs");
+});
+
+test("main.cjs 不再直接注册 ipcMain.on", () => {
+  // 移除注释行后检查（允许注释中提及 ipcMain.on）
+  const codeLines = mainSource.split("\n").filter((line) => !line.trim().startsWith("//"));
+  const codeWithoutComments = codeLines.join("\n");
+  assert.doesNotMatch(codeWithoutComments, /ipcMain\.on\(/, "main.cjs 不应直接调用 ipcMain.on，IPC 注册应集中在 register-ipc-handlers.cjs");
+});
