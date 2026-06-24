@@ -71,11 +71,8 @@ test("main.cjs onReady 注入 runAppReadyStartupSequence 函数引用", () => {
 });
 
 test("main.cjs onBeforeQuit handler 包含退出清理", () => {
-  // 在 lifecycleCallBlock 内提取 onBeforeQuit handler 块（到下一个 handler "onWindowAllClosed" 前）
-  const onBeforeQuitBlock = lifecycleCallBlock.match(
-    /onBeforeQuit\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onWindowAllClosed/
-  )?.[1] || "";
-  assert.ok(onBeforeQuitBlock.length > 0, "应能提取 onBeforeQuit handler 内容");
+  const onBeforeQuitBlock = mainSource.match(/function runAppBeforeQuitCleanupSequence\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.ok(onBeforeQuitBlock.length > 0, "应能提取 runAppBeforeQuitCleanupSequence 函数体");
 
   const expectedCalls = [
     "writePetStats",
@@ -105,6 +102,24 @@ test("main.cjs onBeforeQuit handler 包含退出清理", () => {
     onBeforeQuitBlock,
     /clearTimeout\(\s*displayMetricsSettleTimer\s*\)/,
     "onBeforeQuit handler 内应 clearTimeout(displayMetricsSettleTimer)"
+  );
+  assert.match(
+    onBeforeQuitBlock,
+    /if\s*\(\s*randomGreetingTimer\s*\)\s*\{[\s\S]*?clearTimeout\(\s*randomGreetingTimer\s*\)[\s\S]*?randomGreetingTimer\s*=\s*null/,
+    "应包含 randomGreetingTimer 条件清理（if + clearTimeout + 置空）"
+  );
+  assert.match(
+    onBeforeQuitBlock,
+    /if\s*\(\s*displayMetricsSettleTimer\s*\)\s*\{[\s\S]*?clearTimeout\(\s*displayMetricsSettleTimer\s*\)[\s\S]*?displayMetricsSettleTimer\s*=\s*null/,
+    "应包含 displayMetricsSettleTimer 条件清理（if + clearTimeout + 置空）"
+  );
+});
+
+test("main.cjs onBeforeQuit 注入 runAppBeforeQuitCleanupSequence 函数引用", () => {
+  assert.match(
+    lifecycleCallBlock,
+    /onBeforeQuit\s*:\s*runAppBeforeQuitCleanupSequence\b/,
+    "onBeforeQuit 应注入 runAppBeforeQuitCleanupSequence 函数引用"
   );
 });
 
@@ -200,10 +215,8 @@ test("onReady handler 启动序列顺序正确", () => {
 });
 
 test("onBeforeQuit handler 退出清理顺序正确", () => {
-  const onBeforeQuitBlock = lifecycleCallBlock.match(
-    /onBeforeQuit\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onWindowAllClosed/
-  )?.[1] || "";
-  assert.ok(onBeforeQuitBlock.length > 0, "应能提取 onBeforeQuit handler 内容");
+  const onBeforeQuitBlock = mainSource.match(/function runAppBeforeQuitCleanupSequence\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.ok(onBeforeQuitBlock.length > 0, "应能提取 runAppBeforeQuitCleanupSequence 函数体");
 
   const idxWritePetStats = onBeforeQuitBlock.indexOf("writePetStats");
   const idxStopHoverPolling = onBeforeQuitBlock.indexOf("stopHoverPolling");

@@ -5104,6 +5104,28 @@ function runAppReadyStartupSequence() {
   startTabbyIdlePolling();
 }
 
+function runAppBeforeQuitCleanupSequence() {
+  writePetStats();
+  stopHoverPolling();
+  stopWindowSurfacePolling();
+  stopWindowRoamPolling();
+  stopEyeTrackingPolling();
+  stopIntimacyDecayTimer();
+  clearHoverIntent();
+  clearDragState({ notify: false });
+  clearStartupBubbleTimer();
+  clearHoverHideTimer();
+  clearMenuHideTimer();
+  if (randomGreetingTimer) {
+    clearTimeout(randomGreetingTimer);
+    randomGreetingTimer = null;
+  }
+  if (displayMetricsSettleTimer) {
+    clearTimeout(displayMetricsSettleTimer);
+    displayMetricsSettleTimer = null;
+  }
+}
+
 registerAppLifecycle({
   app,
   screen,
@@ -5114,27 +5136,7 @@ registerAppLifecycle({
       ensurePetWindow();
     },
     onReady: runAppReadyStartupSequence,
-    onBeforeQuit: () => {
-      writePetStats();
-      stopHoverPolling();
-      stopWindowSurfacePolling();
-      stopWindowRoamPolling();
-      stopEyeTrackingPolling();
-      stopIntimacyDecayTimer();
-      clearHoverIntent();
-      clearDragState({ notify: false });
-      clearStartupBubbleTimer();
-      clearHoverHideTimer();
-      clearMenuHideTimer();
-      if (randomGreetingTimer) {
-        clearTimeout(randomGreetingTimer);
-        randomGreetingTimer = null;
-      }
-      if (displayMetricsSettleTimer) {
-        clearTimeout(displayMetricsSettleTimer);
-        displayMetricsSettleTimer = null;
-      }
-    },
+    onBeforeQuit: runAppBeforeQuitCleanupSequence,
     onWindowAllClosed: () => {
       if (process.platform !== "darwin") {
         app.quit();
