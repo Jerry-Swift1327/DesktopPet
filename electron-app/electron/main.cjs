@@ -5085,6 +5085,25 @@ function startDragTimer() {
   dragTimer = setInterval(updateDragPosition, 16);
 }
 
+function runAppReadyStartupSequence() {
+  log("app ready");
+  readPetStats();
+  readAutoStartPreference();
+  readWindowRoamPreference();
+  readEyeTrackingPreference();
+  readPetScalePreference();
+  rememberHomeDisplay();
+  createPetWindow();
+  refreshAutoStartCacheAsync();
+  startHoverPolling();
+  startWindowSurfacePolling();
+  updateWindowRoamPolling();
+  updateEyeTrackingPolling();
+  startIntimacyDecayTimer();
+  scheduleIdleGreeting();
+  startTabbyIdlePolling();
+}
+
 registerAppLifecycle({
   app,
   screen,
@@ -5094,24 +5113,7 @@ registerAppLifecycle({
     onSecondInstance: () => {
       ensurePetWindow();
     },
-    onReady: () => {
-      log("app ready");
-      readPetStats();
-      readAutoStartPreference();
-      readWindowRoamPreference();
-      readEyeTrackingPreference();
-      readPetScalePreference();
-      rememberHomeDisplay();
-      createPetWindow();
-      refreshAutoStartCacheAsync();
-      startHoverPolling();
-      startWindowSurfacePolling();
-      updateWindowRoamPolling();
-      updateEyeTrackingPolling();
-      startIntimacyDecayTimer();
-      scheduleIdleGreeting();
-      startTabbyIdlePolling();
-    },
+    onReady: runAppReadyStartupSequence,
     onBeforeQuit: () => {
       writePetStats();
       stopHoverPolling();

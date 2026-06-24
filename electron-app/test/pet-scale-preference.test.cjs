@@ -33,10 +33,13 @@ test("packaged user data root follows the base variant", () => {
 });
 
 test("pet scale preference is loaded before the pet window is created", () => {
-  const lifecycleBlock = mainSource.match(/registerAppLifecycle\(\s*\{([\s\S]*?)\n\}\);/)?.[1] || "";
-  const onReadyBlock = lifecycleBlock.match(/onReady\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)createPetWindow\(\);/)?.[1] || "";
+  const startupFnBody = mainSource.match(/function runAppReadyStartupSequence\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.ok(startupFnBody.length > 0, "应能提取 runAppReadyStartupSequence 函数体");
 
-  assert.match(onReadyBlock, /readPetScalePreference\(\);/);
+  const idxReadPetScalePreference = startupFnBody.indexOf("readPetScalePreference");
+  const idxCreatePetWindow = startupFnBody.indexOf("createPetWindow");
+  assert.ok(idxReadPetScalePreference >= 0 && idxCreatePetWindow >= 0, "readPetScalePreference 和 createPetWindow 应存在于启动序列");
+  assert.ok(idxReadPetScalePreference < idxCreatePetWindow, "readPetScalePreference 应在 createPetWindow 之前");
 });
 
 test("split legacy preference files can migrate into preferences", () => {

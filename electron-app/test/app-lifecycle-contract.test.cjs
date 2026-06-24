@@ -34,11 +34,9 @@ test("main.cjs 调用 registerAppLifecycle 并注入单实例锁", () => {
 });
 
 test("main.cjs onReady handler 包含启动序列", () => {
-  // 在 lifecycleCallBlock 内提取 onReady handler 块（到下一个 handler "onBeforeQuit" 前）
-  const onReadyBlock = lifecycleCallBlock.match(
-    /onReady\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onBeforeQuit/
-  )?.[1] || "";
-  assert.ok(onReadyBlock.length > 0, "应能提取 onReady handler 内容");
+  // 提取 runAppReadyStartupSequence 函数体（onReady 注入的函数引用）
+  const onReadyBlock = mainSource.match(/function runAppReadyStartupSequence\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.ok(onReadyBlock.length > 0, "应能提取 runAppReadyStartupSequence 函数体");
 
   const expectedCalls = [
     "readPetStats",
@@ -62,6 +60,14 @@ test("main.cjs onReady handler 包含启动序列", () => {
     const pattern = new RegExp(`\\b${escapeRegex(fn)}\\(`);
     assert.match(onReadyBlock, pattern, `onReady handler 内应调用 ${fn}`);
   }
+});
+
+test("main.cjs onReady 注入 runAppReadyStartupSequence 函数引用", () => {
+  assert.match(
+    lifecycleCallBlock,
+    /onReady\s*:\s*runAppReadyStartupSequence\b/,
+    "onReady 应注入 runAppReadyStartupSequence 函数引用"
+  );
 });
 
 test("main.cjs onBeforeQuit handler 包含退出清理", () => {
@@ -146,10 +152,8 @@ test("main.cjs 包含 switch-variant 重启逻辑", () => {
 });
 
 test("onReady handler 启动序列顺序正确", () => {
-  const onReadyBlock = lifecycleCallBlock.match(
-    /onReady\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onBeforeQuit/
-  )?.[1] || "";
-  assert.ok(onReadyBlock.length > 0, "应能提取 onReady handler 内容");
+  const onReadyBlock = mainSource.match(/function runAppReadyStartupSequence\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.ok(onReadyBlock.length > 0, "应能提取 runAppReadyStartupSequence 函数体");
 
   const idxReadPetScalePreference = onReadyBlock.indexOf("readPetScalePreference");
   const idxCreatePetWindow = onReadyBlock.indexOf("createPetWindow");
@@ -168,6 +172,31 @@ test("onReady handler 启动序列顺序正确", () => {
 
   assert.ok(idxStartWindowSurfacePolling >= 0, "startWindowSurfacePolling 应存在");
   assert.ok(idxCreatePetWindow < idxStartWindowSurfacePolling, "createPetWindow 应在 startWindowSurfacePolling 之前");
+
+  const idxUpdateWindowRoamPolling = onReadyBlock.indexOf("updateWindowRoamPolling");
+  const idxUpdateEyeTrackingPolling = onReadyBlock.indexOf("updateEyeTrackingPolling");
+  const idxStartIntimacyDecayTimer = onReadyBlock.indexOf("startIntimacyDecayTimer");
+  const idxScheduleIdleGreeting = onReadyBlock.indexOf("scheduleIdleGreeting");
+  const idxStartTabbyIdlePolling = onReadyBlock.indexOf("startTabbyIdlePolling");
+  const idxRefreshAutoStartCacheAsync = onReadyBlock.indexOf("refreshAutoStartCacheAsync");
+
+  assert.ok(idxUpdateWindowRoamPolling >= 0, "updateWindowRoamPolling 应存在");
+  assert.ok(idxCreatePetWindow < idxUpdateWindowRoamPolling, "createPetWindow 应在 updateWindowRoamPolling 之前");
+
+  assert.ok(idxUpdateEyeTrackingPolling >= 0, "updateEyeTrackingPolling 应存在");
+  assert.ok(idxCreatePetWindow < idxUpdateEyeTrackingPolling, "createPetWindow 应在 updateEyeTrackingPolling 之前");
+
+  assert.ok(idxStartIntimacyDecayTimer >= 0, "startIntimacyDecayTimer 应存在");
+  assert.ok(idxCreatePetWindow < idxStartIntimacyDecayTimer, "createPetWindow 应在 startIntimacyDecayTimer 之前");
+
+  assert.ok(idxScheduleIdleGreeting >= 0, "scheduleIdleGreeting 应存在");
+  assert.ok(idxCreatePetWindow < idxScheduleIdleGreeting, "createPetWindow 应在 scheduleIdleGreeting 之前");
+
+  assert.ok(idxStartTabbyIdlePolling >= 0, "startTabbyIdlePolling 应存在");
+  assert.ok(idxCreatePetWindow < idxStartTabbyIdlePolling, "createPetWindow 应在 startTabbyIdlePolling 之前");
+
+  assert.ok(idxRefreshAutoStartCacheAsync >= 0, "refreshAutoStartCacheAsync 应存在");
+  assert.ok(idxCreatePetWindow < idxRefreshAutoStartCacheAsync, "createPetWindow 应在 refreshAutoStartCacheAsync 之前");
 });
 
 test("onBeforeQuit handler 退出清理顺序正确", () => {
