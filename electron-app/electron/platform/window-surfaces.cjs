@@ -1,28 +1,29 @@
 // 窗口表面控制器，负责枚举/校验可作为宠物停靠表面的窗口、坐标在物理像素与 DIP 之间的换算，
-// 以及停靠查询点构造与表面评分。从 main.cjs 提取，依赖通过 createWindowSurfaceController(context) 注入；
-// 函数实现与 main.cjs 保持一致，PowerShell 脚本调用复用 main.cjs 中的 prepareRuntimeScript。
-
-const { screen } = require("electron");
-const { execFile, execFileSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+// 以及停靠查询点构造与表面评分。从 main.cjs 提取，所有运行时依赖（screen、execFile、fs、path 等）
+// 和可变状态（petWindow、dragState、lastDragSample、userDataRoot）均通过 createWindowSurfaceController(context)
+// 以访问器形式注入，避免快照固化与双状态源风险。
 
 function createWindowSurfaceController(context) {
   const {
     // 运行时
     process,
     __dirname,
+    // 运行时依赖
+    screen,
+    execFile,
+    execFileSync,
+    fs,
+    path,
     // 依赖函数
     log,
     getPetSpriteSize,
     isValidRect,
     isLikelyDesktopOrSystemWindow,
-    getCachedWindowSurfaceCandidates,
-    // 全局变量
-    petWindow,
-    userDataRoot,
-    dragState,
-    lastDragSample,
+    // 可变状态访问器
+    getPetWindow,
+    getDragState,
+    getLastDragSample,
+    getUserDataRoot,
     // 常量
     ENABLE_WINDOW_DOCKING,
     APP_INTERNAL_NAME,
@@ -118,8 +119,9 @@ function createWindowSurfaceController(context) {
     };
     let dipRect = null;
     try {
-      const ownerWindow = petWindow && !petWindow.isDestroyed() ? petWindow : null;
-      dipRect = screen.screenToDipRect(ownerWindow, physicalRect);
+      const ownerWindow = getPetWindow();
+      const safeOwner = ownerWindow && !ownerWindow.isDestroyed() ? ownerWindow : null;
+      dipRect = screen.screenToDipRect(safeOwner, physicalRect);
     } catch (error) {
       log(`screenToDipRect failed: ${error.stack || error.message}`);
       return {
@@ -178,7 +180,7 @@ function createWindowSurfaceController(context) {
     }
     try {
       const content = fs.readFileSync(sourcePath, "utf8");
-      const runtimeScriptPath = path.join(userDataRoot, scriptName);
+      const runtimeScriptPath = path.join(getUserDataRoot(), scriptName);
       fs.writeFileSync(runtimeScriptPath, content, "utf8");
       return runtimeScriptPath;
     } catch (error) {
@@ -327,6 +329,18 @@ function createWindowSurfaceController(context) {
       }
       return null;
     }
+  }
+
+  function getCachedWindowSurfaceCandidates() {
+    if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
+      return [];
+    }
+    refreshWindowSurfaceCandidatesAsync();
+    return windowSurfaceCandidatesCache || [];
+  }
+
+  function getLastWindowSurfaceAsyncRefreshAt() {
+    return lastWindowSurfaceAsyncRefreshAt;
   }
 
   function findCandidateByHwnd(hwnd, { useCache = true, cacheOnly = false } = {}) {
@@ -483,7 +497,7 @@ function createWindowSurfaceController(context) {
       return points;
     }
     const spriteSize = getPetSpriteSize();
-    const dragSample = dragState?.lastSample || lastDragSample;
+    const dragSample = getDragState()?.lastSample || getLastDragSample();
     const now = Date.now();
     const isFastRelease = Boolean(
       dragSample
@@ -534,7 +548,9 @@ function createWindowSurfaceController(context) {
     getWindowAtScreenPoint,
     buildWindowSurfaceFromItem,
     buildDockQueryPoints,
-    scoreDockSurface
+    scoreDockSurface,
+    getCachedWindowSurfaceCandidates,
+    getLastWindowSurfaceAsyncRefreshAt
   };
 }
 

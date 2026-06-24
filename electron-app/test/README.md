@@ -29,6 +29,7 @@ node --test "test/**/*.test.cjs"
 | `register-app-lifecycle.test.cjs` | 生命周期注册模块结构断言（导出函数、事件注册、darwin 条件、不包含业务逻辑函数） | `../electron/lifecycle/register-app-lifecycle.cjs` |
 | `taskbar-surface-window-lifecycle.test.cjs` | 任务栏表面回退避免读取已销毁宠物窗口 bounds 的结构断言（控制器 destroyed window guard、main.cjs 薄包装委托） | `../electron/platform/screen-metrics.cjs`、`../electron/main.cjs` |
 | `screen-metrics-accessor.test.cjs` | screen-metrics 控制器访问器注入与 main.cjs 薄包装接线结构断言（不直接 require electron、不按值捕获可变状态、getSurfaceDisplay 默认参数使用 getCurrentSurfaceValue、导出 clearDisplayMetricsSettleTimer、8 个薄包装委托、退出清理调用 clearDisplayMetricsSettleTimer） | `../electron/platform/screen-metrics.cjs`、`../electron/main.cjs` |
+| `window-surfaces-accessor.test.cjs` | window-surfaces 控制器接线前访问器护栏结构断言（不直接 require electron/child_process/fs/path、不按值捕获 petWindow/dragState/lastDragSample/userDataRoot、normalizeWindowRectToDip 保留 isDestroyed guard、getCachedWindowSurfaceCandidates 内部化、导出 15 个核心函数） | `../electron/platform/window-surfaces.cjs` |
 | `bounds.test.cjs` | 纯几何工具函数 | `../electron/shared/bounds.cjs` |
 | `messaging.test.cjs` | webContents.send 安全发送和广播 | `../electron/shared/messaging.cjs` |
 | `pet-states.test.cjs` | 宠物状态工厂和状态数组构建 | `../electron/pet/pet-states.cjs` |
