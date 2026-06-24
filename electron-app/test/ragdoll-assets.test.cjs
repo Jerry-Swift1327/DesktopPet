@@ -50,7 +50,7 @@ test("ragdoll yawn keeps a stable sleeping tail loop", () => {
 
 test("ragdoll runtime frames use optimized source ranges", () => {
   const expectedRanges = {
-    ragdoll_walk: { frameCount: 105, sourceLoopStart: 39, sourceLoopEnd: 143 },
+    ragdoll_walk: { frameCount: 103, sourceLoopStart: 27, sourceLoopEnd: 129 },
     ragdoll_feed: { frameCount: 90, sourceLoopStart: 78, sourceLoopEnd: 167 },
     ragdoll_shake: { frameCount: 54, sourceLoopStart: 75, sourceLoopEnd: 128 }
   };
