@@ -5,29 +5,40 @@ const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 
+const lifecycleModuleSource = fs.readFileSync(
+  path.join(__dirname, "..", "electron", "lifecycle", "register-app-lifecycle.cjs"),
+  "utf8"
+);
+
+// 先提取 registerAppLifecycle({...}) 整块，避免匹配到 main.cjs 中其他 onReady 回调（如 createPetWindow 窗口选项）
+const lifecycleCallBlock = mainSource.match(/registerAppLifecycle\(\s*\{([\s\S]*?)\n\}\);/)?.[1] || "";
+
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-test("main.cjs 包含单实例锁", () => {
+test("main.cjs 调用 registerAppLifecycle 并注入单实例锁", () => {
+  // 保留：requestSingleInstanceLock 仍在 main.cjs
   assert.match(mainSource, /app\.requestSingleInstanceLock\(\)/, "应调用 app.requestSingleInstanceLock()");
+
+  // 新增：main.cjs 引入并调用 registerAppLifecycle
   assert.match(
     mainSource,
-    /if\s*\(\s*!gotSingleInstanceLock\s*\)\s*\{[\s\S]*?app\.quit\(\)/,
-    "单实例锁失败时应调用 app.quit()"
+    /require\(.*lifecycle\/register-app-lifecycle\.cjs.*\)/,
+    "应引入 registerAppLifecycle"
   );
-  assert.match(
-    mainSource,
-    /app\.on\(\s*['"]second-instance['"]\s*,\s*\(\s*\)\s*=>\s*\{[\s\S]*?ensurePetWindow\(\)/,
-    "second-instance 事件 handler 内应调用 ensurePetWindow"
-  );
+  assert.match(mainSource, /registerAppLifecycle\(\s*\{/, "应调用 registerAppLifecycle({...})");
+
+  // 新增：注入 gotSingleInstanceLock
+  assert.match(mainSource, /gotSingleInstanceLock\s*[:,]/, "应注入 gotSingleInstanceLock");
 });
 
-test("main.cjs 包含 whenReady 启动序列", () => {
-  assert.match(mainSource, /app\.whenReady\(\)\.then\(/, "应注册 app.whenReady().then()");
-
-  const whenReadyBlock = mainSource.match(/app\.whenReady\(\)\.then\(\(\)\s*=>\s*\{([\s\S]*?)\}\s*\);/)?.[1] || "";
-  assert.ok(whenReadyBlock.length > 0, "应能提取 whenReady 块内容");
+test("main.cjs onReady handler 包含启动序列", () => {
+  // 在 lifecycleCallBlock 内提取 onReady handler 块（到下一个 handler "onBeforeQuit" 前）
+  const onReadyBlock = lifecycleCallBlock.match(
+    /onReady\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onBeforeQuit/
+  )?.[1] || "";
+  assert.ok(onReadyBlock.length > 0, "应能提取 onReady handler 内容");
 
   const expectedCalls = [
     "readPetStats",
@@ -49,17 +60,16 @@ test("main.cjs 包含 whenReady 启动序列", () => {
 
   for (const fn of expectedCalls) {
     const pattern = new RegExp(`\\b${escapeRegex(fn)}\\(`);
-    assert.match(whenReadyBlock, pattern, `whenReady 块内应调用 ${fn}`);
+    assert.match(onReadyBlock, pattern, `onReady handler 内应调用 ${fn}`);
   }
 });
 
-test("main.cjs 包含 before-quit 退出清理", () => {
-  assert.match(mainSource, /app\.on\(\s*['"]before-quit['"]/, "应注册 before-quit 事件");
-
-  const beforeQuitBlock = mainSource.match(
-    /app\.on\(\s*['"]before-quit['"][\s\S]*?(?=\napp\.on\(|\nfunction |\nconst )/
-  )?.[0] || "";
-  assert.ok(beforeQuitBlock.length > 0, "应能提取 before-quit 块内容");
+test("main.cjs onBeforeQuit handler 包含退出清理", () => {
+  // 在 lifecycleCallBlock 内提取 onBeforeQuit handler 块（到下一个 handler "onWindowAllClosed" 前）
+  const onBeforeQuitBlock = lifecycleCallBlock.match(
+    /onBeforeQuit\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onWindowAllClosed/
+  )?.[1] || "";
+  assert.ok(onBeforeQuitBlock.length > 0, "应能提取 onBeforeQuit handler 内容");
 
   const expectedCalls = [
     "writePetStats",
@@ -77,70 +87,52 @@ test("main.cjs 包含 before-quit 退出清理", () => {
 
   for (const fn of expectedCalls) {
     const pattern = new RegExp(`\\b${escapeRegex(fn)}\\(`);
-    assert.match(beforeQuitBlock, pattern, `before-quit 块内应调用 ${fn}`);
+    assert.match(onBeforeQuitBlock, pattern, `onBeforeQuit handler 内应调用 ${fn}`);
   }
 
   assert.match(
-    beforeQuitBlock,
+    onBeforeQuitBlock,
     /clearTimeout\(\s*randomGreetingTimer\s*\)/,
-    "before-quit 块内应 clearTimeout(randomGreetingTimer)"
+    "onBeforeQuit handler 内应 clearTimeout(randomGreetingTimer)"
   );
   assert.match(
-    beforeQuitBlock,
+    onBeforeQuitBlock,
     /clearTimeout\(\s*displayMetricsSettleTimer\s*\)/,
-    "before-quit 块内应 clearTimeout(displayMetricsSettleTimer)"
+    "onBeforeQuit handler 内应 clearTimeout(displayMetricsSettleTimer)"
   );
 });
 
-test("main.cjs 包含 window-all-closed", () => {
-  assert.match(mainSource, /app\.on\(\s*['"]window-all-closed['"]/, "应注册 window-all-closed 事件");
-
-  const windowAllClosedBlock = mainSource.match(
-    /app\.on\(\s*['"]window-all-closed['"]\s*,\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\);/
+test("main.cjs onActivate handler 包含窗口恢复逻辑", () => {
+  // 在 lifecycleCallBlock 内提取 onActivate handler 块（到下一个 handler "onDisplayMetricsChanged" 前）
+  const onActivateBlock = lifecycleCallBlock.match(
+    /onActivate\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onDisplayMetricsChanged/
   )?.[1] || "";
-  assert.ok(windowAllClosedBlock.length > 0, "应能提取 window-all-closed 块内容");
+  assert.ok(onActivateBlock.length > 0, "应能提取 onActivate handler 内容");
 
   assert.match(
-    windowAllClosedBlock,
-    /process\.platform\s*!==\s*['"]darwin['"]/,
-    "应检查 process.platform !== 'darwin'"
-  );
-  assert.match(windowAllClosedBlock, /app\.quit\(\)/, "应调用 app.quit()");
-});
-
-test("main.cjs 包含 activate", () => {
-  assert.match(mainSource, /app\.on\(\s*['"]activate['"]/, "应注册 activate 事件");
-
-  // activate 注册可能在 whenReady 块内，直接从 mainSource 提取其 handler
-  const activateBlock = mainSource.match(
-    /app\.on\(\s*['"]activate['"]\s*,\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\);/
-  )?.[1] || "";
-  assert.ok(activateBlock.length > 0, "应能提取 activate 块内容");
-
-  assert.match(
-    activateBlock,
+    onActivateBlock,
     /BrowserWindow\.getAllWindows\(\)\.length\s*===\s*0/,
-    "应检查 BrowserWindow.getAllWindows().length === 0"
+    "应检查窗口数量"
   );
-  assert.match(activateBlock, /createPetWindow\(\)/, "应调用 createPetWindow()");
+  assert.match(onActivateBlock, /createPetWindow\(\)/, "应调用 createPetWindow()");
 });
 
-test("main.cjs 包含 display-metrics-changed（macOS）", () => {
+test("main.cjs onDisplayMetricsChanged handler 包含显示器变化逻辑", () => {
+  // 在 lifecycleCallBlock 内提取 onDisplayMetricsChanged handler 块（最后一个 handler，闭合为 4 空格 + }）
+  const onDisplayMetricsChangedBlock = lifecycleCallBlock.match(
+    /onDisplayMetricsChanged\s*:\s*\(\s*_event\s*,\s*_display\s*,\s*metrics\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\}/
+  )?.[1] || "";
+  assert.ok(onDisplayMetricsChangedBlock.length > 0, "应能提取 onDisplayMetricsChanged handler 内容");
+
   assert.match(
-    mainSource,
-    /screen\.on\(\s*['"]display-metrics-changed['"]/,
-    "应注册 display-metrics-changed 事件"
-  );
-  assert.match(
-    mainSource,
+    onDisplayMetricsChangedBlock,
     /metrics\.includes\(\s*['"]workArea['"]\s*\)/,
     "应检查 metrics.includes('workArea')"
   );
-  assert.match(mainSource, /scheduleDarwinDisplayMetricsSettle\(\)/, "应调用 scheduleDarwinDisplayMetricsSettle()");
   assert.match(
-    mainSource,
-    /process\.platform\s*===\s*['"]darwin['"][\s\S]*?screen\.on\(\s*['"]display-metrics-changed['"]/,
-    "display-metrics-changed 应注册在 process.platform === 'darwin' 条件块内"
+    onDisplayMetricsChangedBlock,
+    /scheduleDarwinDisplayMetricsSettle\(\)/,
+    "应调用 scheduleDarwinDisplayMetricsSettle()"
   );
 });
 
@@ -153,15 +145,17 @@ test("main.cjs 包含 switch-variant 重启逻辑", () => {
   assert.match(handleSwitchVariantBlock, /app\.exit\(\)/, "应调用 app.exit()");
 });
 
-test("whenReady 启动序列顺序正确", () => {
-  const whenReadyBlock = mainSource.match(/app\.whenReady\(\)\.then\(\(\)\s*=>\s*\{([\s\S]*?)\}\s*\);/)?.[1] || "";
-  assert.ok(whenReadyBlock.length > 0, "应能提取 whenReady 块内容");
+test("onReady handler 启动序列顺序正确", () => {
+  const onReadyBlock = lifecycleCallBlock.match(
+    /onReady\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onBeforeQuit/
+  )?.[1] || "";
+  assert.ok(onReadyBlock.length > 0, "应能提取 onReady handler 内容");
 
-  const idxReadPetScalePreference = whenReadyBlock.indexOf("readPetScalePreference");
-  const idxCreatePetWindow = whenReadyBlock.indexOf("createPetWindow");
-  const idxRememberHomeDisplay = whenReadyBlock.indexOf("rememberHomeDisplay");
-  const idxStartHoverPolling = whenReadyBlock.indexOf("startHoverPolling");
-  const idxStartWindowSurfacePolling = whenReadyBlock.indexOf("startWindowSurfacePolling");
+  const idxReadPetScalePreference = onReadyBlock.indexOf("readPetScalePreference");
+  const idxCreatePetWindow = onReadyBlock.indexOf("createPetWindow");
+  const idxRememberHomeDisplay = onReadyBlock.indexOf("rememberHomeDisplay");
+  const idxStartHoverPolling = onReadyBlock.indexOf("startHoverPolling");
+  const idxStartWindowSurfacePolling = onReadyBlock.indexOf("startWindowSurfacePolling");
 
   assert.ok(idxReadPetScalePreference >= 0 && idxCreatePetWindow >= 0, "readPetScalePreference 和 createPetWindow 应存在");
   assert.ok(idxReadPetScalePreference < idxCreatePetWindow, "readPetScalePreference 应在 createPetWindow 之前");
@@ -176,19 +170,44 @@ test("whenReady 启动序列顺序正确", () => {
   assert.ok(idxCreatePetWindow < idxStartWindowSurfacePolling, "createPetWindow 应在 startWindowSurfacePolling 之前");
 });
 
-test("before-quit 退出清理顺序正确", () => {
-  const beforeQuitBlock = mainSource.match(
-    /app\.on\(\s*['"]before-quit['"][\s\S]*?(?=\napp\.on\(|\nfunction |\nconst )/
-  )?.[0] || "";
-  assert.ok(beforeQuitBlock.length > 0, "应能提取 before-quit 块内容");
+test("onBeforeQuit handler 退出清理顺序正确", () => {
+  const onBeforeQuitBlock = lifecycleCallBlock.match(
+    /onBeforeQuit\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onWindowAllClosed/
+  )?.[1] || "";
+  assert.ok(onBeforeQuitBlock.length > 0, "应能提取 onBeforeQuit handler 内容");
 
-  const idxWritePetStats = beforeQuitBlock.indexOf("writePetStats");
-  const idxStopHoverPolling = beforeQuitBlock.indexOf("stopHoverPolling");
-  const idxClearDragState = beforeQuitBlock.indexOf("clearDragState");
+  const idxWritePetStats = onBeforeQuitBlock.indexOf("writePetStats");
+  const idxStopHoverPolling = onBeforeQuitBlock.indexOf("stopHoverPolling");
+  const idxClearDragState = onBeforeQuitBlock.indexOf("clearDragState");
 
   assert.ok(idxWritePetStats >= 0 && idxStopHoverPolling >= 0, "writePetStats 和 stopHoverPolling 应存在");
   assert.ok(idxWritePetStats < idxStopHoverPolling, "writePetStats 应在 stopHoverPolling 之前");
 
   assert.ok(idxClearDragState >= 0, "clearDragState 应存在");
   assert.ok(idxStopHoverPolling < idxClearDragState, "stopHoverPolling 应在 clearDragState 之前");
+});
+
+test("main.cjs 注入 onSecondInstance handler 调用 ensurePetWindow", () => {
+  // 在 lifecycleCallBlock 内提取 onSecondInstance handler 块（到下一个 handler "onReady" 前）
+  const onSecondInstanceBlock = lifecycleCallBlock.match(
+    /onSecondInstance\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onReady/
+  )?.[1] || "";
+  assert.ok(onSecondInstanceBlock.length > 0, "应能提取 onSecondInstance handler 内容");
+
+  assert.match(onSecondInstanceBlock, /ensurePetWindow\(\)/, "onSecondInstance handler 应调用 ensurePetWindow()");
+});
+
+test("main.cjs 注入 onWindowAllClosed handler 包含平台判断", () => {
+  // 在 lifecycleCallBlock 内提取 onWindowAllClosed handler 块（到下一个 handler "onActivate" 前）
+  const onWindowAllClosedBlock = lifecycleCallBlock.match(
+    /onWindowAllClosed\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\n\s{4}\},\s*\n\s{4}onActivate/
+  )?.[1] || "";
+  assert.ok(onWindowAllClosedBlock.length > 0, "应能提取 onWindowAllClosed handler 内容");
+
+  assert.match(
+    onWindowAllClosedBlock,
+    /process\.platform\s*!==\s*['"]darwin['"]/,
+    "应检查 process.platform !== 'darwin'"
+  );
+  assert.match(onWindowAllClosedBlock, /app\.quit\(\)/, "应调用 app.quit()");
 });

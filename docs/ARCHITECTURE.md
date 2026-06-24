@@ -17,7 +17,7 @@ electron-app/package.json
       -> 按 hash 渲染 pet/menu/hover/bubble 模式
 ```
 
-模块加载顺序：`main.cjs` 启动时优先加载 `core/` 下的基础模块（先 `app-constants.cjs` 提供常量，再 `logger.cjs` 提供日志能力，随后 `runtime-config.cjs` 读取变体配置和用户数据目录，`preferences-store.cjs` 在需要时读取偏好），之后按需加载 `pet/`（`pet-states.cjs` 构建状态、`asset-loader.cjs` 加载帧和元数据）和 `shared/`（`bounds.cjs` 提供几何计算、`messaging.cjs` 在窗口创建后用于向渲染层广播）。`main.cjs` 仍保留窗口、IPC 和系统能力编排，纯逻辑优先委托给子目录模块。
+模块加载顺序：`main.cjs` 启动时优先加载 `core/` 下的基础模块（先 `app-constants.cjs` 提供常量，再 `logger.cjs` 提供日志能力，随后 `runtime-config.cjs` 读取变体配置和用户数据目录，`preferences-store.cjs` 在需要时读取偏好），之后按需加载 `pet/`（`pet-states.cjs` 构建状态、`asset-loader.cjs` 加载帧和元数据）和 `shared/`（`bounds.cjs` 提供几何计算、`messaging.cjs` 在窗口创建后用于向渲染层广播）。生命周期注册模块 `lifecycle/register-app-lifecycle.cjs` 同样在启动时 require，`requestSingleInstanceLock` 由 `main.cjs` 顶层执行后，`registerAppLifecycle(context)` 在所有 handler 函数定义完成后、窗口创建前调用，集中绑定 `app.whenReady`、`before-quit`、`window-all-closed`、`second-instance`、`activate`、`display-metrics-changed` 事件，handler 通过 context 注入。`main.cjs` 仍保留窗口、IPC 和系统能力编排，纯逻辑优先委托给子目录模块。
 
 ## 主进程职责
 
@@ -42,6 +42,8 @@ electron-app/package.json
 平台能力已拆分到 `electron-app/electron/platform/` 目录：开机自启注册表读写和缓存由 `platform/auto-start.cjs` 封装，窗口候选探测（PowerShell 调用、解析、评分）由 `platform/window-surfaces.cjs` 封装，屏幕度量（任务栏表面、跑道、显示器）由 `platform/screen-metrics.cjs` 封装。各模块以 `createXController(context)` 形式暴露，依赖通过 context 注入。
 
 IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.handle` / `ipcMain.on` 集中在 `ipc/register-ipc-handlers.cjs` 的 `registerIpcHandlers(context)` 中注册，handler 函数由 `main.cjs` 通过 context 注入，模块本身不包含业务逻辑。新增 IPC channel 时需同步修改 `register-ipc-handlers.cjs`、`preload.cjs` 和 `static/renderer/` 下对应模块。
+
+应用生命周期注册已抽分到 `electron-app/electron/lifecycle/` 目录：所有 `app.whenReady`、`before-quit`、`window-all-closed`、`second-instance`、`activate`、`display-metrics-changed` 事件注册集中在 `lifecycle/register-app-lifecycle.cjs` 的 `registerAppLifecycle(context)` 中，handler 函数由 `main.cjs` 通过 context 注入，模块本身不包含业务逻辑。`requestSingleInstanceLock` 仍由 `main.cjs` 顶层执行，结果通过 context 注入。
 
 如果要降低未来维护成本，可考虑在独立需求中逐步拆分 `main.cjs`。
 

@@ -34,6 +34,7 @@
 | `platform/window-surfaces.cjs` | 窗口候选探测（PowerShell 调用、解析、评分） |
 | `platform/screen-metrics.cjs` | 屏幕度量（任务栏表面、跑道、显示器） |
 | `ipc/register-ipc-handlers.cjs` | IPC 注册模块，集中注册所有 ipcMain.handle/on，handler 由 main.cjs 注入 |
+| `lifecycle/register-app-lifecycle.cjs` | 应用生命周期注册模块，集中注册 app.whenReady、before-quit、window-all-closed、second-instance、activate、display-metrics-changed 事件，handler 由 main.cjs 注入 |
 
 ## 主进程功能域
 

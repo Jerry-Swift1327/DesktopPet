@@ -33,9 +33,10 @@ test("packaged user data root follows the base variant", () => {
 });
 
 test("pet scale preference is loaded before the pet window is created", () => {
-  const readyBlock = mainSource.match(/app\.whenReady\(\)\.then\(\(\) => \{([\s\S]*?)createPetWindow\(\);/)?.[1] || "";
+  const lifecycleBlock = mainSource.match(/registerAppLifecycle\(\s*\{([\s\S]*?)\n\}\);/)?.[1] || "";
+  const onReadyBlock = lifecycleBlock.match(/onReady\s*:\s*\(\s*\)\s*=>\s*\{([\s\S]*?)createPetWindow\(\);/)?.[1] || "";
 
-  assert.match(readyBlock, /readPetScalePreference\(\);/);
+  assert.match(onReadyBlock, /readPetScalePreference\(\);/);
 });
 
 test("split legacy preference files can migrate into preferences", () => {

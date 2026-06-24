@@ -48,6 +48,7 @@ const { createWindowRoamController } = require("./behavior/window-roam-controlle
 const { createWalkController } = require("./behavior/walk-controller.cjs");
 const { createDockController } = require("./behavior/dock-controller.cjs");
 const { registerIpcHandlers } = require("./ipc/register-ipc-handlers.cjs");
+const { registerAppLifecycle } = require("./lifecycle/register-app-lifecycle.cjs");
 const { createContactQrCodeResolver } = require("./ipc/contact-qrcode.cjs");
 
 // 应用级常量集中管理
@@ -5084,71 +5085,69 @@ function startDragTimer() {
   dragTimer = setInterval(updateDragPosition, 16);
 }
 
-if (!gotSingleInstanceLock) {
-  app.quit();
-} else {
-  app.on("second-instance", () => {
-    ensurePetWindow();
-  });
-
-  app.whenReady().then(() => {
-    log("app ready");
-    readPetStats();
-    readAutoStartPreference();
-    readWindowRoamPreference();
-    readEyeTrackingPreference();
-    readPetScalePreference();
-    rememberHomeDisplay();
-    createPetWindow();
-    refreshAutoStartCacheAsync();
-    startHoverPolling();
-    startWindowSurfacePolling();
-    updateWindowRoamPolling();
-    updateEyeTrackingPolling();
-    startIntimacyDecayTimer();
-    scheduleIdleGreeting();
-    startTabbyIdlePolling();
-    if (process.platform === "darwin") {
-      screen.on("display-metrics-changed", (_event, _display, metrics) => {
-        if (metrics.includes("workArea")) {
-          scheduleDarwinDisplayMetricsSettle();
-        }
-      });
-    }
-
-    app.on("activate", () => {
+registerAppLifecycle({
+  app,
+  screen,
+  process,
+  gotSingleInstanceLock,
+  handlers: {
+    onSecondInstance: () => {
+      ensurePetWindow();
+    },
+    onReady: () => {
+      log("app ready");
+      readPetStats();
+      readAutoStartPreference();
+      readWindowRoamPreference();
+      readEyeTrackingPreference();
+      readPetScalePreference();
+      rememberHomeDisplay();
+      createPetWindow();
+      refreshAutoStartCacheAsync();
+      startHoverPolling();
+      startWindowSurfacePolling();
+      updateWindowRoamPolling();
+      updateEyeTrackingPolling();
+      startIntimacyDecayTimer();
+      scheduleIdleGreeting();
+      startTabbyIdlePolling();
+    },
+    onBeforeQuit: () => {
+      writePetStats();
+      stopHoverPolling();
+      stopWindowSurfacePolling();
+      stopWindowRoamPolling();
+      stopEyeTrackingPolling();
+      stopIntimacyDecayTimer();
+      clearHoverIntent();
+      clearDragState({ notify: false });
+      clearStartupBubbleTimer();
+      clearHoverHideTimer();
+      clearMenuHideTimer();
+      if (randomGreetingTimer) {
+        clearTimeout(randomGreetingTimer);
+        randomGreetingTimer = null;
+      }
+      if (displayMetricsSettleTimer) {
+        clearTimeout(displayMetricsSettleTimer);
+        displayMetricsSettleTimer = null;
+      }
+    },
+    onWindowAllClosed: () => {
+      if (process.platform !== "darwin") {
+        app.quit();
+      }
+    },
+    onActivate: () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createPetWindow();
       }
-    });
-  });
-}
-
-app.on("before-quit", () => {
-  writePetStats();
-  stopHoverPolling();
-  stopWindowSurfacePolling();
-  stopWindowRoamPolling();
-  stopEyeTrackingPolling();
-  stopIntimacyDecayTimer();
-  clearHoverIntent();
-  clearDragState({ notify: false });
-  clearStartupBubbleTimer();
-  clearHoverHideTimer();
-  clearMenuHideTimer();
-  if (randomGreetingTimer) {
-    clearTimeout(randomGreetingTimer);
-    randomGreetingTimer = null;
-  }
-  if (displayMetricsSettleTimer) {
-    clearTimeout(displayMetricsSettleTimer);
-    displayMetricsSettleTimer = null;
-  }
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
+    },
+    onDisplayMetricsChanged: (_event, _display, metrics) => {
+      if (metrics.includes("workArea")) {
+        scheduleDarwinDisplayMetricsSettle();
+      }
+    }
   }
 });
 
