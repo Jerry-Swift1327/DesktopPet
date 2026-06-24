@@ -1,13 +1,12 @@
 // 屏幕指标控制器，提供任务栏行走跑道尺寸、任务栏表面、显示器匹配等计算，
 // 以及 macOS 显示器度量变化后的归位调度。
 // 从 main.cjs 提取，依赖通过 createScreenMetricsController(context) 注入；
-// 函数实现与 main.cjs 保持一致，screen 为 Electron 内置模块，直接 require。
-
-const { screen } = require("electron");
+// 函数实现与 main.cjs 保持一致，screen 由 context 注入。
 
 function createScreenMetricsController(context) {
   const {
-    // 运行时全局
+    // Electron 与运行时
+    screen,
     process,
     // 依赖函数
     clamp,
@@ -16,10 +15,10 @@ function createScreenMetricsController(context) {
     getCurrentSurface,
     getSurfaceWorkArea,
     moveToStartPosition,
-    // 可变全局变量
-    petWindow,
-    dragState,
-    currentSurface,
+    // 可变状态访问器（实时读取，避免快照）
+    getPetWindow,
+    getDragState,
+    getCurrentSurfaceValue,
     // 常量
     TASKBAR_WALK_RUNWAY_PADDING_SCALE,
     TASKBAR_WALK_RUNWAY_PADDING_MIN,
@@ -86,12 +85,16 @@ function createScreenMetricsController(context) {
     };
   }
 
-  function getTaskbarSurfaceForBounds(bounds = petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null) {
+  function getTaskbarSurfaceForBounds(bounds) {
+    if (bounds === undefined) {
+      const win = getPetWindow();
+      bounds = win && !win.isDestroyed() ? win.getBounds() : null;
+    }
     const display = bounds ? screen.getDisplayMatching(bounds) : screen.getPrimaryDisplay();
     return getTaskbarSurface(display);
   }
 
-  function getSurfaceDisplay(surface = currentSurface) {
+  function getSurfaceDisplay(surface = getCurrentSurfaceValue()) {
     if (surface?.displayId !== undefined && surface?.displayId !== null) {
       const display = screen.getAllDisplays().find((item) => item.id === surface.displayId);
       if (display) {
@@ -110,16 +113,24 @@ function createScreenMetricsController(context) {
   }
 
   function scheduleDarwinDisplayMetricsSettle() {
-    if (dragState || !petWindow || petWindow.isDestroyed()) {
+    const win = getPetWindow();
+    if (getDragState() || !win || win.isDestroyed()) {
       return;
     }
     clearTimeout(displayMetricsSettleTimer);
     displayMetricsSettleTimer = setTimeout(() => {
       displayMetricsSettleTimer = null;
-      if (!dragState && petWindow && !petWindow.isDestroyed()) {
+      if (!getDragState() && win && !win.isDestroyed()) {
         moveToStartPosition(false);
       }
     }, DARWIN_DISPLAY_METRICS_SETTLE_MS);
+  }
+
+  function clearDisplayMetricsSettleTimer() {
+    if (displayMetricsSettleTimer) {
+      clearTimeout(displayMetricsSettleTimer);
+      displayMetricsSettleTimer = null;
+    }
   }
 
   return {
@@ -130,7 +141,8 @@ function createScreenMetricsController(context) {
     getTaskbarSurface,
     getTaskbarSurfaceForBounds,
     getSurfaceDisplay,
-    scheduleDarwinDisplayMetricsSettle
+    scheduleDarwinDisplayMetricsSettle,
+    clearDisplayMetricsSettleTimer
   };
 }
 

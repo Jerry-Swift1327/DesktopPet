@@ -100,18 +100,13 @@ test("main.cjs onBeforeQuit handler 包含退出清理", () => {
   );
   assert.match(
     onBeforeQuitBlock,
-    /clearTimeout\(\s*displayMetricsSettleTimer\s*\)/,
-    "onBeforeQuit handler 内应 clearTimeout(displayMetricsSettleTimer)"
-  );
-  assert.match(
-    onBeforeQuitBlock,
     /if\s*\(\s*randomGreetingTimer\s*\)\s*\{[\s\S]*?clearTimeout\(\s*randomGreetingTimer\s*\)[\s\S]*?randomGreetingTimer\s*=\s*null/,
     "应包含 randomGreetingTimer 条件清理（if + clearTimeout + 置空）"
   );
   assert.match(
     onBeforeQuitBlock,
-    /if\s*\(\s*displayMetricsSettleTimer\s*\)\s*\{[\s\S]*?clearTimeout\(\s*displayMetricsSettleTimer\s*\)[\s\S]*?displayMetricsSettleTimer\s*=\s*null/,
-    "应包含 displayMetricsSettleTimer 条件清理（if + clearTimeout + 置空）"
+    /clearDisplayMetricsSettleTimer\(\)/,
+    "onBeforeQuit handler 内应调用 clearDisplayMetricsSettleTimer()（displayMetricsSettleTimer 所有权已迁移到 screenMetricsController）"
   );
 });
 
