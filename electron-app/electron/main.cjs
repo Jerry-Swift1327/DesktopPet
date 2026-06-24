@@ -47,6 +47,7 @@ const { createEyeTrackingController } = require("./behavior/eye-tracking-control
 const { createWindowRoamController } = require("./behavior/window-roam-controller.cjs");
 const { createWalkController } = require("./behavior/walk-controller.cjs");
 const { createDockController } = require("./behavior/dock-controller.cjs");
+const { registerIpcHandlers } = require("./ipc/register-ipc-handlers.cjs");
 
 // 应用级常量集中管理
 const appConstants = require("./core/app-constants.cjs");
@@ -5150,12 +5151,7 @@ app.on("window-all-closed", () => {
   }
 });
 
-ipcMain.handle("pet:get-config", () => buildPetConfig());
-ipcMain.handle("pet:set-auto-start", (_event, enabled) => setAutoStartPreference(enabled));
-ipcMain.handle("pet:toggle-auto-start", () => toggleAutoStart());
-ipcMain.handle("pet:set-window-roam", (_event, enabled) => setWindowRoamPreference(enabled));
-ipcMain.handle("pet:set-eye-tracking", (_event, enabled) => setEyeTrackingPreference(enabled));
-ipcMain.handle("pet:switch-variant", (_event, variant) => {
+function handleSwitchVariant(_event, variant) {
   if (!SWITCHABLE_VARIANTS.includes(variant)) {
     return { success: false, error: `Cannot switch to variant: ${variant}` };
   }
@@ -5165,109 +5161,9 @@ ipcMain.handle("pet:switch-variant", (_event, variant) => {
   app.relaunch();
   app.exit();
   return { success: true };
-});
-ipcMain.handle("pet:advance-walk-step", (_event, frameStep, elapsedMs) => advanceWalkStep(frameStep, elapsedMs));
-ipcMain.on("pet:show-menu", () => {
-  recordUserOperation();
-  togglePetMenu();
-});
-ipcMain.on("pet:resize-menu", (_event, height) => {
-  resizePetMenu(height);
-});
-ipcMain.on("pet:menu-panel-enter", () => {
-  setIsPointerOverMenuPanel(true);
-  clearMenuHideTimer();
-});
-ipcMain.on("pet:menu-panel-leave", () => {
-  setIsPointerOverMenuPanel(false);
-  scheduleHidePetMenu();
-});
-ipcMain.on("pet:resize-bubble", (_event, size) => {
-  if (!size || !Number.isFinite(size.width)) {
-    return;
-  }
-  resizeStartupBubble(size.width, size.height);
-});
-ipcMain.on("pet:hover-enter", () => {
-  beginHoverFromPointer();
-});
-ipcMain.on("pet:hover-leave", () => {
-  if (isCursorInsideSpriteRect()) {
-    beginHoverFromPointer();
-    return;
-  }
+}
 
-  setIsPointerOverPet(false);
-  clearHoverIntent();
-  scheduleHideHoverPanel();
-});
-ipcMain.on("pet:hover-panel-enter", () => {
-  setIsPointerOverHoverPanel(true);
-  clearHoverHideTimer();
-});
-ipcMain.on("pet:hover-panel-leave", () => {
-  setIsPointerOverHoverPanel(false);
-  scheduleHideHoverPanel();
-});
-ipcMain.on("pet:hover-action", (_event, state) => {
-  if (typeof state !== "string") {
-    return;
-  }
-  if (!states.some((item) => item.id === state)) {
-    return;
-  }
-  setState(state);
-  hideHoverPanel();
-});
-ipcMain.on("pet:rendered-frame", (_event, info) => {
-  updateRenderedFrame(info);
-});
-ipcMain.on("pet:renderer-diagnostic", (_event, message) => {
-  if (WALK_DIAGNOSTICS_ENABLED && typeof message === "string") {
-    logWalkDiagnostic(`renderer ${message}`);
-  }
-});
-ipcMain.on("pet:set-state", (_event, state) => {
-  if (typeof state === "string") {
-    setState(state);
-  }
-});
-ipcMain.on("pet:wake-sleeping-pet", () => {
-  if (!petRuntimeConfig.features.wakeHiss || (activeState !== STATE_YAWN && activeState !== STATE_SLEEP)) {
-    return;
-  }
-  recordUserOperation();
-  clearHoverIntent();
-  hideHoverPanel();
-  setState(STATE_HISS, false);
-});
-ipcMain.on("pet:complete-one-shot", (_event, state) => {
-  if (typeof state === "string") {
-    completeOneShotState(state);
-  }
-});
-ipcMain.on("pet:reset-position", () => {
-  recordUserOperation();
-  settlePetQuietly();
-});
-ipcMain.on("pet:reset-scale", () => {
-  recordUserOperation();
-  resetPetScale();
-});
-ipcMain.on("pet:show", ensurePetWindow);
-ipcMain.on("pet:hide", () => {
-  recordUserOperation();
-  petWindow?.hide();
-});
-ipcMain.on("pet:quit", () => app.quit());
-ipcMain.on("pet:hide-menu", hidePetMenu);
-ipcMain.on("pet:show-customization", () => {
-  showCustomizationPanel();
-});
-ipcMain.on("pet:hide-customization", () => {
-  hideCustomizationPanel();
-});
-ipcMain.handle("pet:get-contact-qrcode", async () => {
+function handleGetContactQrCode() {
   const fs = require("fs");
   const os = require("os");
   // 优先从应用内运行资源查找（打包后可用），fallback 到项目根目录和用户 Downloads 目录
@@ -5296,14 +5192,121 @@ ipcMain.handle("pet:get-contact-qrcode", async () => {
     }
   }
   return { success: false, error: "QR code file not found" };
-});
-ipcMain.on("pet:adjust-scale", (_event, deltaY) => {
+}
+
+function handleShowMenu() {
+  recordUserOperation();
+  togglePetMenu();
+}
+
+function handleMenuPanelEnter() {
+  setIsPointerOverMenuPanel(true);
+  clearMenuHideTimer();
+}
+
+function handleMenuPanelLeave() {
+  setIsPointerOverMenuPanel(false);
+  scheduleHidePetMenu();
+}
+
+function handleResizeBubble(_event, size) {
+  if (!size || !Number.isFinite(size.width)) {
+    return;
+  }
+  resizeStartupBubble(size.width, size.height);
+}
+
+function handleHoverLeave() {
+  if (isCursorInsideSpriteRect()) {
+    beginHoverFromPointer();
+    return;
+  }
+
+  setIsPointerOverPet(false);
+  clearHoverIntent();
+  scheduleHideHoverPanel();
+}
+
+function handleHoverPanelEnter() {
+  setIsPointerOverHoverPanel(true);
+  clearHoverHideTimer();
+}
+
+function handleHoverPanelLeave() {
+  setIsPointerOverHoverPanel(false);
+  scheduleHideHoverPanel();
+}
+
+function handleHoverAction(_event, state) {
+  if (typeof state !== "string") {
+    return;
+  }
+  if (!states.some((item) => item.id === state)) {
+    return;
+  }
+  setState(state);
+  hideHoverPanel();
+}
+
+function handleRenderedFrame(_event, info) {
+  updateRenderedFrame(info);
+}
+
+function handleRendererDiagnostic(_event, message) {
+  if (WALK_DIAGNOSTICS_ENABLED && typeof message === "string") {
+    logWalkDiagnostic(`renderer ${message}`);
+  }
+}
+
+function handleSetState(_event, state) {
+  if (typeof state === "string") {
+    setState(state);
+  }
+}
+
+function handleWakeSleepingPet() {
+  if (!petRuntimeConfig.features.wakeHiss || (activeState !== STATE_YAWN && activeState !== STATE_SLEEP)) {
+    return;
+  }
+  recordUserOperation();
+  clearHoverIntent();
+  hideHoverPanel();
+  setState(STATE_HISS, false);
+}
+
+function handleCompleteOneShot(_event, state) {
+  if (typeof state === "string") {
+    completeOneShotState(state);
+  }
+}
+
+function handleResetPosition() {
+  recordUserOperation();
+  settlePetQuietly();
+}
+
+function handleResetScale() {
+  recordUserOperation();
+  resetPetScale();
+}
+
+function handleHidePet() {
+  recordUserOperation();
+  petWindow?.hide();
+}
+
+function handleQuit() {
+  app.quit();
+}
+
+function handleAdjustScale(_event, deltaY) {
   if (Number.isFinite(deltaY)) {
     recordUserOperation();
     adjustPetScale(deltaY);
   }
-});
-ipcMain.on("pet:drag-start", (_event, point) => {
+}
+
+function handleDragStart(_event, point) {
   if (!petWindow || petWindow.isDestroyed() || !isScreenPoint(point)) {
     return;
   }
@@ -5337,8 +5340,9 @@ ipcMain.on("pet:drag-start", (_event, point) => {
   log(`drag-start cursor=${point.screenX},${point.screenY} bounds=${bounds.x},${bounds.y},${bounds.width},${bounds.height}`);
   sendDragState(true);
   startDragTimer();
-});
-ipcMain.on("pet:drag-end", () => {
+}
+
+function handleDragEnd() {
   if (dragState && petWindow && !petWindow.isDestroyed()) {
     if (windowDockInProgress) {
       clearDragState({ notify: true });
@@ -5358,6 +5362,48 @@ ipcMain.on("pet:drag-end", () => {
     return;
   }
   clearDragState({ notify: true });
+}
+
+registerIpcHandlers({
+  ipcMain,
+  handlers: {
+    // invoke handlers (8 个)
+    getConfig: buildPetConfig,
+    setAutoStart: (_event, enabled) => setAutoStartPreference(enabled),
+    toggleAutoStart,
+    setWindowRoam: (_event, enabled) => setWindowRoamPreference(enabled),
+    setEyeTracking: (_event, enabled) => setEyeTrackingPreference(enabled),
+    switchVariant: handleSwitchVariant,
+    advanceWalkStep: (_event, frameStep, elapsedMs) => advanceWalkStep(frameStep, elapsedMs),
+    getContactQrCode: handleGetContactQrCode,
+    // on handlers (26 个)
+    showMenu: handleShowMenu,
+    resizeMenu: (_event, height) => resizePetMenu(height),
+    menuPanelEnter: handleMenuPanelEnter,
+    menuPanelLeave: handleMenuPanelLeave,
+    resizeBubble: handleResizeBubble,
+    hoverEnter: beginHoverFromPointer,
+    hoverLeave: handleHoverLeave,
+    hoverPanelEnter: handleHoverPanelEnter,
+    hoverPanelLeave: handleHoverPanelLeave,
+    hoverAction: handleHoverAction,
+    renderedFrame: handleRenderedFrame,
+    rendererDiagnostic: handleRendererDiagnostic,
+    setState: handleSetState,
+    wakeSleepingPet: handleWakeSleepingPet,
+    completeOneShot: handleCompleteOneShot,
+    resetPosition: handleResetPosition,
+    resetScale: handleResetScale,
+    show: ensurePetWindow,
+    hide: handleHidePet,
+    quit: handleQuit,
+    hideMenu: hidePetMenu,
+    showCustomization: showCustomizationPanel,
+    hideCustomization: hideCustomizationPanel,
+    adjustScale: handleAdjustScale,
+    dragStart: handleDragStart,
+    dragEnd: handleDragEnd
+  }
 });
 
 

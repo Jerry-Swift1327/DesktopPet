@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "walk-controller.cjs"), "utf8");
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const registerIpcSource = fs.readFileSync(path.join(__dirname, "..", "electron", "ipc", "register-ipc-handlers.cjs"), "utf8");
 
 test("walk-controller 不再按值解构运行时可变状态，全部改为访问器", () => {
   // 提取 context 解构块（从 "const {" 到 "} = context;"）
@@ -173,8 +174,8 @@ test("walk-controller 保留 6 个导出函数", () => {
   assert.match(exportBlock, /advanceWalkStep/);
 });
 
-test("main.cjs 仍保留 advance-walk-step IPC 入口名称不变", () => {
-  assert.match(mainSource, /ipcMain\.handle\("pet:advance-walk-step"/);
+test("register-ipc-handlers.cjs 仍保留 advance-walk-step IPC 入口名称不变", () => {
+  assert.match(registerIpcSource, /ipcMain\.handle\(\s*['"]pet:advance-walk-step['"]/);
 });
 
 test("main.cjs 仍保留 pauseWalkLoopClock/resumeWalkLoopClock/resetWalkRuntime 函数声明", () => {

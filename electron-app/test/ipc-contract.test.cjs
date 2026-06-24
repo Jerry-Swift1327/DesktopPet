@@ -7,6 +7,7 @@ const ROOT = path.join(__dirname, "..");
 
 const preloadSource = fs.readFileSync(path.join(ROOT, "electron", "preload.cjs"), "utf8");
 const mainSource = fs.readFileSync(path.join(ROOT, "electron", "main.cjs"), "utf8");
+const registerIpcSource = fs.readFileSync(path.join(ROOT, "electron", "ipc", "register-ipc-handlers.cjs"), "utf8");
 
 const rendererSources = [
   fs.readFileSync(path.join(ROOT, "static", "renderer.js"), "utf8"),
@@ -29,7 +30,12 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-test("preload invoke channel 在 main.cjs 中有对应 ipcMain.handle", () => {
+test("main.cjs 已引入并调用 registerIpcHandlers", () => {
+  assert.match(mainSource, /require\(.*ipc\/register-ipc-handlers\.cjs.*\)/, "main.cjs 应引入 register-ipc-handlers.cjs");
+  assert.match(mainSource, /registerIpcHandlers\(/, "main.cjs 应调用 registerIpcHandlers");
+});
+
+test("preload invoke channel 在 register-ipc-handlers.cjs 中有对应 ipcMain.handle", () => {
   const invokeChannels = [...preloadSource.matchAll(/ipcRenderer\.invoke\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
   const expected = [
     "pet:get-config",
@@ -46,11 +52,11 @@ test("preload invoke channel 在 main.cjs 中有对应 ipcMain.handle", () => {
 
   for (const channel of expected) {
     const pattern = new RegExp(`ipcMain\\.handle\\(\\s*['"]${escapeRegex(channel)}['"]`);
-    assert.match(mainSource, pattern, `main.cjs 应为 ${channel} 注册 ipcMain.handle`);
+    assert.match(registerIpcSource, pattern, `register-ipc-handlers.cjs 应为 ${channel} 注册 ipcMain.handle`);
   }
 });
 
-test("preload send channel 在 main.cjs 中有对应 ipcMain.on", () => {
+test("preload send channel 在 register-ipc-handlers.cjs 中有对应 ipcMain.on", () => {
   const sendChannels = [...preloadSource.matchAll(/ipcRenderer\.send\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
   const expected = [
     "pet:show-menu", "pet:resize-menu", "pet:resize-bubble",
@@ -68,7 +74,7 @@ test("preload send channel 在 main.cjs 中有对应 ipcMain.on", () => {
 
   for (const channel of expected) {
     const pattern = new RegExp(`ipcMain\\.on\\(\\s*['"]${escapeRegex(channel)}['"]`);
-    assert.match(mainSource, pattern, `main.cjs 应为 ${channel} 注册 ipcMain.on`);
+    assert.match(registerIpcSource, pattern, `register-ipc-handlers.cjs 应为 ${channel} 注册 ipcMain.on`);
   }
 });
 
@@ -110,7 +116,7 @@ test("renderer 调用的 desktopPet.* 都存在于 preload.cjs", () => {
   }
 });
 
-test("高风险 channel 名称在 preload.cjs 和 main.cjs 中保持不变", () => {
+test("高风险 channel 名称在 preload.cjs 和 register-ipc-handlers.cjs 中保持不变", () => {
   const highRiskChannels = [
     "pet:advance-walk-step",
     "pet:drag-start",
@@ -123,7 +129,7 @@ test("高风险 channel 名称在 preload.cjs 和 main.cjs 中保持不变", () 
   for (const channel of highRiskChannels) {
     const pattern = new RegExp(escapeRegex(channel));
     assert.match(preloadSource, pattern, `preload.cjs 应包含高风险 channel ${channel}`);
-    assert.match(mainSource, pattern, `main.cjs 应包含高风险 channel ${channel}`);
+    assert.match(registerIpcSource, pattern, `register-ipc-handlers.cjs 应包含高风险 channel ${channel}`);
   }
 });
 

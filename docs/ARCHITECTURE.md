@@ -41,6 +41,8 @@ electron-app/package.json
 
 平台能力已拆分到 `electron-app/electron/platform/` 目录：开机自启注册表读写和缓存由 `platform/auto-start.cjs` 封装，窗口候选探测（PowerShell 调用、解析、评分）由 `platform/window-surfaces.cjs` 封装，屏幕度量（任务栏表面、跑道、显示器）由 `platform/screen-metrics.cjs` 封装。各模块以 `createXController(context)` 形式暴露，依赖通过 context 注入。
 
+IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.handle` / `ipcMain.on` 集中在 `ipc/register-ipc-handlers.cjs` 的 `registerIpcHandlers(context)` 中注册，handler 函数由 `main.cjs` 通过 context 注入，模块本身不包含业务逻辑。新增 IPC channel 时需同步修改 `register-ipc-handlers.cjs`、`preload.cjs` 和 `static/renderer/` 下对应模块。
+
 如果要降低未来维护成本，可考虑在独立需求中逐步拆分 `main.cjs`。
 
 ## 渲染层职责
@@ -61,7 +63,7 @@ electron-app/package.json
 
 `electron-app/electron/preload.cjs` 是主进程和渲染层之间的安全边界。新增渲染层能力时通常需要三处同步：
 
-1. `main.cjs` 增加 `ipcMain.handle` 或 `ipcMain.on`。
+1. 在 `ipc/register-ipc-handlers.cjs` 中添加 `ipcMain.handle` 或 `ipcMain.on`，并在 `main.cjs` 中提供对应 handler 函数。
 2. `preload.cjs` 暴露新的 `window.desktopPet` 方法。
 3. `static/renderer.js` 调用该方法并处理 UI 状态。
 

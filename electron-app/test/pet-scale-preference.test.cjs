@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const registerIpcSource = fs.readFileSync(path.join(__dirname, "..", "electron", "ipc", "register-ipc-handlers.cjs"), "utf8");
 const appConstantsSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "app-constants.cjs"), "utf8");
 const runtimeConfigSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "runtime-config.cjs"), "utf8");
 const preferencesStoreSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "preferences-store.cjs"), "utf8");
@@ -82,11 +83,11 @@ test("window dock scale uses the surface-fitted scale", () => {
 test("preferred variant is stored under the base variant local data folder", () => {
   const preferredPathBody = runtimeConfigSource.match(/function getPreferredVariantFilePath\(baseVariant = DEFAULT_PET_VARIANT\) \{([\s\S]*?)\n\}/)?.[1] || "";
   const runtimeConfigBody = runtimeConfigSource.match(/function readPetRuntimeConfig\(\) \{([\s\S]*?)function getBasePetVariant/)?.[1] || "";
-  const switchVariantBody = mainSource.match(/ipcMain\.handle\("pet:switch-variant"[\s\S]*?\n\}\);/)?.[0] || "";
 
   assert.match(preferredPathBody, /process\.env\.LOCALAPPDATA[\s\S]*APP_INTERNAL_NAME, baseVariant, PREFERRED_VARIANT_FILE/);
   assert.match(runtimeConfigBody, /readPreferredVariant\(fileConfig\.variant\)/);
-  assert.match(switchVariantBody, /writePreferredVariant\(variant, basePetVariant\)/);
+  assert.match(registerIpcSource, /ipcMain\.handle\(\s*['"]pet:switch-variant['"]/, "register-ipc-handlers.cjs 应注册 pet:switch-variant");
+  assert.match(mainSource, /writePreferredVariant\(variant, basePetVariant\)/, "main.cjs 应在 switch-variant handler 中调用 writePreferredVariant");
 });
 
 test("packaged preferred variant still reads the legacy roaming file", () => {

@@ -33,6 +33,7 @@
 | `platform/auto-start.cjs` | 开机自启（注册表读写、缓存、摘要） |
 | `platform/window-surfaces.cjs` | 窗口候选探测（PowerShell 调用、解析、评分） |
 | `platform/screen-metrics.cjs` | 屏幕度量（任务栏表面、跑道、显示器） |
+| `ipc/register-ipc-handlers.cjs` | IPC 注册模块，集中注册所有 ipcMain.handle/on，handler 由 main.cjs 注入 |
 
 ## 主进程功能域
 
@@ -60,6 +61,7 @@
 | 资源加载 | `pet/asset-loader.cjs`、`listFrames`、`getAssetsRoot` |
 | 几何工具 | `shared/bounds.cjs`、`clamp`、`isPointInsideRect` |
 | 消息广播 | `shared/messaging.cjs`、`safeSend`、`broadcastToWindows` |
+| IPC 注册 | `ipc/register-ipc-handlers.cjs`、`registerIpcHandlers` |
 | 窗口创建 | `windows/overlay-window.cjs`、`createOverlayWindow` |
 | 窗口定位 | `windows/overlay-geometry.cjs`、`getOverlayPlacementRect`、`getMenuPosition` |
 | 气泡控制 | `windows/bubble-controller.cjs`、`showStartupBubble`、`hideStartupBubble` |
@@ -78,7 +80,7 @@
 
 新增一个渲染层能力时，通常需要：
 
-1. 在 `main.cjs` 中添加 `ipcMain.handle` 或 `ipcMain.on`。
+1. 在 `ipc/register-ipc-handlers.cjs` 中添加 `ipcMain.handle` 或 `ipcMain.on`，并在 `main.cjs` 中提供对应 handler 函数注入 context.handlers。
 2. 在 `preload.cjs` 中暴露 `window.desktopPet` 方法。
 3. 在 `../static/renderer.js` 中调用该方法。
 4. 如涉及 UI 状态，更新 `../static/styles.css`。
