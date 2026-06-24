@@ -183,7 +183,26 @@ test("main.cjs 仍保留 pauseWalkLoopClock/resumeWalkLoopClock/resetWalkRuntime
   assert.match(mainSource, /function resetWalkRuntime\(/);
 });
 
-test("main.cjs 尚未引入 createWalkController（本轮不接线）", () => {
-  assert.doesNotMatch(mainSource, /createWalkController/);
-  assert.doesNotMatch(mainSource, /require\(.*walk-controller/);
+test("main.cjs 已引入并构造 createWalkController", () => {
+  assert.match(mainSource, /createWalkController/);
+  assert.match(mainSource, /require\(.*walk-controller/);
+  assert.match(mainSource, /const walkController = createWalkController\(/);
+});
+
+test("main.cjs 保留 6 个薄包装函数声明", () => {
+  assert.match(mainSource, /function scheduleWalkLoopTimeout\(\)/);
+  assert.match(mainSource, /function startWalkLoop\(\)/);
+  assert.match(mainSource, /function refreshWalkLoopAfterSurfaceChange\(\)/);
+  assert.match(mainSource, /function completeWalkLoop\(\)/);
+  assert.match(mainSource, /function advanceTaskbarWalkStep\(/);
+  assert.match(mainSource, /function advanceWalkStep\(/);
+});
+
+test("main.cjs 薄包装函数体委托给 walkController", () => {
+  assert.match(mainSource, /walkController\.scheduleWalkLoopTimeout\(\)/);
+  assert.match(mainSource, /walkController\.startWalkLoop\(\)/);
+  assert.match(mainSource, /walkController\.refreshWalkLoopAfterSurfaceChange\(\)/);
+  assert.match(mainSource, /walkController\.completeWalkLoop\(\)/);
+  assert.match(mainSource, /walkController\.advanceTaskbarWalkStep\(/);
+  assert.match(mainSource, /walkController\.advanceWalkStep\(/);
 });
