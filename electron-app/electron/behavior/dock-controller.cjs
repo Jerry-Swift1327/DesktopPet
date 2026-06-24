@@ -1,6 +1,13 @@
 // 贴靠控制器，管理宠物窗口拖拽结束后的窗口表面贴靠、表面校验、轮询与回退逻辑。
 // 从 main.cjs 提取，依赖通过 createDockController(context) 注入；
 // 函数实现与 main.cjs 保持一致，不修改控制流与逻辑。
+//
+// 本控制器为无状态函数束：所有运行时可变状态（petWindow、currentSurface、activeState、
+// walkDirection、dragState、petRuntimeConfig、petScale、preferredPetScale、windowRoamEnabled
+// 以及 5 个贴靠轮询状态）均不在 controller 内部持有副本，而是通过 context 注入的
+// 访问器（getter）读取 main.cjs 的实时状态，通过 setter 回写 main.cjs 状态，
+// 避免快照固化与双状态源风险。windowRoam 相关状态由 window-roam-controller 统一维护，
+// 本控制器仅通过注入的协作方法间接操作。
 
 function createDockController(context) {
   const {
@@ -37,16 +44,32 @@ function createDockController(context) {
     refreshCurrentWindowSurfaceBoundsFromCache,
     getTopWindowRoamSurface,
     attachPetToWindowRoamSurface,
-    // 只读状态
-    petWindow,
-    currentSurface,
-    activeState,
-    walkDirection,
-    petRuntimeConfig,
-    petScale,
-    preferredPetScale,
-    dragState,
-    windowRoamEnabledCache,
+    // window-roam-controller 协作方法（状态由 window-roam-controller 统一维护）
+    rememberDockedWindowRoamTarget,
+    clearWindowRoamSuppression,
+    suppressPreviousWindowAfterDockMiss,
+    setDragFallbackSuppressionUntil,
+    markWindowRoamAttached,
+    // 外部状态访问器（读取 main.cjs 实时状态）
+    getPetWindow,
+    getActiveState,
+    getWalkDirection,
+    getDragState,
+    getPetRuntimeConfig,
+    getPetScale,
+    getPreferredPetScale,
+    getWindowRoamEnabled,
+    // 贴靠轮询状态访问器（读 getter / 写 setter，状态存储于 main.cjs）
+    getWindowSurfacePollTimer,
+    setWindowSurfacePollTimer,
+    getLastWindowSurfaceHeavyCheckAt,
+    setLastWindowSurfaceHeavyCheckAt,
+    getWindowSurfaceMissingTicks,
+    setWindowSurfaceMissingTicks,
+    getWindowDockInProgress,
+    setWindowDockInProgress,
+    getWindowDockHoverSuppressedUntil,
+    setWindowDockHoverSuppressedUntil,
     // 常量
     STATE_SHAKE,
     ENABLE_WINDOW_DOCKING,
@@ -60,33 +83,21 @@ function createDockController(context) {
     WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS
   } = context;
 
-  // 贴靠相关状态（原 main.cjs 中的全局变量，迁移函数内被重新赋值，故用 let 声明为模块内部状态）
-  let windowSurfacePollTimer = null;
-  let lastWindowSurfaceHeavyCheckAt = 0;
-  let windowSurfaceMissingTicks = 0;
-  let windowDockInProgress = false;
-  let windowDockHoverSuppressedUntil = 0;
-  let windowRoamLastTargetId = "";
-  let windowRoamPreferredTargetId = "";
-  let windowRoamSuppressedWindowId = "";
-  let windowRoamDragFallbackSuppressedUntil = 0;
-  let windowRoamMissingTicks = 0;
-
   function shouldRetryDockAfterDrag(reason) {
     return reason === "empty-cache" || reason === "no-window-candidates";
   }
 
   function applyDockSurfaceAfterDrag(surface, draggedX) {
     const nextSurface = setCurrentSurface(surface);
-    applySurfaceScale(nextSurface, activeState, walkDirection);
-    groundPetToSurface(activeState, walkDirection, nextSurface);
+    applySurfaceScale(nextSurface, getActiveState(), getWalkDirection());
+    groundPetToSurface(getActiveState(), getWalkDirection(), nextSurface);
     if (nextSurface.type === "window") {
-      windowDockHoverSuppressedUntil = Date.now() + WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS;
-      const snappedBounds = petWindow.getBounds();
-      const target = clampPetWindowPositionToSurface(draggedX, snappedBounds.y, nextSurface, activeState, walkDirection);
+      setWindowDockHoverSuppressedUntil(Date.now() + WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS);
+      const snappedBounds = getPetWindow().getBounds();
+      const target = clampPetWindowPositionToSurface(draggedX, snappedBounds.y, nextSurface, getActiveState(), getWalkDirection());
       setPetWindowPosition(target.x, target.y);
       syncWalkTrackX(target.x);
-      lastWindowSurfaceHeavyCheckAt = Date.now();
+      setLastWindowSurfaceHeavyCheckAt(Date.now());
     }
     if (isWalkingState()) {
       refreshWalkLoopAfterSurfaceChange();
@@ -96,22 +107,22 @@ function createDockController(context) {
 
   function finishWindowDockAfterDrag() {
     clearDragState({ notify: true });
-    windowDockInProgress = false;
+    setWindowDockInProgress(false);
     refreshWindowSurfaceCandidatesAsync();
-    if (petRuntimeConfig.variant === "tabby" && activeState !== STATE_SHAKE) {
+    if (getPetRuntimeConfig().variant === "tabby" && getActiveState() !== STATE_SHAKE) {
       setState(STATE_SHAKE, false);
     }
   }
 
   function dockPetAfterDrag({ retry = false } = {}) {
-    if (!petWindow || petWindow.isDestroyed()) {
+    if (!getPetWindow() || getPetWindow().isDestroyed()) {
       finishWindowDockAfterDrag();
       return;
     }
-    const bounds = petWindow.getBounds();
+    const bounds = getPetWindow().getBounds();
     const draggedX = bounds.x;
-    const previousWindowId = currentSurface?.type === "window"
-      ? parseWindowHwnd(currentSurface.sourceWindowId)
+    const previousWindowId = getCurrentSurface()?.type === "window"
+      ? parseWindowHwnd(getCurrentSurface().sourceWindowId)
       : "";
     let surface = null;
     let diagnostic = { ok: false, reason: "disabled", elapsedMs: 0, surface: null };
@@ -130,20 +141,18 @@ function createDockController(context) {
         return;
       }
 
-      if (surface && applySurfaceScale(surface, activeState, walkDirection)) {
+      if (surface && applySurfaceScale(surface, getActiveState(), getWalkDirection())) {
         const nextSurface = applyDockSurfaceAfterDrag(surface, draggedX);
-        if (windowRoamEnabledCache && nextSurface.type === "window") {
-          windowRoamLastTargetId = parseWindowHwnd(nextSurface.sourceWindowId);
-          windowRoamPreferredTargetId = windowRoamLastTargetId;
-          windowRoamDragFallbackSuppressedUntil = 0;
+        if (getWindowRoamEnabled() && nextSurface.type === "window") {
+          rememberDockedWindowRoamTarget(nextSurface);
         }
-        windowRoamSuppressedWindowId = "";
+        clearWindowRoamSuppression();
       } else {
-        if (windowRoamEnabledCache && previousWindowId) {
-          windowRoamSuppressedWindowId = previousWindowId;
+        if (getWindowRoamEnabled() && previousWindowId) {
+          suppressPreviousWindowAfterDockMiss(previousWindowId);
         }
-        if (windowRoamEnabledCache) {
-          windowRoamDragFallbackSuppressedUntil = Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS;
+        if (getWindowRoamEnabled()) {
+          setDragFallbackSuppressionUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS);
         }
         fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
       }
@@ -158,15 +167,15 @@ function createDockController(context) {
 
     if (WINDOW_DOCK_DEBUG) {
       const resolvedSurface = getCurrentSurface();
-      log(`dock-after-drag reason=${diagnostic.reason} elapsedMs=${diagnostic.elapsedMs || 0} surface=${resolvedSurface.type} title=${resolvedSurface.title || ""} scale=${petScale} preferred=${preferredPetScale}`);
+      log(`dock-after-drag reason=${diagnostic.reason} elapsedMs=${diagnostic.elapsedMs || 0} surface=${resolvedSurface.type} title=${resolvedSurface.title || ""} scale=${getPetScale()} preferred=${getPreferredPetScale()}`);
     }
   }
 
   function validateCurrentWindowSurface({ useCache = true } = {}) {
-    if (!currentSurface || currentSurface.type !== "window") {
+    if (!getCurrentSurface() || getCurrentSurface().type !== "window") {
       return true;
     }
-    const sourceWindowId = currentSurface.sourceWindowId;
+    const sourceWindowId = getCurrentSurface().sourceWindowId;
     if (!sourceWindowId) {
       return false;
     }
@@ -184,11 +193,11 @@ function createDockController(context) {
     return true;
   }
 
-  function isPetStillDockedOnWindowSurface(surface = currentSurface) {
-    if (!petWindow || petWindow.isDestroyed() || !surface || surface.type !== "window") {
+  function isPetStillDockedOnWindowSurface(surface = getCurrentSurface()) {
+    if (!getPetWindow() || getPetWindow().isDestroyed() || !surface || surface.type !== "window") {
       return false;
     }
-    const visibleRect = getVisiblePetRectFromBounds(petWindow.getBounds(), activeState, walkDirection);
+    const visibleRect = getVisiblePetRectFromBounds(getPetWindow().getBounds(), getActiveState(), getWalkDirection());
     const centerX = visibleRect.x + Math.round(visibleRect.width / 2);
     const bottomY = visibleRect.y + visibleRect.height;
     return centerX >= surface.left
@@ -197,21 +206,21 @@ function createDockController(context) {
   }
 
   function fallbackCurrentSurfaceToTaskbar(reason = "window-surface-invalidated") {
-    if (!petWindow || petWindow.isDestroyed()) {
+    if (!getPetWindow() || getPetWindow().isDestroyed()) {
       return;
     }
-    const previousBounds = petWindow.getBounds();
-    const previousVisibleRect = getVisiblePetRectFromBounds(previousBounds, activeState, walkDirection);
+    const previousBounds = getPetWindow().getBounds();
+    const previousVisibleRect = getVisiblePetRectFromBounds(previousBounds, getActiveState(), getWalkDirection());
     const previousCenterX = previousVisibleRect.x + Math.round(previousVisibleRect.width / 2);
     const fallback = resetToTaskbarSurface(previousBounds);
-    applySurfaceScale(fallback, activeState, walkDirection);
-    const groundedY = getGroundedWindowYForSurface(fallback, activeState, walkDirection);
-    const nextBounds = petWindow.getBounds();
-    const nextVisibleInsets = getVisibleSpriteInsets(activeState, walkDirection);
+    applySurfaceScale(fallback, getActiveState(), getWalkDirection());
+    const groundedY = getGroundedWindowYForSurface(fallback, getActiveState(), getWalkDirection());
+    const nextBounds = getPetWindow().getBounds();
+    const nextVisibleInsets = getVisibleSpriteInsets(getActiveState(), getWalkDirection());
     const nextVisibleWidth = getPetSpriteSize() - nextVisibleInsets.left - nextVisibleInsets.right;
     const nextVisibleLeft = previousCenterX - Math.round(nextVisibleWidth / 2);
-    const target = getPetWindowPositionForVisibleRect(nextVisibleLeft, getSurfaceVisibleTop(fallback, activeState, walkDirection), activeState, walkDirection);
-    const next = clampPetWindowPositionToSurface(target.x, groundedY, fallback, activeState, walkDirection);
+    const target = getPetWindowPositionForVisibleRect(nextVisibleLeft, getSurfaceVisibleTop(fallback, getActiveState(), getWalkDirection()), getActiveState(), getWalkDirection());
+    const next = clampPetWindowPositionToSurface(target.x, groundedY, fallback, getActiveState(), getWalkDirection());
     if (isWalkingState() || (Math.abs(next.x - nextBounds.x) <= 2 && Math.abs(next.y - nextBounds.y) <= 2)) {
       setPetWindowPosition(next.x, next.y);
     } else {
@@ -222,75 +231,73 @@ function createDockController(context) {
       refreshWalkLoopAfterSurfaceChange();
     }
     if (WINDOW_DOCK_DEBUG) {
-      log(`${reason} -> fallback taskbar target=${next.x},${next.y} state=${activeState}`);
+      log(`${reason} -> fallback taskbar target=${next.x},${next.y} state=${getActiveState()}`);
     }
-    windowSurfaceMissingTicks = 0;
+    setWindowSurfaceMissingTicks(0);
   }
 
   function startWindowSurfacePolling() {
-    if (windowSurfacePollTimer || !ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
+    if (getWindowSurfacePollTimer() || !ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
       return;
     }
-    windowSurfacePollTimer = setInterval(() => {
-      if (!petWindow || petWindow.isDestroyed()) {
+    setWindowSurfacePollTimer(setInterval(() => {
+      if (!getPetWindow() || getPetWindow().isDestroyed()) {
         return;
       }
-      if (dragState) {
+      if (getDragState()) {
         return;
       }
-      if (!currentSurface || currentSurface.type !== "window") {
+      if (!getCurrentSurface() || getCurrentSurface().type !== "window") {
         return;
       }
       maybeRefreshWindowSurfaceCandidatesBackground();
       const quickValid = refreshCurrentWindowSurfaceBoundsFromCache();
       if (quickValid) {
-        windowSurfaceMissingTicks = 0;
+        setWindowSurfaceMissingTicks(0);
       } else {
-        windowSurfaceMissingTicks += 1;
-        if (windowSurfaceMissingTicks < 1) {
+        setWindowSurfaceMissingTicks(getWindowSurfaceMissingTicks() + 1);
+        if (getWindowSurfaceMissingTicks() < 1) {
           return;
         }
       }
-      if (!windowRoamEnabledCache && !isPetStillDockedOnWindowSurface(currentSurface)) {
+      if (!getWindowRoamEnabled() && !isPetStillDockedOnWindowSurface(getCurrentSurface())) {
         fallbackCurrentSurfaceToTaskbar("window-surface-detached");
         return;
       }
       const now = Date.now();
-      if (now - lastWindowSurfaceHeavyCheckAt < WINDOW_SURFACE_HEAVY_RECHECK_MS) {
+      if (now - getLastWindowSurfaceHeavyCheckAt() < WINDOW_SURFACE_HEAVY_RECHECK_MS) {
         if (quickValid) {
           return;
         }
       }
-      lastWindowSurfaceHeavyCheckAt = now;
+      setLastWindowSurfaceHeavyCheckAt(now);
       if (!validateCurrentWindowSurface()) {
-        const invalidWindowId = parseWindowHwnd(currentSurface?.sourceWindowId);
-        const roamSurface = windowRoamEnabledCache ? getTopWindowRoamSurface(invalidWindowId) : null;
+        const invalidWindowId = parseWindowHwnd(getCurrentSurface()?.sourceWindowId);
+        const roamSurface = getWindowRoamEnabled() ? getTopWindowRoamSurface(invalidWindowId) : null;
         if (roamSurface && attachPetToWindowRoamSurface(roamSurface)) {
-          windowRoamLastTargetId = parseWindowHwnd(roamSurface.sourceWindowId);
-          windowRoamSuppressedWindowId = "";
-          windowRoamMissingTicks = 0;
+          markWindowRoamAttached(roamSurface);
           return;
         }
-        const fallback = resetToTaskbarSurface(petWindow.getBounds());
-        applySurfaceScale(fallback, activeState, walkDirection);
-        groundPetToSurface(activeState, walkDirection, fallback);
+        const fallback = resetToTaskbarSurface(getPetWindow().getBounds());
+        applySurfaceScale(fallback, getActiveState(), getWalkDirection());
+        groundPetToSurface(getActiveState(), getWalkDirection(), fallback);
         if (isWalkingState()) {
           refreshWalkLoopAfterSurfaceChange();
         }
         if (WINDOW_DOCK_DEBUG) {
           log("window-surface invalidated -> fallback taskbar");
         }
-        windowSurfaceMissingTicks = 0;
+        setWindowSurfaceMissingTicks(0);
       }
-    }, WINDOW_SURFACE_POLL_INTERVAL_MS);
+    }, WINDOW_SURFACE_POLL_INTERVAL_MS));
   }
 
   function stopWindowSurfacePolling() {
-    if (!windowSurfacePollTimer) {
+    if (!getWindowSurfacePollTimer()) {
       return;
     }
-    clearInterval(windowSurfacePollTimer);
-    windowSurfacePollTimer = null;
+    clearInterval(getWindowSurfacePollTimer());
+    setWindowSurfacePollTimer(null);
   }
 
   return {
