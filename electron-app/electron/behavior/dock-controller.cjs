@@ -44,12 +44,18 @@ function createDockController(context) {
     refreshCurrentWindowSurfaceBoundsFromCache,
     getTopWindowRoamSurface,
     attachPetToWindowRoamSurface,
+    // 诊断日志与暂停状态（与 main.cjs finishWindowDockAfterDrag 等价）
+    logWalkDiagnostic,
+    isInteractionPaused,
+    getInteractionPauseSummary,
     // window-roam-controller 协作方法（状态由 window-roam-controller 统一维护）
     rememberDockedWindowRoamTarget,
     clearWindowRoamSuppression,
     suppressPreviousWindowAfterDockMiss,
     setDragFallbackSuppressionUntil,
     markWindowRoamAttached,
+    // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag，避免闭包绕过 main.cjs 函数名
+    retryDockPetAfterDrag,
     // 外部状态访问器（读取 main.cjs 实时状态）
     getPetWindow,
     getActiveState,
@@ -109,7 +115,8 @@ function createDockController(context) {
     clearDragState({ notify: true });
     setWindowDockInProgress(false);
     refreshWindowSurfaceCandidatesAsync();
-    if (getPetRuntimeConfig().variant === "tabby" && getActiveState() !== STATE_SHAKE) {
+    logWalkDiagnostic(`dock-finish state=${getActiveState()} surface=${getCurrentSurface()?.type || "unknown"} paused=${isInteractionPaused()} reasons=${getInteractionPauseSummary()}`);
+    if (getPetRuntimeConfig().features.dockShake && getActiveState() !== STATE_SHAKE) {
       setState(STATE_SHAKE, false);
     }
   }
@@ -137,7 +144,7 @@ function createDockController(context) {
       if (!surface && !retry && ENABLE_WINDOW_DOCKING && shouldRetryDockAfterDrag(diagnostic.reason)) {
         refreshWindowSurfaceCandidatesAsync({ force: true });
         retryScheduled = true;
-        setTimeout(() => dockPetAfterDrag({ retry: true }), WINDOW_DOCK_DRAG_RETRY_DELAY_MS);
+        setTimeout(() => retryDockPetAfterDrag({ retry: true }), WINDOW_DOCK_DRAG_RETRY_DELAY_MS);
         return;
       }
 

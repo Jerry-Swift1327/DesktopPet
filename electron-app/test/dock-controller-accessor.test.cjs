@@ -187,9 +187,57 @@ test("dock-controller 保留 8 个核心导出函数", () => {
   assert.match(exportBlock, /stopWindowSurfacePolling/);
 });
 
-test("main.cjs 尚未引入或构造 createDockController", () => {
-  assert.doesNotMatch(mainSource, /createDockController/);
-  assert.doesNotMatch(mainSource, /require\(.*dock-controller/);
+test("main.cjs 已引入并构造 createDockController", () => {
+  assert.match(mainSource, /createDockController/);
+  assert.match(mainSource, /require\(.*dock-controller/);
+  assert.match(mainSource, /const dockController = createDockController\(/);
+});
+
+test("main.cjs 保留 8 个薄包装函数声明", () => {
+  assert.match(mainSource, /function applyDockSurfaceAfterDrag\(/);
+  assert.match(mainSource, /function finishWindowDockAfterDrag\(/);
+  assert.match(mainSource, /function dockPetAfterDrag\(/);
+  assert.match(mainSource, /function validateCurrentWindowSurface\(/);
+  assert.match(mainSource, /function isPetStillDockedOnWindowSurface\(/);
+  assert.match(mainSource, /function fallbackCurrentSurfaceToTaskbar\(/);
+  assert.match(mainSource, /function startWindowSurfacePolling\(/);
+  assert.match(mainSource, /function stopWindowSurfacePolling\(/);
+});
+
+test("main.cjs 薄包装函数体委托给 dockController", () => {
+  assert.match(mainSource, /dockController\.applyDockSurfaceAfterDrag\(/);
+  assert.match(mainSource, /dockController\.finishWindowDockAfterDrag\(/);
+  assert.match(mainSource, /dockController\.dockPetAfterDrag\(/);
+  assert.match(mainSource, /dockController\.validateCurrentWindowSurface\(/);
+  assert.match(mainSource, /dockController\.isPetStillDockedOnWindowSurface\(/);
+  assert.match(mainSource, /dockController\.fallbackCurrentSurfaceToTaskbar\(/);
+  assert.match(mainSource, /dockController\.startWindowSurfacePolling\(/);
+  assert.match(mainSource, /dockController\.stopWindowSurfacePolling\(/);
+});
+
+test("dock-controller 使用 features.dockShake 而非硬编码 variant === tabby", () => {
+  // 应使用 features.dockShake
+  assert.match(controllerSource, /features\.dockShake/);
+  // 不应使用 variant === "tabby"（在非注释行中）
+  const codeLines = controllerSource.split("\n").filter((line) => !line.trim().startsWith("//"));
+  const codeWithoutComments = codeLines.join("\n");
+  assert.doesNotMatch(codeWithoutComments, /variant === "tabby"/);
+});
+
+test("dock-controller finishWindowDockAfterDrag 包含 dock-finish 诊断日志", () => {
+  assert.match(controllerSource, /dock-finish/);
+  assert.match(controllerSource, /logWalkDiagnostic\(/);
+});
+
+test("dock-controller retry 使用 retryDockPetAfterDrag 依赖", () => {
+  assert.match(controllerSource, /retryDockPetAfterDrag/);
+  // retry 分支应调用 retryDockPetAfterDrag 而非直接调用 dockPetAfterDrag
+  assert.match(controllerSource, /retryDockPetAfterDrag\(\{ retry: true \}\)/);
+});
+
+test("main.cjs 注入 retryDockPetAfterDrag 委托给薄包装", () => {
+  assert.match(mainSource, /retryDockPetAfterDrag/);
+  assert.match(mainSource, /dockPetAfterDrag\(\.\.\.args\)/);
 });
 
 test("main.cjs 仍保留 walk-controller 接线（不回归）", () => {

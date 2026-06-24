@@ -22,7 +22,7 @@ node --test "test/**/*.test.cjs"
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名 | `../electron/pet-variants.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |
 | `walk-controller-accessor.test.cjs` | walk-controller 访问器与 main.cjs 接线结构断言 | `../electron/behavior/walk-controller.cjs`、`../electron/main.cjs` |
-| `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除与 main.cjs 未接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |
+| `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除与 main.cjs 薄包装接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |
 | `bounds.test.cjs` | 纯几何工具函数 | `../electron/shared/bounds.cjs` |
 | `messaging.test.cjs` | webContents.send 安全发送和广播 | `../electron/shared/messaging.cjs` |
 | `pet-states.test.cjs` | 宠物状态工厂和状态数组构建 | `../electron/pet/pet-states.cjs` |

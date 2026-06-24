@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "window-roam-controller.cjs"), "utf8");
+const dockControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "dock-controller.cjs"), "utf8");
 
 test("window roam keeps the current window target when enabled from a window surface", () => {
   assert.match(mainSource, /const \{ createWindowRoamController \} = require\("\.\/behavior\/window-roam-controller\.cjs"\);/);
@@ -19,7 +20,8 @@ test("window roam keeps the current window target when enabled from a window sur
 
   // main.cjs 触发链（顶层函数，闭合 } 在行首）
   const setRoamBody = mainSource.match(/function setWindowRoamPreference\(enabled\) \{([\s\S]*?)\n\}/)?.[1] || "";
-  const dockBody = mainSource.match(/function dockPetAfterDrag\(\{ retry = false \} = \{\}\) \{([\s\S]*?)\nfunction validateCurrentWindowSurface/)?.[1] || "";
+  // dock-controller 核心逻辑（函数缩进 2 空格，闭合 2 空格 + }）
+  const dockBody = dockControllerSource.match(/function dockPetAfterDrag\(\{ retry = false \} = \{\}\) \{([\s\S]*?)\n  function validateCurrentWindowSurface/)?.[1] || "";
 
   // controller: tickWindowRoam 拖拽回退抑制 + 优先目标选取 + 同窗附着
   assert.match(tickBody, /if \(Date\.now\(\) < windowRoamDragFallbackSuppressedUntil\) \{[\s\S]*return;[\s\S]*\}/);
@@ -48,21 +50,22 @@ test("window roam keeps the current window target when enabled from a window sur
   assert.match(setRoamBody, /prepareWindowRoamAfterPreferenceEnabled\(currentSurface\);/);
   assert.match(setRoamBody, /updateWindowRoamPolling\(\);/);
 
-  // main.cjs: dockPetAfterDrag 成功/失败分支调用 controller 方法
+  // dock-controller: dockPetAfterDrag 成功/失败分支调用 controller 方法
   assert.match(dockBody, /rememberDockedWindowRoamTarget\(nextSurface\);[\s\S]*clearWindowRoamSuppression\(\);/);
   assert.match(dockBody, /suppressPreviousWindowAfterDockMiss\(previousWindowId\);[\s\S]*setDragFallbackSuppressionUntil\(Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS\);/);
 });
 
 test("window surface polling falls back when a non-roaming pet is no longer docked", () => {
-  const dockedBody = mainSource.match(/function isPetStillDockedOnWindowSurface\(surface = currentSurface\) \{([\s\S]*?)function fallbackCurrentSurfaceToTaskbar/)?.[1] || "";
-  const pollingBody = mainSource.match(/function startWindowSurfacePolling\(\) \{([\s\S]*?)function stopWindowSurfacePolling/)?.[1] || "";
-  const detachedBranch = pollingBody.match(/if \(!preferencesStore\.getWindowRoamEnabled\(\) && !isPetStillDockedOnWindowSurface\(currentSurface\)\) \{([\s\S]*?)\n    \}/)?.[1] || "";
+  // dock-controller 核心逻辑（函数缩进 2 空格，闭合 2 空格 + }）
+  const dockedBody = dockControllerSource.match(/function isPetStillDockedOnWindowSurface\(surface = getCurrentSurface\(\)\) \{([\s\S]*?)\n  function fallbackCurrentSurfaceToTaskbar/)?.[1] || "";
+  const pollingBody = dockControllerSource.match(/function startWindowSurfacePolling\(\) \{([\s\S]*?)\n  function stopWindowSurfacePolling/)?.[1] || "";
+  const detachedBranch = pollingBody.match(/if \(!getWindowRoamEnabled\(\) && !isPetStillDockedOnWindowSurface\(getCurrentSurface\(\)\)\) \{([\s\S]*?)\n      \}/)?.[1] || "";
 
   assert.match(dockedBody, /centerX >= surface\.left/);
   assert.match(dockedBody, /centerX <= surface\.right/);
   assert.match(dockedBody, /Math\.abs\(bottomY - surface\.groundY\) <= WINDOW_DOCK_COARSE_CORRECTION_LIMIT/);
-  assert.match(pollingBody, /!preferencesStore\.getWindowRoamEnabled\(\)/);
-  assert.match(pollingBody, /!isPetStillDockedOnWindowSurface\(currentSurface\)/);
+  assert.match(pollingBody, /!getWindowRoamEnabled\(\)/);
+  assert.match(pollingBody, /!isPetStillDockedOnWindowSurface\(getCurrentSurface\(\)\)/);
   assert.match(pollingBody, /fallbackCurrentSurfaceToTaskbar\("window-surface-detached"\);[\s\S]*return;/);
   assert.doesNotMatch(detachedBranch, /validateCurrentWindowSurface/);
   assert.ok(

@@ -46,6 +46,7 @@ const { createHoverController } = require("./windows/hover-controller.cjs");
 const { createEyeTrackingController } = require("./behavior/eye-tracking-controller.cjs");
 const { createWindowRoamController } = require("./behavior/window-roam-controller.cjs");
 const { createWalkController } = require("./behavior/walk-controller.cjs");
+const { createDockController } = require("./behavior/dock-controller.cjs");
 
 // 应用级常量集中管理
 const appConstants = require("./core/app-constants.cjs");
@@ -1047,6 +1048,87 @@ const walkController = createWalkController({
   WALK_SCALE_APPLY_THROTTLE_MS,
   WALK_MIRROR_HYSTERESIS_PX,
   WALK_MIRROR_COOLDOWN_STEPS
+});
+
+// 接入 behavior/dock-controller.cjs：贴靠、表面校验、轮询与回退
+// 采用薄包装接线：8 个贴靠函数保留原函数名，函数体委托给 dockController
+// 所有贴靠状态仍以 main.cjs 为唯一存储源，controller 通过 getter/setter 读写
+const dockController = createDockController({
+  // Electron 与运行时
+  process,
+  // 依赖函数（main.cjs function 声明，hoisted 可用）
+  log,
+  setCurrentSurface,
+  getCurrentSurface,
+  applySurfaceScale,
+  groundPetToSurface,
+  clampPetWindowPositionToSurface,
+  setPetWindowPosition,
+  syncWalkTrackX,
+  isWalkingState,
+  refreshWalkLoopAfterSurfaceChange,
+  clearDragState,
+  refreshWindowSurfaceCandidatesAsync,
+  setState,
+  parseWindowHwnd,
+  diagnoseDockTargetFromCache,
+  fallbackToTaskbarAfterDrag,
+  findCandidateByHwnd,
+  buildWindowSurfaceFromItem,
+  getVisiblePetRectFromBounds,
+  resetToTaskbarSurface,
+  getGroundedWindowYForSurface,
+  getVisibleSpriteInsets,
+  getPetSpriteSize,
+  getPetWindowPositionForVisibleRect,
+  getSurfaceVisibleTop,
+  animatePetWindowTo,
+  maybeRefreshWindowSurfaceCandidatesBackground,
+  refreshCurrentWindowSurfaceBoundsFromCache,
+  logWalkDiagnostic,
+  isInteractionPaused,
+  getInteractionPauseSummary,
+  // window-roam-controller 协作方法（状态由 window-roam-controller 统一维护）
+  getTopWindowRoamSurface,
+  attachPetToWindowRoamSurface,
+  rememberDockedWindowRoamTarget,
+  clearWindowRoamSuppression,
+  suppressPreviousWindowAfterDockMiss,
+  setDragFallbackSuppressionUntil,
+  markWindowRoamAttached,
+  // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag
+  retryDockPetAfterDrag: (...args) => dockPetAfterDrag(...args),
+  // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
+  getPetWindow: () => petWindow,
+  getActiveState: () => activeState,
+  getWalkDirection: () => walkDirection,
+  getDragState: () => dragState,
+  getPetRuntimeConfig: () => petRuntimeConfig,
+  getPetScale: () => petScale,
+  getPreferredPetScale: () => preferredPetScale,
+  getWindowRoamEnabled: () => preferencesStore.getWindowRoamEnabled(),
+  // 贴靠轮询状态访问器（读 getter / 写 setter，状态存储于 main.cjs）
+  getWindowSurfacePollTimer: () => windowSurfacePollTimer,
+  setWindowSurfacePollTimer: (v) => { windowSurfacePollTimer = v; },
+  getLastWindowSurfaceHeavyCheckAt: () => lastWindowSurfaceHeavyCheckAt,
+  setLastWindowSurfaceHeavyCheckAt: (v) => { lastWindowSurfaceHeavyCheckAt = v; },
+  getWindowSurfaceMissingTicks: () => windowSurfaceMissingTicks,
+  setWindowSurfaceMissingTicks: (v) => { windowSurfaceMissingTicks = v; },
+  getWindowDockInProgress: () => windowDockInProgress,
+  setWindowDockInProgress: (v) => { windowDockInProgress = v; },
+  getWindowDockHoverSuppressedUntil: () => windowDockHoverSuppressedUntil,
+  setWindowDockHoverSuppressedUntil: (v) => { windowDockHoverSuppressedUntil = v; },
+  // 常量
+  STATE_SHAKE,
+  ENABLE_WINDOW_DOCKING,
+  WINDOW_DOCK_DEBUG,
+  WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS,
+  WINDOW_DOCK_DRAG_RETRY_DELAY_MS,
+  WINDOW_DOCK_COARSE_CORRECTION_LIMIT,
+  WINDOW_SURFACE_FALLBACK_BLEND_MS,
+  WINDOW_SURFACE_HEAVY_RECHECK_MS,
+  WINDOW_SURFACE_POLL_INTERVAL_MS,
+  WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS
 });
 
 function getAutoStartCommand() {
@@ -4948,217 +5030,35 @@ function fallbackToTaskbarAfterDrag(bounds, reason = "fallback") {
 }
 
 function applyDockSurfaceAfterDrag(surface, draggedX) {
-  const nextSurface = setCurrentSurface(surface);
-  applySurfaceScale(nextSurface, activeState, walkDirection);
-  groundPetToSurface(activeState, walkDirection, nextSurface);
-  if (nextSurface.type === "window") {
-    windowDockHoverSuppressedUntil = Date.now() + WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS;
-    const snappedBounds = petWindow.getBounds();
-    const target = clampPetWindowPositionToSurface(draggedX, snappedBounds.y, nextSurface, activeState, walkDirection);
-    setPetWindowPosition(target.x, target.y);
-    syncWalkTrackX(target.x);
-    lastWindowSurfaceHeavyCheckAt = Date.now();
-  }
-  if (isWalkingState()) {
-    refreshWalkLoopAfterSurfaceChange();
-  }
-  return nextSurface;
-}
-
-function shouldRetryDockAfterDrag(reason) {
-  return reason === "empty-cache" || reason === "no-window-candidates";
+  return dockController.applyDockSurfaceAfterDrag(surface, draggedX);
 }
 
 function finishWindowDockAfterDrag() {
-  clearDragState({ notify: true });
-  windowDockInProgress = false;
-  refreshWindowSurfaceCandidatesAsync();
-  logWalkDiagnostic(`dock-finish state=${activeState} surface=${getCurrentSurface()?.type || "unknown"} paused=${isInteractionPaused()} reasons=${getInteractionPauseSummary()}`);
-  if (petRuntimeConfig.features.dockShake && activeState !== STATE_SHAKE) {
-    setState(STATE_SHAKE, false);
-  }
+  return dockController.finishWindowDockAfterDrag();
 }
 
 function dockPetAfterDrag({ retry = false } = {}) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    finishWindowDockAfterDrag();
-    return;
-  }
-  const bounds = petWindow.getBounds();
-  const draggedX = bounds.x;
-  const previousWindowId = currentSurface?.type === "window"
-    ? parseWindowHwnd(currentSurface.sourceWindowId)
-    : "";
-  let surface = null;
-  let diagnostic = { ok: false, reason: "disabled", elapsedMs: 0, surface: null };
-  let retryScheduled = false;
-
-  try {
-    diagnostic = ENABLE_WINDOW_DOCKING
-      ? diagnoseDockTargetFromCache(bounds)
-      : { ok: false, reason: "disabled", elapsedMs: 0, surface: null };
-    surface = diagnostic.surface;
-
-    if (!surface && !retry && ENABLE_WINDOW_DOCKING && shouldRetryDockAfterDrag(diagnostic.reason)) {
-      refreshWindowSurfaceCandidatesAsync({ force: true });
-      retryScheduled = true;
-      setTimeout(() => dockPetAfterDrag({ retry: true }), WINDOW_DOCK_DRAG_RETRY_DELAY_MS);
-      return;
-    }
-
-    if (surface && applySurfaceScale(surface, activeState, walkDirection)) {
-      const nextSurface = applyDockSurfaceAfterDrag(surface, draggedX);
-      rememberDockedWindowRoamTarget(nextSurface);
-      clearWindowRoamSuppression();
-    } else {
-      suppressPreviousWindowAfterDockMiss(previousWindowId);
-      if (preferencesStore.getWindowRoamEnabled()) {
-        setDragFallbackSuppressionUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS);
-      }
-      fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
-    }
-  } catch (error) {
-    fallbackToTaskbarAfterDrag(bounds, `dock-exception:${error.message}`);
-    log(`dock-after-drag exception: ${error.stack || error.message}`);
-  } finally {
-    if (!retryScheduled) {
-      finishWindowDockAfterDrag();
-    }
-  }
-
-  if (WINDOW_DOCK_DEBUG) {
-    const resolvedSurface = getCurrentSurface();
-    log(`dock-after-drag reason=${diagnostic.reason} elapsedMs=${diagnostic.elapsedMs || 0} surface=${resolvedSurface.type} title=${resolvedSurface.title || ""} scale=${petScale} preferred=${preferredPetScale}`);
-  }
+  return dockController.dockPetAfterDrag({ retry });
 }
 
 function validateCurrentWindowSurface({ useCache = true } = {}) {
-  if (!currentSurface || currentSurface.type !== "window") {
-    return true;
-  }
-  const sourceWindowId = currentSurface.sourceWindowId;
-  if (!sourceWindowId) {
-    return false;
-  }
-  const candidate = useCache
-    ? findCandidateByHwnd(sourceWindowId, { cacheOnly: true }) || findCandidateByHwnd(sourceWindowId, { useCache: false })
-    : findCandidateByHwnd(sourceWindowId, { useCache: false });
-  if (!candidate) {
-    return false;
-  }
-  const built = buildWindowSurfaceFromItem(candidate);
-  if (!built.surface) {
-    return false;
-  }
-  setCurrentSurface(built.surface);
-  return true;
+  return dockController.validateCurrentWindowSurface({ useCache });
 }
 
-function isPetStillDockedOnWindowSurface(surface = currentSurface) {
-  if (!petWindow || petWindow.isDestroyed() || !surface || surface.type !== "window") {
-    return false;
-  }
-  const visibleRect = getVisiblePetRectFromBounds(petWindow.getBounds(), activeState, walkDirection);
-  const centerX = visibleRect.x + Math.round(visibleRect.width / 2);
-  const bottomY = visibleRect.y + visibleRect.height;
-  return centerX >= surface.left
-    && centerX <= surface.right
-    && Math.abs(bottomY - surface.groundY) <= WINDOW_DOCK_COARSE_CORRECTION_LIMIT;
+function isPetStillDockedOnWindowSurface(surface) {
+  return dockController.isPetStillDockedOnWindowSurface(surface);
 }
 
-function fallbackCurrentSurfaceToTaskbar(reason = "window-surface-invalidated") {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  const previousBounds = petWindow.getBounds();
-  const previousVisibleRect = getVisiblePetRectFromBounds(previousBounds, activeState, walkDirection);
-  const previousCenterX = previousVisibleRect.x + Math.round(previousVisibleRect.width / 2);
-  const fallback = resetToTaskbarSurface(previousBounds);
-  applySurfaceScale(fallback, activeState, walkDirection);
-  const groundedY = getGroundedWindowYForSurface(fallback, activeState, walkDirection);
-  const nextBounds = petWindow.getBounds();
-  const nextVisibleInsets = getVisibleSpriteInsets(activeState, walkDirection);
-  const nextVisibleWidth = getPetSpriteSize() - nextVisibleInsets.left - nextVisibleInsets.right;
-  const nextVisibleLeft = previousCenterX - Math.round(nextVisibleWidth / 2);
-  const target = getPetWindowPositionForVisibleRect(nextVisibleLeft, getSurfaceVisibleTop(fallback, activeState, walkDirection), activeState, walkDirection);
-  const next = clampPetWindowPositionToSurface(target.x, groundedY, fallback, activeState, walkDirection);
-  if (isWalkingState() || (Math.abs(next.x - nextBounds.x) <= 2 && Math.abs(next.y - nextBounds.y) <= 2)) {
-    setPetWindowPosition(next.x, next.y);
-  } else {
-    animatePetWindowTo(next.x, next.y, WINDOW_SURFACE_FALLBACK_BLEND_MS);
-  }
-  syncWalkTrackX(next.x);
-  if (isWalkingState()) {
-    refreshWalkLoopAfterSurfaceChange();
-  }
-  if (WINDOW_DOCK_DEBUG) {
-    log(`${reason} -> fallback taskbar target=${next.x},${next.y} state=${activeState}`);
-  }
-  windowSurfaceMissingTicks = 0;
+function fallbackCurrentSurfaceToTaskbar(reason) {
+  return dockController.fallbackCurrentSurfaceToTaskbar(reason);
 }
 
 function startWindowSurfacePolling() {
-  if (windowSurfacePollTimer || !ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
-    return;
-  }
-  windowSurfacePollTimer = setInterval(() => {
-    if (!petWindow || petWindow.isDestroyed()) {
-      return;
-    }
-    if (dragState) {
-      return;
-    }
-    if (!currentSurface || currentSurface.type !== "window") {
-      return;
-    }
-    maybeRefreshWindowSurfaceCandidatesBackground();
-    const quickValid = refreshCurrentWindowSurfaceBoundsFromCache();
-    if (quickValid) {
-      windowSurfaceMissingTicks = 0;
-    } else {
-      windowSurfaceMissingTicks += 1;
-      if (windowSurfaceMissingTicks < 1) {
-        return;
-      }
-    }
-    if (!preferencesStore.getWindowRoamEnabled() && !isPetStillDockedOnWindowSurface(currentSurface)) {
-      fallbackCurrentSurfaceToTaskbar("window-surface-detached");
-      return;
-    }
-    const now = Date.now();
-    if (now - lastWindowSurfaceHeavyCheckAt < WINDOW_SURFACE_HEAVY_RECHECK_MS) {
-      if (quickValid) {
-        return;
-      }
-    }
-    lastWindowSurfaceHeavyCheckAt = now;
-    if (!validateCurrentWindowSurface()) {
-      const invalidWindowId = parseWindowHwnd(currentSurface?.sourceWindowId);
-      const roamSurface = preferencesStore.getWindowRoamEnabled() ? getTopWindowRoamSurface(invalidWindowId) : null;
-      if (roamSurface && attachPetToWindowRoamSurface(roamSurface)) {
-        markWindowRoamAttached(roamSurface);
-        return;
-      }
-      const fallback = resetToTaskbarSurface(petWindow.getBounds());
-      applySurfaceScale(fallback, activeState, walkDirection);
-      groundPetToSurface(activeState, walkDirection, fallback);
-      if (isWalkingState()) {
-        refreshWalkLoopAfterSurfaceChange();
-      }
-      if (WINDOW_DOCK_DEBUG) {
-        log("window-surface invalidated -> fallback taskbar");
-      }
-      windowSurfaceMissingTicks = 0;
-    }
-  }, WINDOW_SURFACE_POLL_INTERVAL_MS);
+  return dockController.startWindowSurfacePolling();
 }
 
 function stopWindowSurfacePolling() {
-  if (!windowSurfacePollTimer) {
-    return;
-  }
-  clearInterval(windowSurfacePollTimer);
-  windowSurfacePollTimer = null;
+  return dockController.stopWindowSurfacePolling();
 }
 
 function scheduleDarwinDisplayMetricsSettle() {
