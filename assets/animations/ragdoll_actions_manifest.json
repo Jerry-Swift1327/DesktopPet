@@ -13,7 +13,9 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_walk",
@@ -23,13 +25,15 @@
     "frameSize": 256,
     "qualityProfile": "enhanced_2x_conservative",
     "sourceFrameCount": 168,
-    "frameCount": 168,
+    "frameCount": 105,
     "loopStart": 0,
-    "loopEnd": 167,
-    "sourceLoopStart": 0,
-    "sourceLoopEnd": 167,
+    "loopEnd": 104,
+    "sourceLoopStart": 39,
+    "sourceLoopEnd": 143,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "manual",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_feed",
@@ -39,13 +43,15 @@
     "frameSize": 256,
     "qualityProfile": "enhanced_2x_conservative",
     "sourceFrameCount": 168,
-    "frameCount": 168,
+    "frameCount": 90,
     "loopStart": 0,
-    "loopEnd": 167,
-    "sourceLoopStart": 0,
+    "loopEnd": 89,
+    "sourceLoopStart": 78,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "manual",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_ball",
@@ -61,7 +67,9 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_spin",
@@ -77,7 +85,9 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_lick",
@@ -93,7 +103,9 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_stretch",
@@ -109,7 +121,9 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_belly",
@@ -125,7 +139,9 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_shake",
@@ -135,13 +151,15 @@
     "frameSize": 256,
     "qualityProfile": "enhanced_2x_conservative",
     "sourceFrameCount": 168,
-    "frameCount": 168,
+    "frameCount": 54,
     "loopStart": 0,
-    "loopEnd": 167,
-    "sourceLoopStart": 0,
-    "sourceLoopEnd": 167,
+    "loopEnd": 53,
+    "sourceLoopStart": 75,
+    "sourceLoopEnd": 128,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "manual",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   },
   {
     "action": "ragdoll_yawn",
@@ -160,7 +178,7 @@
     "loopSelection": "full",
     "trimGroundAlpha": 128,
     "trimGroundPadding": 1,
-    "tailLoopStart": 240
+    "tailLoopStart": 294
   },
   {
     "action": "ragdoll_hiss",
@@ -176,6 +194,8 @@
     "sourceLoopStart": 0,
     "sourceLoopEnd": 167,
     "score": 0,
-    "loopSelection": "full"
+    "loopSelection": "full",
+    "trimGroundAlpha": 128,
+    "trimGroundPadding": 1
   }
 ]

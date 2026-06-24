@@ -44,6 +44,31 @@ test("ragdoll yawn keeps a stable sleeping tail loop", () => {
   assert.equal(loop.sourceFrameCount, 335);
   assert.equal(loop.frameCount, 335);
   assert.equal(loop.loopSelection, "full");
-  assert.equal(loop.tailLoopStart, 240);
+  assert.equal(loop.tailLoopStart, 294);
   assert.equal(loop.loopEnd, 334);
+});
+
+test("ragdoll runtime frames use optimized source ranges", () => {
+  const expectedRanges = {
+    ragdoll_walk: { frameCount: 105, sourceLoopStart: 39, sourceLoopEnd: 143 },
+    ragdoll_feed: { frameCount: 90, sourceLoopStart: 78, sourceLoopEnd: 167 },
+    ragdoll_shake: { frameCount: 54, sourceLoopStart: 75, sourceLoopEnd: 128 }
+  };
+
+  for (const [action, expected] of Object.entries(expectedRanges)) {
+    const loop = JSON.parse(fs.readFileSync(path.join(animationsRoot, action, "loop.json"), "utf8"));
+    assert.equal(loop.loopSelection, "manual");
+    assert.equal(loop.frameCount, expected.frameCount);
+    assert.equal(loop.loopEnd, expected.frameCount - 1);
+    assert.equal(loop.sourceLoopStart, expected.sourceLoopStart);
+    assert.equal(loop.sourceLoopEnd, expected.sourceLoopEnd);
+    assert.equal(loop.trimGroundAlpha, 128);
+  }
+});
+
+test("ragdoll runtime frames trim ground alpha remnants", () => {
+  for (const entry of manifest) {
+    assert.equal(entry.trimGroundAlpha, 128);
+    assert.equal(entry.trimGroundPadding, 1);
+  }
 });

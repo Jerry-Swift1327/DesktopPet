@@ -86,7 +86,7 @@ function createScreenMetricsController(context) {
     };
   }
 
-  function getTaskbarSurfaceForBounds(bounds = petWindow?.getBounds()) {
+  function getTaskbarSurfaceForBounds(bounds = petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null) {
     const display = bounds ? screen.getDisplayMatching(bounds) : screen.getPrimaryDisplay();
     return getTaskbarSurface(display);
   }
