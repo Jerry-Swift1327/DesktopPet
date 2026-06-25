@@ -37,6 +37,8 @@ node --test "test/**/*.test.cjs"
 | `pet-stats-rules.test.cjs` | pet stats 纯规则（clampStat/daysBetween/createDefaultPetStats/normalizePetStats/applyDailyDecay/applyPromptStateRules/applyNaturalStatsTickRules/applyActionStatsRules/applyCompletedWalkStatsRules/recordInteractionRules） | `../electron/pet/pet-stats-rules.cjs` |
 | `pet-stats-store.test.cjs` | pet stats 读写边界（encode/decode 往返、readPetStatsFile 主文件与 legacy fallback、读取异常、writePetStatsFile 写入内容） | `../electron/pet/pet-stats-store.cjs` |
 | `pet-stats-controller-accessor.test.cjs` | pet-stats-controller 控制器访问器护栏与 main.cjs 薄包装接线结构断言（不直接 require electron/fs/path、不直接访问窗口/IPC/bubble、不使用 Math.random/new Date、context 注入完整、调用 rules/store 不重写、timer 所有权在控制器、main 不再持有 stats 运行态） | `../electron/pet/pet-stats-controller.cjs`、`../electron/main.cjs` |
+| `frame-geometry.test.cjs` | 帧纯几何计算（spriteRect、visibleInsets、frameVisibleRect、stableGroundBottom、bottomAnchor、centerWindowX） | `../electron/pet/frame-geometry.cjs` |
+| `frame-visible-bounds.test.cjs` | 帧可见区域 bitmap 扫描纯规则（scanVisibleBounds、scanHeadBounds） | `../electron/pet/frame-visible-bounds.cjs` |
 
 ## 何时补测试
 

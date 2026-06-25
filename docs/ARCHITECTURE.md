@@ -33,7 +33,7 @@ electron-app/package.json
 - Windows 自启动偏好和注册表写入。
 - IPC 事件处理。
 
-`main.cjs` 正在逐步将职责委托给 `core/`、`pet/`、`shared/` 子目录的模块：`core/` 收口常量、日志、运行时配置和偏好存储等基础能力；`pet/` 收口宠物状态定义、资源加载、pet stats 纯规则（`pet/pet-stats-rules.cjs`，不依赖 electron/fs/Date.now/Math.random）和 stats 文件读写边界（`pet/pet-stats-store.cjs`，工厂形式注入 fs/log）；`shared/` 收口无副作用的几何工具和跨窗口消息广播。`main.cjs` 保留 stats 相关函数名作为薄包装委托 rules/store，运行时状态（petStats、last*At 时间戳、intimacyDecayTimer）和副作用编排（sendStats、showStatMessages、IPC 广播、气泡提示）仍由 `main.cjs` 持有。后续拆分应继续沿此方向，把纯逻辑从 `main.cjs` 抽出到对应子目录，避免在 `main.cjs` 中新增可独立的逻辑。
+`main.cjs` 正在逐步将职责委托给 `core/`、`pet/`、`shared/` 子目录的模块：`core/` 收口常量、日志、运行时配置和偏好存储等基础能力；`pet/` 收口宠物状态定义、资源加载、pet stats 纯规则（`pet/pet-stats-rules.cjs`，不依赖 electron/fs/Date.now/Math.random）和 stats 文件读写边界（`pet/pet-stats-store.cjs`，工厂形式注入 fs/log）；`shared/` 收口无副作用的几何工具和跨窗口消息广播。`main.cjs` 保留 stats 相关函数名作为薄包装委托 rules/store，运行时状态（petStats、last*At 时间戳、intimacyDecayTimer）和副作用编排（sendStats、showStatMessages、IPC 广播、气泡提示）仍由 `main.cjs` 持有。`pet/` 还收口帧纯几何（`pet/frame-geometry.cjs`）和帧可见区域 bitmap 扫描纯规则（`pet/frame-visible-bounds.cjs`），`main.cjs` 保留 `nativeImage`、缓存所有权与文件路径解析，纯计算委托给这两个模块。后续拆分应继续沿此方向，把纯逻辑从 `main.cjs` 抽出到对应子目录，避免在 `main.cjs` 中新增可独立的逻辑。
 
 窗口创建和控制器逻辑已拆分到 `electron-app/electron/windows/` 目录：`main.cjs` 通过 `windows/overlay-window.cjs` 的 `createOverlayWindow` 工厂创建 overlay 窗口（归纳 BrowserWindow 选项），定位几何由 `windows/overlay-geometry.cjs` 提供（含菜单/悬停/自定义面板位置计算），气泡、菜单、悬停面板、自定义面板分别由 `windows/bubble-controller.cjs`、`windows/menu-controller.cjs`、`windows/hover-controller.cjs`、`windows/customization-controller.cjs` 以 `createXController(context)` 形式封装创建、显示、隐藏、定位和可见性等行为。`main.cjs` 负责在启动时构造这些控制器并注入上下文，窗口相关逻辑修改应优先落到对应控制器模块，而非 `main.cjs`。
 

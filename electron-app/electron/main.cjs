@@ -63,6 +63,8 @@ const { createAssetLoader } = require("./pet/asset-loader.cjs");
 const { createPetStatsStore } = require("./pet/pet-stats-store.cjs");
 const petStatsRules = require("./pet/pet-stats-rules.cjs");
 const { createPetStatsController } = require("./pet/pet-stats-controller.cjs");
+const frameGeometry = require("./pet/frame-geometry.cjs");
+const frameVisibleBounds = require("./pet/frame-visible-bounds.cjs");
 const {
   APP_INTERNAL_NAME,
   APP_DISPLAY_NAME,
@@ -415,7 +417,7 @@ const petStatsStore = createPetStatsStore({
 });
 
 // 接入 pet/pet-stats-controller.cjs：pet stats 状态所有权与副作用编排
-// 采用薄包装接线：14 个 stats 函数保留原函数名，函数体委托给 petStatsController
+// 采用薄包装接线：15 个 stats 函数保留原函数名，函数体委托给 petStatsController
 // petStats/intimacyDecayTimer/last*DecayAt 所有权迁移到控制器，main.cjs 不再直接持有
 // onStatsChanged/onStatMessages 由 main 持有 UI 副作用（sendStats/showStatMessages，函数声明提升可引用）
 // pickStatMessage 封装 pickRandom(statMessages[key])，使 controller 不感知中文文案
@@ -1698,11 +1700,7 @@ function getVisibleBottomPoint(bounds = petWindow?.getBounds(), stateId = active
     return null;
   }
   const visibleRect = getVisiblePetRectFromBounds(bounds, stateId, direction);
-  return {
-    x: visibleRect.x + Math.round(visibleRect.width / 2),
-    y: visibleRect.y + visibleRect.height,
-    visibleRect
-  };
+  return frameGeometry.getBottomAnchorFromVisibleRect(visibleRect);
 }
 
 function getRenderedFrameBottomAnchor(bounds = petWindow?.getBounds(), stateId = activeState, direction = walkDirection) {
@@ -1711,14 +1709,7 @@ function getRenderedFrameBottomAnchor(bounds = petWindow?.getBounds(), stateId =
   }
   const visibleRect = getRenderedFrameVisibleRectFromBounds(bounds, stateId, direction)
     || getVisiblePetRectFromBounds(bounds, stateId, direction);
-  if (!visibleRect) {
-    return null;
-  }
-  return {
-    x: Math.round(visibleRect.x + visibleRect.width / 2),
-    y: Math.round(visibleRect.y + visibleRect.height),
-    visibleRect
-  };
+  return frameGeometry.getBottomAnchorFromVisibleRect(visibleRect);
 }
 
 function getTransitionBottomAnchor(stateId = activeState, direction = walkDirection) {
@@ -1726,11 +1717,7 @@ function getTransitionBottomAnchor(stateId = activeState, direction = walkDirect
     ? getRenderedFrameVisibleRect()
     : null;
   if (visibleRect) {
-    return {
-      x: Math.round(visibleRect.x + visibleRect.width / 2),
-      y: Math.round(visibleRect.y + visibleRect.height),
-      visibleRect
-    };
+    return frameGeometry.getBottomAnchorFromVisibleRect(visibleRect);
   }
   return getRenderedFrameBottomAnchor(petWindow?.getBounds(), stateId, direction);
 }
@@ -2342,26 +2329,7 @@ function getFrameVisibleBounds(filePath) {
   }
 
   const bitmap = image.toBitmap();
-  let left = size.width;
-  let top = size.height;
-  let right = -1;
-  let bottom = -1;
-
-  for (let y = 0; y < size.height; y += 1) {
-    for (let x = 0; x < size.width; x += 1) {
-      const alpha = bitmap[(y * size.width + x) * 4 + 3];
-      if (alpha > VISIBLE_ALPHA_THRESHOLD) {
-        left = Math.min(left, x);
-        top = Math.min(top, y);
-        right = Math.max(right, x);
-        bottom = Math.max(bottom, y);
-      }
-    }
-  }
-
-  const bounds = right >= left && bottom >= top
-    ? { left, top, right, bottom, width: right - left + 1, height: bottom - top + 1, imageWidth: size.width, imageHeight: size.height }
-    : { left: 0, top: 0, right: size.width - 1, bottom: size.height - 1, width: size.width, height: size.height, imageWidth: size.width, imageHeight: size.height };
+  const bounds = frameVisibleBounds.scanVisibleBoundsFromBitmap(bitmap, size.width, size.height, VISIBLE_ALPHA_THRESHOLD);
   visibleBoundsCache.set(filePath, bounds);
   return bounds;
 }
@@ -2398,30 +2366,13 @@ function getStateVisibleBounds(stateId = activeState) {
 
   const framePaths = listFramePaths(state.folder);
   const frameBounds = framePaths.map((filePath) => getFrameVisibleBounds(filePath));
-  let combined = null;
-  for (const bounds of frameBounds) {
-    if (!combined) {
-      combined = { ...bounds };
-      continue;
-    }
-    combined.left = Math.min(combined.left, bounds.left);
-    combined.top = Math.min(combined.top, bounds.top);
-    combined.right = Math.max(combined.right, bounds.right);
-    combined.bottom = Math.max(combined.bottom, bounds.bottom);
-    combined.imageWidth = Math.max(combined.imageWidth, bounds.imageWidth);
-    combined.imageHeight = Math.max(combined.imageHeight, bounds.imageHeight);
-  }
+  let combined = frameGeometry.combineFrameBoundsList(frameBounds);
 
   if (!combined) {
     const spriteSize = getPetSpriteSize();
     combined = { left: 0, top: 0, right: spriteSize - 1, bottom: spriteSize - 1, width: spriteSize, height: spriteSize, imageWidth: spriteSize, imageHeight: spriteSize };
   } else {
-    if (state.moving && frameBounds.length > 2) {
-      const stableBottom = getStableGroundBottom(frameBounds);
-      combined.bottom = Math.max(combined.top, Math.min(combined.bottom, stableBottom));
-    }
-    combined.width = combined.right - combined.left + 1;
-    combined.height = combined.bottom - combined.top + 1;
+    frameGeometry.applyStableGroundBottomCorrection(combined, frameBounds, Boolean(state.moving) && frameBounds.length > 2);
   }
   visibleBoundsCache.set(cacheKey, combined);
   return combined;
@@ -2458,22 +2409,8 @@ function getFrameVisibleRectFromBounds(windowBounds, stateId = activeState, fram
   }
 
   const state = getState(stateId);
-  const shouldMirror = state?.defaultFacing === "left" ? direction > 0 : direction < 0;
-  const rawLeft = shouldMirror
-    ? frameBounds.imageWidth - 1 - frameBounds.right
-    : frameBounds.left;
-  const rawRight = shouldMirror
-    ? frameBounds.imageWidth - 1 - frameBounds.left
-    : frameBounds.right;
   const spriteRect = getSpriteRectFromBounds(windowBounds);
-  const xScale = spriteRect.width / frameBounds.imageWidth;
-  const yScale = spriteRect.height / frameBounds.imageHeight;
-  return {
-    x: Math.round(spriteRect.x + rawLeft * xScale),
-    y: Math.round(spriteRect.y + frameBounds.top * yScale),
-    width: Math.max(1, Math.round((rawRight - rawLeft + 1) * xScale)),
-    height: Math.max(1, Math.round((frameBounds.bottom - frameBounds.top + 1) * yScale))
-  };
+  return frameGeometry.getFrameVisibleRectFromBounds(frameBounds, spriteRect, state?.defaultFacing, direction);
 }
 
 function getFrameVisibleCenterWindowX(centerX, stateId = activeState, frameIndex = 0, direction = walkDirection) {
@@ -2485,7 +2422,7 @@ function getFrameVisibleCenterWindowX(centerX, stateId = activeState, frameIndex
   };
   const visibleRect = getFrameVisibleRectFromBounds(probe, stateId, frameIndex, direction)
     || getVisiblePetRectFromBounds(probe, stateId, direction);
-  return Math.round(centerX - (visibleRect.x - probe.x) - visibleRect.width / 2);
+  return frameGeometry.getFrameVisibleCenterWindowX(centerX, probe, visibleRect);
 }
 
 function applyDailyDecay(stats, days = 1) {
@@ -2548,31 +2485,7 @@ function getFrameHeadBounds(filePath) {
   }
 
   const bitmap = image.toBitmap();
-  const visibleHeight = Math.max(1, visibleBounds.bottom - visibleBounds.top + 1);
-  const scanBottom = Math.min(
-    visibleBounds.bottom,
-    visibleBounds.top + Math.round(visibleHeight * PET_MENU_HEAD_SCAN_RATIO)
-  );
-  let left = size.width;
-  let top = size.height;
-  let right = -1;
-  let bottom = -1;
-
-  for (let y = visibleBounds.top; y <= scanBottom; y += 1) {
-    for (let x = visibleBounds.left; x <= visibleBounds.right; x += 1) {
-      const alpha = bitmap[(y * size.width + x) * 4 + 3];
-      if (alpha > VISIBLE_ALPHA_THRESHOLD) {
-        left = Math.min(left, x);
-        top = Math.min(top, y);
-        right = Math.max(right, x);
-        bottom = Math.max(bottom, y);
-      }
-    }
-  }
-
-  const headBounds = right >= left && bottom >= top
-    ? { left, top, right, bottom, width: right - left + 1, height: bottom - top + 1, imageWidth: size.width, imageHeight: size.height }
-    : visibleBounds;
+  const headBounds = frameVisibleBounds.scanHeadBoundsFromBitmap(bitmap, size.width, size.height, visibleBounds, VISIBLE_ALPHA_THRESHOLD, PET_MENU_HEAD_SCAN_RATIO);
   headBoundsCache.set(filePath, headBounds);
   return headBounds;
 }
@@ -2589,63 +2502,24 @@ function getStateHeadBounds(stateId = activeState) {
 
   const framePaths = listFramePaths(state.folder);
   const frameBounds = framePaths.map((filePath) => getFrameHeadBounds(filePath));
-  let combined = null;
-  for (const bounds of frameBounds) {
-    if (!bounds) {
-      continue;
-    }
-    if (!combined) {
-      combined = { ...bounds };
-      continue;
-    }
-    combined.left = Math.min(combined.left, bounds.left);
-    combined.top = Math.min(combined.top, bounds.top);
-    combined.right = Math.max(combined.right, bounds.right);
-    combined.bottom = Math.max(combined.bottom, bounds.bottom);
-    combined.imageWidth = Math.max(combined.imageWidth, bounds.imageWidth);
-    combined.imageHeight = Math.max(combined.imageHeight, bounds.imageHeight);
-  }
+  let combined = frameGeometry.combineFrameBoundsList(frameBounds);
 
   if (!combined) {
     combined = getStateVisibleBounds(stateId);
-  } else {
-    combined.width = combined.right - combined.left + 1;
-    combined.height = combined.bottom - combined.top + 1;
   }
   headBoundsCache.set(cacheKey, combined);
   return combined;
 }
 
 function getStableGroundBottom(frameBounds) {
-  const bottoms = frameBounds
-    .filter((bounds) => bounds && Number.isFinite(bounds.bottom))
-    .map((bounds) => bounds.bottom)
-    .sort((left, right) => left - right);
-  if (bottoms.length === 0) {
-    return 0;
-  }
-  const index = Math.min(bottoms.length - 1, Math.floor((bottoms.length - 1) * 0.9));
-  return bottoms[index];
+  return frameGeometry.getStableGroundBottom(frameBounds);
 }
 
 function getVisibleSpriteInsets(stateId = activeState, direction = walkDirection) {
   const spriteSize = getPetSpriteSize();
   const bounds = getStateVisibleBounds(stateId);
-  if (!bounds || !bounds.imageWidth || !bounds.imageHeight) {
-    return { left: 0, top: 0, right: 0, bottom: 0 };
-  }
-
-  const insets = {
-    left: Math.round((bounds.left / bounds.imageWidth) * spriteSize),
-    top: Math.round((bounds.top / bounds.imageHeight) * spriteSize),
-    right: Math.round(((bounds.imageWidth - 1 - bounds.right) / bounds.imageWidth) * spriteSize),
-    bottom: Math.round(((bounds.imageHeight - 1 - bounds.bottom) / bounds.imageHeight) * spriteSize)
-  };
   const state = getState(stateId);
-  const shouldMirror = state?.defaultFacing === "left" ? direction > 0 : direction < 0;
-  return shouldMirror
-    ? { ...insets, left: insets.right, right: insets.left }
-    : insets;
+  return frameGeometry.getVisibleSpriteInsetsFromBounds(bounds, spriteSize, direction, state?.defaultFacing);
 }
 
 function getAppPageUrl(hash) {
@@ -2696,32 +2570,18 @@ function getCurrentPetVisualCenterX(stateId = activeState, direction = walkDirec
 }
 
 function getSpriteRectFromBounds(bounds) {
-  const spriteSize = getPetSpriteSize();
-  const canUseRunwayOffset = taskbarWalkRunway
-    && isTaskbarWalkActive()
-    && Math.round(bounds.width) === taskbarWalkRunway.windowWidth
-    && Math.round(bounds.height) === taskbarWalkRunway.windowHeight;
-  const horizontalInset = canUseRunwayOffset
-    ? Math.max(0, Math.round(taskbarWalkRunway.spriteOffsetX))
-    : getSpriteLocalXForWindowWidth(bounds.width);
-  const verticalInset = Math.max(0, bounds.height - spriteSize);
-  return {
-    x: bounds.x + horizontalInset,
-    y: bounds.y + verticalInset,
-    width: spriteSize,
-    height: spriteSize
-  };
+  return frameGeometry.getSpriteRectFromBounds(bounds, {
+    spriteSize: getPetSpriteSize(),
+    runwayInfo: taskbarWalkRunway,
+    isTaskbarWalkActive: isTaskbarWalkActive(),
+    getSpriteLocalXForWindowWidth
+  });
 }
 
 function getVisiblePetRectFromBounds(bounds, stateId = activeState, direction = walkDirection) {
   const spriteRect = getSpriteRectFromBounds(bounds);
   const insets = getVisibleSpriteInsets(stateId, direction);
-  return {
-    x: spriteRect.x + insets.left,
-    y: spriteRect.y + insets.top,
-    width: Math.max(1, spriteRect.width - insets.left - insets.right),
-    height: Math.max(1, spriteRect.height - insets.top - insets.bottom)
-  };
+  return frameGeometry.getVisiblePetRectFromBounds(spriteRect, insets);
 }
 
 function getPetWindowPositionForVisibleRect(left, top, stateId = activeState, direction = walkDirection) {

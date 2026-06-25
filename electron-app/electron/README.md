@@ -21,6 +21,8 @@
 | `pet/pet-stats-rules.cjs` | pet stats 纯规则模块（clamp/normalize/daily decay/natural tick/action stats 规则），不依赖 electron/fs/Date.now/Math.random/中文文案 |
 | `pet/pet-stats-store.cjs` | pet stats 读写边界模块（base64 编码/解码、文件读写、legacy fallback），工厂形式注入 fs/log |
 | `pet/pet-stats-controller.cjs` | pet stats 控制器（持有 stats 状态、读写、自然衰减 timer、交互统计、动作结算、状态摘要），工厂形式注入 rules/store/回调/常量，不直接接触窗口/IPC/bubble |
+| `pet/frame-geometry.cjs` | 宠物帧纯几何计算（spriteRect、visibleInsets、frameVisibleRect、stableGroundBottom、bottomAnchor、centerWindowX），不依赖 electron/fs/nativeImage/缓存 |
+| `pet/frame-visible-bounds.cjs` | 帧可见区域 bitmap 扫描纯规则（scanVisibleBounds、scanHeadBounds），不依赖 electron/fs/nativeImage/缓存 |
 | `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
 | `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
 | `windows/overlay-window.cjs` | overlay 窗口公共创建 helper，归纳 BrowserWindow 选项 |
@@ -65,6 +67,8 @@
 | 宠物状态 | `pet/pet-states.cjs`、`buildPetStates`、`sharedGreetings` |
 | 资源加载 | `pet/asset-loader.cjs`、`listFrames`、`getAssetsRoot` |
 | 几何工具 | `shared/bounds.cjs`、`clamp`、`isPointInsideRect` |
+| 帧几何 | `pet/frame-geometry.cjs`、`getSpriteRectFromBounds`、`getVisiblePetRectFromBounds`、`getFrameVisibleRectFromBounds` |
+| 帧可见区域扫描 | `pet/frame-visible-bounds.cjs`、`getFrameVisibleBounds`、`getFrameHeadBounds`、`scanVisibleBoundsFromBitmap`、`scanHeadBoundsFromBitmap` |
 | 消息广播 | `shared/messaging.cjs`、`safeSend`、`broadcastToWindows` |
 | IPC 注册 | `ipc/register-ipc-handlers.cjs`、`registerIpcHandlers` |
 | 窗口创建 | `windows/overlay-window.cjs`、`createOverlayWindow` |
