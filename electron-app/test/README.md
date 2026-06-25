@@ -39,6 +39,8 @@ node --test "test/**/*.test.cjs"
 | `pet-stats-controller-accessor.test.cjs` | pet-stats-controller 控制器访问器护栏与 main.cjs 薄包装接线结构断言（不直接 require electron/fs/path、不直接访问窗口/IPC/bubble、不使用 Math.random/new Date、context 注入完整、调用 rules/store 不重写、timer 所有权在控制器、main 不再持有 stats 运行态） | `../electron/pet/pet-stats-controller.cjs`、`../electron/main.cjs` |
 | `frame-geometry.test.cjs` | 帧纯几何计算（spriteRect、visibleInsets、frameVisibleRect、stableGroundBottom、bottomAnchor、centerWindowX） | `../electron/pet/frame-geometry.cjs` |
 | `frame-visible-bounds.test.cjs` | 帧可见区域 bitmap 扫描纯规则（scanVisibleBounds、scanHeadBounds） | `../electron/pet/frame-visible-bounds.cjs` |
+| `frame-bounds-controller.test.cjs` | frame-bounds 控制器缓存命中、无效图片 fallback、state bounds 合并、moving stable bottom 修正、结构断言 | `../electron/pet/frame-bounds-controller.cjs` |
+| `frame-hit-test.test.cjs` | 透明像素命中检测纯规则（命中/不命中/镜像/hitPadding 半径/边界 clamp） | `../electron/pet/frame-hit-test.cjs` |
 
 ## 何时补测试
 

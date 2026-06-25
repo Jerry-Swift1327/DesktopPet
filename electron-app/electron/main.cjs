@@ -65,6 +65,8 @@ const petStatsRules = require("./pet/pet-stats-rules.cjs");
 const { createPetStatsController } = require("./pet/pet-stats-controller.cjs");
 const frameGeometry = require("./pet/frame-geometry.cjs");
 const frameVisibleBounds = require("./pet/frame-visible-bounds.cjs");
+const { createFrameBoundsController } = require("./pet/frame-bounds-controller.cjs");
+const frameHitTest = require("./pet/frame-hit-test.cjs");
 const {
   APP_INTERNAL_NAME,
   APP_DISPLAY_NAME,
@@ -400,9 +402,6 @@ let autoStartRefreshInFlight = false;
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
 const logDir = path.join(userDataRoot, "logs");
-const visibleBoundsCache = new Map();
-const headBoundsCache = new Map();
-const framePixelCache = new Map();
 
 // 接入 core/logger.cjs：文件日志与行走诊断日志
 _logger = createLogger(logDir, { walkDiagnosticsEnabled: WALK_DIAGNOSTICS_ENABLED });
@@ -449,6 +448,20 @@ const petStatsController = createPetStatsController({
   WALK_LOOP_DURATION_MS,
   INTERACTION_INTIMACY_GAIN_MIN,
   INTERACTION_INTIMACY_GAIN_MAX
+});
+
+// 接入 pet/frame-bounds-controller.cjs：帧缓存与读图控制器
+// visibleBoundsCache/headBoundsCache/framePixelCache 所有权迁移到控制器
+// main.cjs 保留同名薄包装委托，nativeImage 通过 context 注入
+const frameBoundsController = createFrameBoundsController({
+  nativeImage,
+  getState,
+  listFramePaths,
+  getPetSpriteSize,
+  VISIBLE_ALPHA_THRESHOLD,
+  PET_MENU_HEAD_SCAN_RATIO,
+  frameGeometry,
+  frameVisibleBounds
 });
 
 // 接入 windows/overlay-geometry.cjs：overlay 窗口定位几何统一收口
@@ -2316,66 +2329,15 @@ function buildPetConfig() {
 }
 
 function getFrameVisibleBounds(filePath) {
-  if (visibleBoundsCache.has(filePath)) {
-    return visibleBoundsCache.get(filePath);
-  }
-
-  const image = nativeImage.createFromPath(filePath);
-  const size = image.getSize();
-  if (!size.width || !size.height) {
-    const fallback = { left: 0, top: 0, right: 1, bottom: 1, width: 1, height: 1, imageWidth: 1, imageHeight: 1 };
-    visibleBoundsCache.set(filePath, fallback);
-    return fallback;
-  }
-
-  const bitmap = image.toBitmap();
-  const bounds = frameVisibleBounds.scanVisibleBoundsFromBitmap(bitmap, size.width, size.height, VISIBLE_ALPHA_THRESHOLD);
-  visibleBoundsCache.set(filePath, bounds);
-  return bounds;
+  return frameBoundsController.getFrameVisibleBounds(filePath);
 }
 
 function getFramePixelData(filePath) {
-  if (framePixelCache.has(filePath)) {
-    return framePixelCache.get(filePath);
-  }
-
-  const image = nativeImage.createFromPath(filePath);
-  const size = image.getSize();
-  if (!size.width || !size.height) {
-    return null;
-  }
-
-  const data = {
-    bitmap: image.toBitmap(),
-    width: size.width,
-    height: size.height
-  };
-  framePixelCache.set(filePath, data);
-  return data;
+  return frameBoundsController.getFramePixelData(filePath);
 }
 
 function getStateVisibleBounds(stateId = activeState) {
-  const state = getState(stateId);
-  if (!state) {
-    return null;
-  }
-  const cacheKey = `state:${state.id}`;
-  if (visibleBoundsCache.has(cacheKey)) {
-    return visibleBoundsCache.get(cacheKey);
-  }
-
-  const framePaths = listFramePaths(state.folder);
-  const frameBounds = framePaths.map((filePath) => getFrameVisibleBounds(filePath));
-  let combined = frameGeometry.combineFrameBoundsList(frameBounds);
-
-  if (!combined) {
-    const spriteSize = getPetSpriteSize();
-    combined = { left: 0, top: 0, right: spriteSize - 1, bottom: spriteSize - 1, width: spriteSize, height: spriteSize, imageWidth: spriteSize, imageHeight: spriteSize };
-  } else {
-    frameGeometry.applyStableGroundBottomCorrection(combined, frameBounds, Boolean(state.moving) && frameBounds.length > 2);
-  }
-  visibleBoundsCache.set(cacheKey, combined);
-  return combined;
+  return frameBoundsController.getStateVisibleBounds(stateId);
 }
 
 function getStateFramePath(stateId = activeState, frameIndex = 0) {
@@ -2472,43 +2434,11 @@ function getRenderedFrameInfo() {
 }
 
 function getFrameHeadBounds(filePath) {
-  if (headBoundsCache.has(filePath)) {
-    return headBoundsCache.get(filePath);
-  }
-
-  const visibleBounds = getFrameVisibleBounds(filePath);
-  const image = nativeImage.createFromPath(filePath);
-  const size = image.getSize();
-  if (!size.width || !size.height || !visibleBounds) {
-    headBoundsCache.set(filePath, visibleBounds);
-    return visibleBounds;
-  }
-
-  const bitmap = image.toBitmap();
-  const headBounds = frameVisibleBounds.scanHeadBoundsFromBitmap(bitmap, size.width, size.height, visibleBounds, VISIBLE_ALPHA_THRESHOLD, PET_MENU_HEAD_SCAN_RATIO);
-  headBoundsCache.set(filePath, headBounds);
-  return headBounds;
+  return frameBoundsController.getFrameHeadBounds(filePath);
 }
 
 function getStateHeadBounds(stateId = activeState) {
-  const state = getState(stateId);
-  if (!state) {
-    return getStateVisibleBounds(stateId);
-  }
-  const cacheKey = `head:${state.id}`;
-  if (headBoundsCache.has(cacheKey)) {
-    return headBoundsCache.get(cacheKey);
-  }
-
-  const framePaths = listFramePaths(state.folder);
-  const frameBounds = framePaths.map((filePath) => getFrameHeadBounds(filePath));
-  let combined = frameGeometry.combineFrameBoundsList(frameBounds);
-
-  if (!combined) {
-    combined = getStateVisibleBounds(stateId);
-  }
-  headBoundsCache.set(cacheKey, combined);
-  return combined;
+  return frameBoundsController.getStateHeadBounds(stateId);
 }
 
 function getStableGroundBottom(frameBounds) {
@@ -2589,12 +2519,8 @@ function getPetWindowPositionForVisibleRect(left, top, stateId = activeState, di
   const windowHeight = getPetWindowHeight();
   const spriteSize = getPetSpriteSize();
   const horizontalInset = getSpriteLocalXForWindowWidth(windowWidth);
-  const verticalInset = Math.max(0, windowHeight - spriteSize);
   const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-  return {
-    x: Math.round(left - horizontalInset - visibleInsets.left),
-    y: Math.round(top - verticalInset - visibleInsets.top)
-  };
+  return frameGeometry.getWindowPositionForVisibleRect(left, top, windowWidth, windowHeight, spriteSize, horizontalInset, visibleInsets);
 }
 
 function getGroundedVisibleTop(area, stateId = activeState, direction = walkDirection) {
@@ -2654,20 +2580,17 @@ function getRenderedFrameHeadRectFromBounds(bounds, stateId = activeState, direc
 
   const spriteRect = getSpriteRectFromBounds(bounds);
   const state = getState(stateId);
-  const shouldMirror = state?.defaultFacing === "left" ? frameSnapshot.direction > 0 : frameSnapshot.direction < 0;
-  const rawLeft = shouldMirror
-    ? headBounds.imageWidth - 1 - headBounds.right
-    : headBounds.left;
-  const rawRight = shouldMirror
-    ? headBounds.imageWidth - 1 - headBounds.left
-    : headBounds.right;
-  const xScale = spriteRect.width / headBounds.imageWidth;
-  const yScale = spriteRect.height / headBounds.imageHeight;
+  const baseRect = frameGeometry.getFrameVisibleRectFromBounds(
+    headBounds,
+    spriteRect,
+    state?.defaultFacing,
+    frameSnapshot.direction
+  );
   return {
-    x: Math.round(spriteRect.x + rawLeft * xScale + PET_MENU_HEAD_X_OFFSET),
-    y: Math.round(spriteRect.y + headBounds.top * yScale + PET_MENU_HEAD_Y_OFFSET),
-    width: Math.max(1, Math.round((rawRight - rawLeft + 1) * xScale)),
-    height: Math.max(1, Math.round((headBounds.bottom - headBounds.top + 1) * yScale))
+    x: baseRect.x + PET_MENU_HEAD_X_OFFSET,
+    y: baseRect.y + PET_MENU_HEAD_Y_OFFSET,
+    width: baseRect.width,
+    height: baseRect.height
   };
 }
 
@@ -2842,32 +2765,7 @@ function isPointInsideRenderedFrame(point, frameInfo = null) {
   }
 
   const state = getState(safeFrameInfo.stateId);
-  const shouldMirror = state?.defaultFacing === "left" ? safeFrameInfo.direction > 0 : safeFrameInfo.direction < 0;
-  const localX = (point.x - spriteRect.x) / spriteRect.width;
-  const localY = (point.y - spriteRect.y) / spriteRect.height;
-  const imageX = clamp(
-    Math.round((shouldMirror ? 1 - localX : localX) * (pixelData.width - 1)),
-    0,
-    pixelData.width - 1
-  );
-  const imageY = clamp(
-    Math.round(localY * (pixelData.height - 1)),
-    0,
-    pixelData.height - 1
-  );
-  const radius = hitPadding;
-  const pixelRadius = Math.max(0, Math.ceil((radius / Math.max(1, spriteRect.width)) * pixelData.width));
-
-  for (let y = Math.max(0, imageY - pixelRadius); y <= Math.min(pixelData.height - 1, imageY + pixelRadius); y += 1) {
-    for (let x = Math.max(0, imageX - pixelRadius); x <= Math.min(pixelData.width - 1, imageX + pixelRadius); x += 1) {
-      const alpha = pixelData.bitmap[(y * pixelData.width + x) * 4 + 3];
-      if (alpha > VISIBLE_ALPHA_THRESHOLD) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  return frameHitTest.isPointInsideVisiblePixels(point, spriteRect, pixelData, state?.defaultFacing, safeFrameInfo.direction, hitPadding, VISIBLE_ALPHA_THRESHOLD);
 }
 
 // normalizeBounds 已从 shared/bounds.cjs 导入

@@ -127,6 +127,14 @@ function getFrameVisibleCenterWindowX(centerX, probe, visibleRect) {
   return Math.round(centerX - (visibleRect.x - probe.x) - visibleRect.width / 2);
 }
 
+function getWindowPositionForVisibleRect(left, top, windowWidth, windowHeight, spriteSize, horizontalInset, visibleInsets) {
+  const verticalInset = Math.max(0, windowHeight - spriteSize);
+  return {
+    x: Math.round(left - horizontalInset - visibleInsets.left),
+    y: Math.round(top - verticalInset - visibleInsets.top)
+  };
+}
+
 module.exports = {
   getStableGroundBottom,
   combineFrameBoundsList,
@@ -136,5 +144,6 @@ module.exports = {
   getVisiblePetRectFromBounds,
   getFrameVisibleRectFromBounds,
   getBottomAnchorFromVisibleRect,
-  getFrameVisibleCenterWindowX
+  getFrameVisibleCenterWindowX,
+  getWindowPositionForVisibleRect
 };

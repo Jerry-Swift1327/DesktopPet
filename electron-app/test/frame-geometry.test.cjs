@@ -313,3 +313,60 @@ test("getFrameVisibleCenterWindowX 按 X 偏移换算（probe.x=10）", () => {
   // round(200-(60-10)-50)=round(100)=100
   assert.equal(result, 100);
 });
+
+// getWindowPositionForVisibleRect
+test("getWindowPositionForVisibleRect 常规输入", () => {
+  const result = frameGeometry.getWindowPositionForVisibleRect(
+    100, 200, // left, top
+    128, 128, // windowWidth, windowHeight
+    96,       // spriteSize
+    16,       // horizontalInset
+    { left: 5, top: 3, right: 2, bottom: 4 } // visibleInsets
+  );
+  // verticalInset = max(0, 128 - 96) = 32
+  // x = round(100 - 16 - 5) = 79
+  // y = round(200 - 32 - 3) = 165
+  assert.deepEqual(result, { x: 79, y: 165 });
+});
+
+test("getWindowPositionForVisibleRect windowHeight < spriteSize 时 verticalInset 为 0", () => {
+  const result = frameGeometry.getWindowPositionForVisibleRect(
+    100, 200,
+    96, 80,   // windowHeight < spriteSize
+    96,
+    16,
+    { left: 5, top: 3, right: 2, bottom: 4 }
+  );
+  // verticalInset = max(0, 80 - 96) = 0
+  // x = round(100 - 16 - 5) = 79
+  // y = round(200 - 0 - 3) = 197
+  assert.deepEqual(result, { x: 79, y: 197 });
+});
+
+test("getWindowPositionForVisibleRect visibleInsets 影响偏移", () => {
+  const result = frameGeometry.getWindowPositionForVisibleRect(
+    100, 200,
+    128, 128,
+    96,
+    16,
+    { left: 10, top: 8, right: 2, bottom: 4 }
+  );
+  // verticalInset = 32
+  // x = round(100 - 16 - 10) = 74
+  // y = round(200 - 32 - 8) = 160
+  assert.deepEqual(result, { x: 74, y: 160 });
+});
+
+test("getWindowPositionForVisibleRect 浮点输入 Math.round 正确", () => {
+  const result = frameGeometry.getWindowPositionForVisibleRect(
+    100.4, 200.6,
+    128, 128,
+    96,
+    16.5,
+    { left: 5.3, top: 3.7, right: 2, bottom: 4 }
+  );
+  // verticalInset = 32
+  // x = round(100.4 - 16.5 - 5.3) = round(78.6) = 79
+  // y = round(200.6 - 32 - 3.7) = round(164.9) = 165
+  assert.deepEqual(result, { x: 79, y: 165 });
+});
