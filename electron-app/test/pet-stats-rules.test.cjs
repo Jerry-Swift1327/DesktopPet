@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const {
   clampStat,
   getLocalDateKey,
@@ -13,6 +15,13 @@ const {
   applyCompletedWalkStatsRules,
   recordInteractionRules
 } = require("../electron/pet/pet-stats-rules.cjs");
+
+// 结构断言：读取 rules 源码，确保纯规则边界不被回归
+// 剥离注释后再做字符串检查，避免文档性注释（如首行"不依赖 .../Math.random/..."）误触断言
+const rulesSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "pet-stats-rules.cjs"), "utf8");
+const rulesSourceCode = rulesSource
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/\/\/[^\n]*/g, "");
 const {
   INTIMACY_DECAY_INTERVAL_MS,
   HEALTH_RECOVERY_INTERVAL_MS,
@@ -410,4 +419,22 @@ test("recordInteractionRules 更新 lastInteractionAt 并累加 todayInteraction
   recordInteractionRules(stats, 1000);
   assert.equal(stats.lastInteractionAt, 1000);
   assert.equal(stats.todayInteractions, 1);
+});
+
+// 结构断言：rules 模块纯规则边界
+test("rules 不 require electron/fs/path", () => {
+  assert.ok(!rulesSourceCode.includes("require(\"electron\""), "rules 不应 require electron");
+  assert.ok(!rulesSourceCode.includes("require('electron'"), "rules 不应 require electron");
+  assert.ok(!rulesSourceCode.includes("require(\"fs\""), "rules 不应 require fs");
+  assert.ok(!rulesSourceCode.includes("require('fs'"), "rules 不应 require fs");
+  assert.ok(!rulesSourceCode.includes("require(\"path\""), "rules 不应 require path");
+  assert.ok(!rulesSourceCode.includes("require('path'"), "rules 不应 require path");
+});
+
+test("rules 不使用 Math.random", () => {
+  assert.ok(!rulesSourceCode.includes("Math.random"), "rules 不应使用 Math.random");
+});
+
+test("rules 不出现 new Date()", () => {
+  assert.ok(!rulesSourceCode.includes("new Date()"), "rules 不应出现 new Date()");
 });

@@ -104,3 +104,19 @@ test("tabby release hover panel shows the sleep pose timer", () => {
   assert.match(rendererSource, /data-timer="sleep-pose"/);
   assert.match(rendererSource, /Pose\\n\$\{formatTimer\(\(timers\.nextTabbySleepPoseInMs \|\| 0\) - elapsedSinceSnapshot\)\}/);
 });
+
+//  收尾结构断言：main.cjs 不再解构已迁入 rules 的 stats 规则常量
+test("main.cjs 不解构已迁入 rules 的 stats 规则常量", () => {
+  assert.ok(!mainSource.includes("STAT_NATURAL_DELTA"), "main.cjs 不应再解构 STAT_NATURAL_DELTA");
+  assert.ok(!mainSource.includes("FEED_FULLNESS_GAIN_MIN"), "main.cjs 不应再解构 FEED_FULLNESS_GAIN_MIN");
+  assert.ok(!mainSource.includes("FEED_FULLNESS_GAIN_MAX"), "main.cjs 不应再解构 FEED_FULLNESS_GAIN_MAX");
+  assert.ok(!mainSource.includes("LIE_HEALTH_GAIN"), "main.cjs 不应再解构 LIE_HEALTH_GAIN");
+  assert.ok(!mainSource.includes("DAILY_DECAY_FULLNESS"), "main.cjs 不应再解构 DAILY_DECAY_FULLNESS");
+  assert.ok(!mainSource.includes("PET_INTIMACY_DEFAULT"), "main.cjs 不应再解构 PET_INTIMACY_DEFAULT");
+  assert.ok(!mainSource.includes("HEALTH_RECOVERY_THRESHOLD"), "main.cjs 不应再解构 HEALTH_RECOVERY_THRESHOLD");
+});
+
+test("randomStatDelta 不引用 STAT_CHANGE_MIN/STAT_CHANGE_MAX", () => {
+  assert.ok(!mainSource.includes("STAT_CHANGE_MIN"), "randomStatDelta 不应引用 STAT_CHANGE_MIN");
+  assert.ok(!mainSource.includes("STAT_CHANGE_MAX"), "randomStatDelta 不应引用 STAT_CHANGE_MAX");
+});

@@ -38,7 +38,7 @@ function clampStat(value) {
   return Math.round(clamp(Number(value) || 0, PET_STAT_MIN, PET_STAT_MAX));
 }
 
-function getLocalDateKey(date = new Date()) {
+function getLocalDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
