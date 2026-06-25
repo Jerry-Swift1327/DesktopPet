@@ -78,7 +78,7 @@ test("prepareRuntimeScript 使用 getUserDataRoot()", () => {
   assert.doesNotMatch(funcBlock, /(^|\s|[^.])userDataRoot(\s|,|\))/, "不应直接引用裸变量 userDataRoot");
 });
 
-test("return 导出列表包含 15 个核心函数", () => {
+test("return 导出列表包含 16 个核心函数", () => {
   const expectedExports = [
     "parseWindowSurfaceItems",
     "parseWindowHwnd",
@@ -94,7 +94,8 @@ test("return 导出列表包含 15 个核心函数", () => {
     "buildDockQueryPoints",
     "scoreDockSurface",
     "getCachedWindowSurfaceCandidates",
-    "getLastWindowSurfaceAsyncRefreshAt"
+    "getLastWindowSurfaceAsyncRefreshAt",
+    "maybeRefreshWindowSurfaceCandidatesBackground"
   ];
   for (const name of expectedExports) {
     assert.match(exportBlock, new RegExp(`\\b${name}\\b`), `导出对象应包含 ${name}`);
@@ -204,4 +205,11 @@ test("main.cjs 仍保留 dock-controller 接线（不回归）", () => {
 
 test("main.cjs 仍保留 window-roam-controller 接线（不回归）", () => {
   assert.match(mainSource, /createWindowRoamController/);
+});
+
+test("main.cjs 不再声明 4 个窗口表面死代码 helper", () => {
+  assert.doesNotMatch(mainSource, /function toNumberOrNull\(/, "不应再声明 toNumberOrNull");
+  assert.doesNotMatch(mainSource, /function normalizeRectShape\(/, "不应再声明 normalizeRectShape");
+  assert.doesNotMatch(mainSource, /function rectFromWindowItem\(/, "不应再声明 rectFromWindowItem");
+  assert.doesNotMatch(mainSource, /function isWindowTopDockable\(/, "不应再声明 isWindowTopDockable");
 });

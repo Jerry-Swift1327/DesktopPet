@@ -1832,27 +1832,6 @@ function parseWindowHwnd(value) {
   return windowSurfaceController.parseWindowHwnd(value);
 }
 
-function toNumberOrNull(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-function normalizeRectShape(rect) {
-  if (!rect) {
-    return null;
-  }
-  const left = toNumberOrNull(rect.left);
-  const top = toNumberOrNull(rect.top);
-  const right = toNumberOrNull(rect.right);
-  const bottom = toNumberOrNull(rect.bottom);
-  if (left === null || top === null || right === null || bottom === null) {
-    return null;
-  }
-  const width = Number.isFinite(Number(rect.width)) ? Number(rect.width) : (right - left);
-  const height = Number.isFinite(Number(rect.height)) ? Number(rect.height) : (bottom - top);
-  return { left, top, right, bottom, width, height };
-}
-
 function normalizeWindowRectToDip(rect) {
   return windowSurfaceController.normalizeWindowRectToDip(rect);
 }
@@ -1908,34 +1887,6 @@ function maybeRefreshWindowSurfaceCandidatesBackground(now = Date.now()) {
 
 function getWindowAtScreenPoint(x, y) {
   return windowSurfaceController.getWindowAtScreenPoint(x, y);
-}
-
-function rectFromWindowItem(item) {
-  return normalizeWindowRectToDip({
-    left: item.left,
-    top: item.top,
-    right: item.right,
-    bottom: item.bottom,
-    width: item.width,
-    height: item.height
-  }) || {
-    left: 0,
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: 0,
-    height: 0
-  };
-}
-
-// isValidRect 已从 shared/bounds.cjs 导入
-
-function isWindowTopDockable(rect, area) {
-  const verticalSlack = 10;
-  const horizontalOverlap = Math.min(rect.right, area.x + area.width) - Math.max(rect.left, area.x);
-  return rect.top >= area.y - verticalSlack
-    && rect.top <= area.y + area.height - 80
-    && horizontalOverlap >= WINDOW_DOCK_MIN_WIDTH;
 }
 
 function buildWindowSurfaceFromItem(item) {
