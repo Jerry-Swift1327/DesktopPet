@@ -7,6 +7,7 @@ const controllerSource = fs.readFileSync(
   path.join(__dirname, "..", "electron", "platform", "window-surfaces.cjs"),
   "utf8"
 );
+const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 
 // 提取 context 解构块
 const contextBlock = controllerSource.match(/const \{([\s\S]*?)\} = context;/)?.[1] || "";
@@ -108,4 +109,99 @@ test("context 不注入 getCachedWindowSurfaceCandidates（已内部化）", () 
 
 test("控制器内部定义 getLastWindowSurfaceAsyncRefreshAt", () => {
   assert.match(controllerSource, /function getLastWindowSurfaceAsyncRefreshAt\(\)/, "控制器内部应定义 getLastWindowSurfaceAsyncRefreshAt");
+});
+
+// ============================================================================
+// B2：main.cjs 接线相关结构断言（window-surfaces 真实接线）
+// ============================================================================
+
+test("main.cjs 已引入并构造 createWindowSurfaceController", () => {
+  assert.match(mainSource, /createWindowSurfaceController/);
+  assert.match(mainSource, /require\(.*window-surfaces/);
+  assert.match(mainSource, /const windowSurfaceController = createWindowSurfaceController\(/);
+});
+
+test("main.cjs 保留 16 个窗口表面薄包装函数声明", () => {
+  const expectedDeclarations = [
+    "parseWindowSurfaceItems",
+    "parseWindowHwnd",
+    "normalizeWindowRectToDip",
+    "toPhysicalScreenPoint",
+    "prepareRuntimeScript",
+    "listWindowSurfaceCandidates",
+    "refreshWindowSurfaceCandidatesAsync",
+    "listSpecificWindowSurfaceCandidate",
+    "findCandidateByHwnd",
+    "maybeRefreshWindowSurfaceCandidatesBackground",
+    "getWindowAtScreenPoint",
+    "buildWindowSurfaceFromItem",
+    "buildDockQueryPoints",
+    "scoreDockSurface",
+    "getCachedWindowSurfaceCandidates",
+    "getLastWindowSurfaceAsyncRefreshAt"
+  ];
+  for (const name of expectedDeclarations) {
+    assert.match(mainSource, new RegExp(`function ${name}\\(`), `main.cjs 应保留 ${name} 函数声明`);
+  }
+});
+
+test("main.cjs 薄包装函数体委托给 windowSurfaceController", () => {
+  assert.match(mainSource, /windowSurfaceController\.parseWindowSurfaceItems\(rawOutput\)/);
+  assert.match(mainSource, /windowSurfaceController\.parseWindowHwnd\(value\)/);
+  assert.match(mainSource, /windowSurfaceController\.normalizeWindowRectToDip\(rect\)/);
+  assert.match(mainSource, /windowSurfaceController\.toPhysicalScreenPoint\(point\)/);
+  assert.match(mainSource, /windowSurfaceController\.prepareRuntimeScript\(scriptName\)/);
+  assert.match(mainSource, /windowSurfaceController\.listWindowSurfaceCandidates\(\{ useCache \}\)/);
+  assert.match(mainSource, /windowSurfaceController\.refreshWindowSurfaceCandidatesAsync\(\{ force \}\)/);
+  assert.match(mainSource, /windowSurfaceController\.listSpecificWindowSurfaceCandidate\(hwnd\)/);
+  assert.match(mainSource, /windowSurfaceController\.findCandidateByHwnd\(hwnd, \{ useCache, cacheOnly \}\)/);
+  assert.match(mainSource, /windowSurfaceController\.maybeRefreshWindowSurfaceCandidatesBackground\(now\)/);
+  assert.match(mainSource, /windowSurfaceController\.getWindowAtScreenPoint\(x, y\)/);
+  assert.match(mainSource, /windowSurfaceController\.buildWindowSurfaceFromItem\(item\)/);
+  assert.match(mainSource, /windowSurfaceController\.buildDockQueryPoints\(bottomPoint, surfaceHint\)/);
+  assert.match(mainSource, /windowSurfaceController\.scoreDockSurface\(bottomPoint, rect\)/);
+  assert.match(mainSource, /windowSurfaceController\.getCachedWindowSurfaceCandidates\(\)/);
+  assert.match(mainSource, /windowSurfaceController\.getLastWindowSurfaceAsyncRefreshAt\(\)/);
+});
+
+test("main.cjs 不再声明 5 个旧窗口候选缓存状态变量", () => {
+  assert.doesNotMatch(mainSource, /let windowSurfaceCandidatesCache\b/, "不应再声明 let windowSurfaceCandidatesCache");
+  assert.doesNotMatch(mainSource, /let windowSurfaceCandidatesCacheAt\b/, "不应再声明 let windowSurfaceCandidatesCacheAt");
+  assert.doesNotMatch(mainSource, /let windowSurfaceRefreshInFlight\b/, "不应再声明 let windowSurfaceRefreshInFlight");
+  assert.doesNotMatch(mainSource, /let lastWindowSurfaceAsyncRefreshAt\b/, "不应再声明 let lastWindowSurfaceAsyncRefreshAt");
+  assert.doesNotMatch(mainSource, /let lastWindowSurfaceBackgroundRefreshAt\b/, "不应再声明 let lastWindowSurfaceBackgroundRefreshAt");
+});
+
+test("main.cjs updateDragPosition 使用 getLastWindowSurfaceAsyncRefreshAt() 而非裸变量", () => {
+  const funcBlock = mainSource.match(/function updateDragPosition\([\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(funcBlock.length > 0, "应能提取 updateDragPosition 函数");
+  assert.match(funcBlock, /getLastWindowSurfaceAsyncRefreshAt\(\)/, "应使用 getLastWindowSurfaceAsyncRefreshAt()");
+  assert.doesNotMatch(funcBlock, /now\s*-\s*lastWindowSurfaceAsyncRefreshAt\b/, "不应直接引用裸变量 lastWindowSurfaceAsyncRefreshAt");
+});
+
+test("window-surfaces.cjs 内部定义并导出 maybeRefreshWindowSurfaceCandidatesBackground", () => {
+  assert.match(controllerSource, /function maybeRefreshWindowSurfaceCandidatesBackground\(now = Date\.now\(\)\)/, "应定义函数");
+  const lastReturnIdx = controllerSource.lastIndexOf("return {");
+  const exportBlock = lastReturnIdx >= 0 ? controllerSource.slice(lastReturnIdx) : "";
+  assert.match(exportBlock, /maybeRefreshWindowSurfaceCandidatesBackground/, "应导出该函数");
+});
+
+test("window-surfaces.cjs context 包含 getCurrentSurfaceValue 和 WINDOW_SURFACE_BACKGROUND_REFRESH_MS", () => {
+  assert.match(contextBlock, /getCurrentSurfaceValue/, "context 应包含 getCurrentSurfaceValue");
+  assert.match(contextBlock, /WINDOW_SURFACE_BACKGROUND_REFRESH_MS/, "context 应包含 WINDOW_SURFACE_BACKGROUND_REFRESH_MS");
+});
+
+test("window-surfaces.cjs maybeRefreshWindowSurfaceCandidatesBackground 使用 getCurrentSurfaceValue() 访问器", () => {
+  const funcBlock = controllerSource.match(/function maybeRefreshWindowSurfaceCandidatesBackground\(now = Date\.now\(\)\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.ok(funcBlock.length > 0, "应能提取函数体");
+  assert.match(funcBlock, /getCurrentSurfaceValue\(\)/, "应使用 getCurrentSurfaceValue() 访问器");
+});
+
+test("main.cjs 仍保留 dock-controller 接线（不回归）", () => {
+  assert.match(mainSource, /createDockController/);
+  assert.match(mainSource, /dockController\./);
+});
+
+test("main.cjs 仍保留 window-roam-controller 接线（不回归）", () => {
+  assert.match(mainSource, /createWindowRoamController/);
 });

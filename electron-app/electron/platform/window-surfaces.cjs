@@ -24,6 +24,7 @@ function createWindowSurfaceController(context) {
     getDragState,
     getLastDragSample,
     getUserDataRoot,
+    getCurrentSurfaceValue,
     // 常量
     ENABLE_WINDOW_DOCKING,
     APP_INTERNAL_NAME,
@@ -38,7 +39,8 @@ function createWindowSurfaceController(context) {
     WINDOW_DOCK_FAST_HIT_SAMPLES,
     WINDOW_DOCK_NORMAL_HIT_SAMPLES,
     WINDOW_DOCK_FAST_POINT_OFFSETS_Y,
-    WINDOW_DOCK_POINT_OFFSETS_Y
+    WINDOW_DOCK_POINT_OFFSETS_Y,
+    WINDOW_SURFACE_BACKGROUND_REFRESH_MS
   } = context;
 
   // 窗口表面候选缓存与异步刷新状态（原 main.cjs 中的全局变量）
@@ -46,6 +48,7 @@ function createWindowSurfaceController(context) {
   let windowSurfaceCandidatesCacheAt = 0;
   let windowSurfaceRefreshInFlight = false;
   let lastWindowSurfaceAsyncRefreshAt = 0;
+  let lastWindowSurfaceBackgroundRefreshAt = 0;
 
   function parseWindowSurfaceItems(rawOutput) {
     if (!rawOutput || !rawOutput.trim()) {
@@ -343,6 +346,24 @@ function createWindowSurfaceController(context) {
     return lastWindowSurfaceAsyncRefreshAt;
   }
 
+  function maybeRefreshWindowSurfaceCandidatesBackground(now = Date.now()) {
+    if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
+      return;
+    }
+    const currentSurface = getCurrentSurfaceValue();
+    if (!currentSurface || currentSurface.type !== "window") {
+      return;
+    }
+    if (windowSurfaceRefreshInFlight) {
+      return;
+    }
+    if (now - lastWindowSurfaceBackgroundRefreshAt < WINDOW_SURFACE_BACKGROUND_REFRESH_MS) {
+      return;
+    }
+    lastWindowSurfaceBackgroundRefreshAt = now;
+    refreshWindowSurfaceCandidatesAsync();
+  }
+
   function findCandidateByHwnd(hwnd, { useCache = true, cacheOnly = false } = {}) {
     const normalizedTarget = parseWindowHwnd(hwnd);
     if (!normalizedTarget) {
@@ -550,7 +571,8 @@ function createWindowSurfaceController(context) {
     buildDockQueryPoints,
     scoreDockSurface,
     getCachedWindowSurfaceCandidates,
-    getLastWindowSurfaceAsyncRefreshAt
+    getLastWindowSurfaceAsyncRefreshAt,
+    maybeRefreshWindowSurfaceCandidatesBackground
   };
 }
 

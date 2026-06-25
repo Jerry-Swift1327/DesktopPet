@@ -48,6 +48,7 @@ const { createWindowRoamController } = require("./behavior/window-roam-controlle
 const { createWalkController } = require("./behavior/walk-controller.cjs");
 const { createDockController } = require("./behavior/dock-controller.cjs");
 const { createScreenMetricsController } = require("./platform/screen-metrics.cjs");
+const { createWindowSurfaceController } = require("./platform/window-surfaces.cjs");
 const { registerIpcHandlers } = require("./ipc/register-ipc-handlers.cjs");
 const { registerAppLifecycle } = require("./lifecycle/register-app-lifecycle.cjs");
 const { createContactQrCodeResolver } = require("./ipc/contact-qrcode.cjs");
@@ -405,18 +406,13 @@ let lastHealthDecayAt = Date.now();
 let lastHealthRecoveryAt = Date.now();
 let currentSurface = null;
 let windowSurfacePollTimer = null;
-let windowSurfaceCandidatesCache = [];
-let windowSurfaceCandidatesCacheAt = 0;
 let lastWindowSurfaceHeavyCheckAt = 0;
-let windowSurfaceRefreshInFlight = false;
 let windowSurfaceMissingTicks = 0;
 let walkPausedAt = 0;
 let pendingActionStatsState = null;
 let lastWalkScaleApplyAt = 0;
 let lastWalkSurfaceSignature = "";
-let lastWindowSurfaceAsyncRefreshAt = 0;
 let windowDockInProgress = false;
-let lastWindowSurfaceBackgroundRefreshAt = 0;
 let windowDockHoverSuppressedUntil = 0;
 let autoStartRefreshInFlight = false;
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
@@ -904,6 +900,47 @@ const screenMetricsController = createScreenMetricsController({
   VISIBLE_SIDE_GAP,
   VISIBLE_BOTTOM_GAP,
   DARWIN_DISPLAY_METRICS_SETTLE_MS
+});
+
+// 接入 platform/window-surfaces.cjs：窗口候选探测（PowerShell 调用、解析、评分、命中检测）
+// 采用薄包装接线：16 个窗口表面函数保留原函数名，函数体委托给 windowSurfaceController
+// 窗口候选缓存与异步刷新状态所有权迁移到控制器，main.cjs 不再直接持有
+const windowSurfaceController = createWindowSurfaceController({
+  // Electron 与运行时
+  screen,
+  execFile,
+  execFileSync,
+  fs,
+  path,
+  process,
+  __dirname,
+  // 依赖函数（main.cjs function 声明，hoisted 可用）
+  log,
+  getPetSpriteSize,
+  isValidRect,
+  isLikelyDesktopOrSystemWindow,
+  // 可变状态访问器（实时读取 main.cjs 状态，避免快照）
+  getPetWindow: () => petWindow,
+  getDragState: () => dragState,
+  getLastDragSample: () => lastDragSample,
+  getUserDataRoot: () => userDataRoot,
+  getCurrentSurfaceValue: () => currentSurface,
+  // 常量
+  ENABLE_WINDOW_DOCKING,
+  APP_INTERNAL_NAME,
+  WINDOW_DOCK_DEBUG,
+  WINDOW_SURFACE_CACHE_MS,
+  WINDOW_SURFACE_ASYNC_REFRESH_MIN_MS,
+  WINDOW_SURFACE_BACKGROUND_REFRESH_MS,
+  WINDOW_DOCK_MIN_WIDTH,
+  WINDOW_SURFACE_SIDE_GAP,
+  WINDOW_DOCK_GAP,
+  WINDOW_DOCK_FAST_RELEASE_SPEED_PX_PER_SEC,
+  WINDOW_DOCK_FAST_RELEASE_MAX_AGE_MS,
+  WINDOW_DOCK_FAST_HIT_SAMPLES,
+  WINDOW_DOCK_NORMAL_HIT_SAMPLES,
+  WINDOW_DOCK_FAST_POINT_OFFSETS_Y,
+  WINDOW_DOCK_POINT_OFFSETS_Y
 });
 
 // 接入 behavior/eye-tracking-controller.cjs：眼球追踪光标跟随、视线方向计算、pet:eye-tracking-look 发送
@@ -1788,31 +1825,11 @@ function getVisibleBottomYForSurface(surface, stateId = activeState, direction =
 }
 
 function parseWindowSurfaceItems(rawOutput) {
-  if (!rawOutput || !rawOutput.trim()) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(rawOutput);
-    return Array.isArray(parsed) ? parsed : [parsed];
-  } catch (error) {
-    log(`failed to parse window surfaces: ${error.stack || error.message}`);
-    return [];
-  }
+  return windowSurfaceController.parseWindowSurfaceItems(rawOutput);
 }
 
 function parseWindowHwnd(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-  if (/^0x/i.test(raw)) {
-    return raw.slice(2).replace(/^0+/, "").toLowerCase() || "0";
-  }
-  const asNumber = Number(raw);
-  if (Number.isFinite(asNumber) && asNumber > 0) {
-    return Math.trunc(asNumber).toString(16);
-  }
-  return raw.toLowerCase();
+  return windowSurfaceController.parseWindowHwnd(value);
 }
 
 function toNumberOrNull(value) {
@@ -1837,248 +1854,31 @@ function normalizeRectShape(rect) {
 }
 
 function normalizeWindowRectToDip(rect) {
-  const normalized = normalizeRectShape(rect);
-  if (!normalized) {
-    return null;
-  }
-  if (typeof screen.screenToDipRect !== "function") {
-    return {
-      left: Math.round(normalized.left),
-      top: Math.round(normalized.top),
-      right: Math.round(normalized.right),
-      bottom: Math.round(normalized.bottom),
-      width: Math.round(normalized.width),
-      height: Math.round(normalized.height)
-    };
-  }
-  const physicalRect = {
-    x: Math.round(normalized.left),
-    y: Math.round(normalized.top),
-    width: Math.max(1, Math.round(normalized.width)),
-    height: Math.max(1, Math.round(normalized.height))
-  };
-  let dipRect = null;
-  try {
-    const ownerWindow = petWindow && !petWindow.isDestroyed() ? petWindow : null;
-    dipRect = screen.screenToDipRect(ownerWindow, physicalRect);
-  } catch (error) {
-    log(`screenToDipRect failed: ${error.stack || error.message}`);
-    return {
-      left: Math.round(normalized.left),
-      top: Math.round(normalized.top),
-      right: Math.round(normalized.right),
-      bottom: Math.round(normalized.bottom),
-      width: Math.round(normalized.width),
-      height: Math.round(normalized.height)
-    };
-  }
-  if (!dipRect || !Number.isFinite(dipRect.x) || !Number.isFinite(dipRect.y) || !Number.isFinite(dipRect.width) || !Number.isFinite(dipRect.height)) {
-    return {
-      left: Math.round(normalized.left),
-      top: Math.round(normalized.top),
-      right: Math.round(normalized.right),
-      bottom: Math.round(normalized.bottom),
-      width: Math.round(normalized.width),
-      height: Math.round(normalized.height)
-    };
-  }
-  return {
-    left: Math.round(dipRect.x),
-    top: Math.round(dipRect.y),
-    right: Math.round(dipRect.x + dipRect.width),
-    bottom: Math.round(dipRect.y + dipRect.height),
-    width: Math.round(dipRect.width),
-    height: Math.round(dipRect.height)
-  };
+  return windowSurfaceController.normalizeWindowRectToDip(rect);
 }
 
 function toPhysicalScreenPoint(point) {
-  if (!point) {
-    return null;
-  }
-  if (typeof screen.dipToScreenPoint !== "function") {
-    return {
-      x: Math.round(point.x),
-      y: Math.round(point.y)
-    };
-  }
-  const screenPoint = screen.dipToScreenPoint({
-    x: Math.round(point.x),
-    y: Math.round(point.y)
-  });
-  return {
-    x: Math.round(screenPoint.x),
-    y: Math.round(screenPoint.y)
-  };
+  return windowSurfaceController.toPhysicalScreenPoint(point);
 }
 
 function prepareRuntimeScript(scriptName) {
-  const sourcePath = path.join(__dirname, scriptName);
-  if (!sourcePath.includes(".asar") && fs.existsSync(sourcePath)) {
-    return sourcePath;
-  }
-  try {
-    const content = fs.readFileSync(sourcePath, "utf8");
-    const runtimeScriptPath = path.join(userDataRoot, scriptName);
-    fs.writeFileSync(runtimeScriptPath, content, "utf8");
-    return runtimeScriptPath;
-  } catch (error) {
-    log(`failed to prepare runtime script ${scriptName}: ${error.stack || error.message}`);
-    return null;
-  }
+  return windowSurfaceController.prepareRuntimeScript(scriptName);
 }
 
 function listWindowSurfaceCandidates({ useCache = true } = {}) {
-  if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
-    return [];
-  }
-  const now = Date.now();
-  if (useCache && now - windowSurfaceCandidatesCacheAt <= WINDOW_SURFACE_CACHE_MS) {
-    return windowSurfaceCandidatesCache;
-  }
-
-  const scriptPath = prepareRuntimeScript("window-surfaces.ps1");
-  if (!scriptPath || !fs.existsSync(scriptPath)) {
-    return [];
-  }
-
-  try {
-    const output = execFileSync("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      scriptPath,
-      "-PetPid",
-      String(process.pid),
-      "-PetInternalName",
-      APP_INTERNAL_NAME
-    ], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 1800,
-      maxBuffer: 1024 * 1024
-    });
-    const items = parseWindowSurfaceItems(output);
-    windowSurfaceCandidatesCache = items;
-    windowSurfaceCandidatesCacheAt = now;
-    if (WINDOW_DOCK_DEBUG) {
-      log(`window-dock enum items=${items.length}`);
-    }
-    return items;
-  } catch (error) {
-    log(`failed to list window surfaces: ${error.stack || error.message}`);
-    return [];
-  }
+  return windowSurfaceController.listWindowSurfaceCandidates({ useCache });
 }
 
 function refreshWindowSurfaceCandidatesAsync({ force = false } = {}) {
-  if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32" || windowSurfaceRefreshInFlight) {
-    return;
-  }
-  const now = Date.now();
-  if (!force && now - lastWindowSurfaceAsyncRefreshAt < WINDOW_SURFACE_ASYNC_REFRESH_MIN_MS) {
-    return;
-  }
-  lastWindowSurfaceAsyncRefreshAt = now;
-
-  const scriptPath = prepareRuntimeScript("window-surfaces.ps1");
-  if (!scriptPath || !fs.existsSync(scriptPath)) {
-    return;
-  }
-
-  windowSurfaceRefreshInFlight = true;
-  execFile("powershell.exe", [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    scriptPath,
-    "-PetPid",
-    String(process.pid),
-    "-PetInternalName",
-    APP_INTERNAL_NAME
-  ], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 3000,
-    maxBuffer: 1024 * 1024
-  }, (error, stdout, stderr) => {
-    windowSurfaceRefreshInFlight = false;
-    if (error) {
-      if (WINDOW_DOCK_DEBUG) {
-        const detail = [
-          `message=${error.message || ""}`,
-          `code=${error.code || ""}`,
-          `signal=${error.signal || ""}`,
-          `killed=${error.killed ? "1" : "0"}`,
-          `timedOut=${error.code === "ETIMEDOUT" ? "1" : "0"}`,
-          `stdoutLen=${(stdout || "").length}`,
-          `stderrLen=${(stderr || "").length}`,
-          `stderr=${String(stderr || "").trim().slice(0, 300)}`
-        ].join(" ");
-        log(`window-dock async refresh failed: ${detail}`);
-      }
-      return;
-    }
-    const items = parseWindowSurfaceItems(stdout || "");
-    windowSurfaceCandidatesCache = items;
-    windowSurfaceCandidatesCacheAt = Date.now();
-  });
+  return windowSurfaceController.refreshWindowSurfaceCandidatesAsync({ force });
 }
 
 function listSpecificWindowSurfaceCandidate(hwnd) {
-  if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
-    return null;
-  }
-  const normalizedTarget = parseWindowHwnd(hwnd);
-  if (!normalizedTarget) {
-    return null;
-  }
-
-  const scriptPath = prepareRuntimeScript("window-surfaces.ps1");
-  if (!scriptPath || !fs.existsSync(scriptPath)) {
-    return null;
-  }
-
-  try {
-    const output = execFileSync("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      scriptPath,
-      "-PetPid",
-      String(process.pid),
-      "-PetInternalName",
-      APP_INTERNAL_NAME,
-      "-TargetHwnd",
-      String(hwnd)
-    ], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 700,
-      maxBuffer: 256 * 1024
-    });
-    const candidates = parseWindowSurfaceItems(output);
-    return candidates.find((item) => parseWindowHwnd(item.hwnd) === normalizedTarget) || null;
-  } catch (error) {
-    if (WINDOW_DOCK_DEBUG) {
-      log(`failed to validate window surface hwnd=${hwnd}: ${error.stack || error.message}`);
-    }
-    return null;
-  }
+  return windowSurfaceController.listSpecificWindowSurfaceCandidate(hwnd);
 }
 
 function findCandidateByHwnd(hwnd, { useCache = true, cacheOnly = false } = {}) {
-  const normalizedTarget = parseWindowHwnd(hwnd);
-  if (!normalizedTarget) {
-    return null;
-  }
-  const candidates = cacheOnly
-    ? getCachedWindowSurfaceCandidates()
-    : listWindowSurfaceCandidates({ useCache });
-  return candidates.find((item) => parseWindowHwnd(item.hwnd) === normalizedTarget) || null;
+  return windowSurfaceController.findCandidateByHwnd(hwnd, { useCache, cacheOnly });
 }
 
 function refreshCurrentWindowSurfaceBoundsFromCache() {
@@ -2103,85 +1903,11 @@ function refreshCurrentWindowSurfaceBoundsFromCache() {
 }
 
 function maybeRefreshWindowSurfaceCandidatesBackground(now = Date.now()) {
-  if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
-    return;
-  }
-  if (!currentSurface || currentSurface.type !== "window") {
-    return;
-  }
-  if (windowSurfaceRefreshInFlight) {
-    return;
-  }
-  if (now - lastWindowSurfaceBackgroundRefreshAt < WINDOW_SURFACE_BACKGROUND_REFRESH_MS) {
-    return;
-  }
-  lastWindowSurfaceBackgroundRefreshAt = now;
-  refreshWindowSurfaceCandidatesAsync();
+  return windowSurfaceController.maybeRefreshWindowSurfaceCandidatesBackground(now);
 }
 
 function getWindowAtScreenPoint(x, y) {
-  if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
-    return null;
-  }
-
-  const scriptPath = prepareRuntimeScript("window-from-point.ps1");
-  if (!scriptPath || !fs.existsSync(scriptPath)) {
-    return null;
-  }
-  const physicalPoint = toPhysicalScreenPoint({ x, y });
-  if (!physicalPoint) {
-    return null;
-  }
-
-  try {
-    const output = execFileSync("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      scriptPath,
-      "-X",
-      String(physicalPoint.x),
-      "-Y",
-      String(physicalPoint.y),
-      "-PetPid",
-      String(process.pid),
-      "-PetInternalName",
-      APP_INTERNAL_NAME
-    ], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 1200,
-      maxBuffer: 512 * 1024
-    });
-    if (!output || !output.trim()) {
-      return null;
-    }
-    const parsed = JSON.parse(output);
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-    const normalizedRect = normalizeWindowRectToDip({
-      left: parsed.left,
-      top: parsed.top,
-      right: parsed.right,
-      bottom: parsed.bottom,
-      width: parsed.width,
-      height: parsed.height
-    });
-    if (normalizedRect) {
-      parsed.left = normalizedRect.left;
-      parsed.top = normalizedRect.top;
-      parsed.right = normalizedRect.right;
-      parsed.bottom = normalizedRect.bottom;
-      parsed.width = normalizedRect.width;
-      parsed.height = normalizedRect.height;
-    }
-    return parsed;
-  } catch (error) {
-    log(`failed to hit-test window point: ${error.stack || error.message}`);
-    return null;
-  }
+  return windowSurfaceController.getWindowAtScreenPoint(x, y);
 }
 
 function rectFromWindowItem(item) {
@@ -2213,91 +1939,15 @@ function isWindowTopDockable(rect, area) {
 }
 
 function buildWindowSurfaceFromItem(item) {
-  const rect = rectFromWindowItem(item);
-  if (!isValidRect(rect)) {
-    return { surface: null, reason: "invalid-rect", rect };
-  }
-  const display = screen.getDisplayMatching({
-    x: rect.left,
-    y: rect.top,
-    width: Math.max(1, rect.width),
-    height: Math.max(1, rect.height)
-  });
-  const area = display.workArea;
-  if (isLikelyDesktopOrSystemWindow(item, rect, area)) {
-    return { surface: null, reason: "system-or-desktop-window", rect };
-  }
-  if (item.minimized || item.maximized) {
-    return { surface: null, reason: item.minimized ? "minimized" : "maximized", rect };
-  }
-  if (!isWindowTopDockable(rect, area)) {
-    return { surface: null, reason: "top-not-dockable", rect };
-  }
-  if (rect.width < WINDOW_DOCK_MIN_WIDTH) {
-    return { surface: null, reason: `too-narrow:${rect.width}`, rect };
-  }
-
-  return {
-    surface: {
-      type: "window",
-      displayId: display.id,
-      sourceWindowId: item.hwnd,
-      title: item.title || "",
-      className: item.className || "",
-      processName: item.processName || "",
-      bounds: rect,
-      left: Math.max(rect.left, area.x + WINDOW_SURFACE_SIDE_GAP),
-      right: Math.min(rect.right, area.x + area.width - WINDOW_SURFACE_SIDE_GAP),
-      groundY: rect.top - WINDOW_DOCK_GAP,
-      workArea: { x: area.x, y: area.y, width: area.width, height: area.height }
-    },
-    reason: "accepted",
-    rect
-  };
+  return windowSurfaceController.buildWindowSurfaceFromItem(item);
 }
 
 function buildDockQueryPoints(bottomPoint, surfaceHint = null) {
-  const points = [];
-  if (!bottomPoint) {
-    return points;
-  }
-  const spriteSize = getPetSpriteSize();
-  const dragSample = dragState?.lastSample || lastDragSample;
-  const now = Date.now();
-  const isFastRelease = Boolean(
-    dragSample
-    && Number.isFinite(dragSample.speedPxPerSec)
-    && dragSample.speedPxPerSec >= WINDOW_DOCK_FAST_RELEASE_SPEED_PX_PER_SEC
-    && now - dragSample.at <= WINDOW_DOCK_FAST_RELEASE_MAX_AGE_MS
-  );
-  const sampleCount = isFastRelease
-    ? Math.max(3, WINDOW_DOCK_FAST_HIT_SAMPLES)
-    : Math.max(3, WINDOW_DOCK_NORMAL_HIT_SAMPLES);
-  const pointOffsetsY = isFastRelease ? WINDOW_DOCK_FAST_POINT_OFFSETS_Y : WINDOW_DOCK_POINT_OFFSETS_Y;
-  const halfSamples = Math.floor(sampleCount / 2);
-  const step = Math.max(8, Math.round(spriteSize / (sampleCount + 1)));
-  const sideSlack = Math.max(24, Math.round(spriteSize * 0.35));
-  const minX = surfaceHint?.left !== undefined ? Math.round(surfaceHint.left - sideSlack) : -Infinity;
-  const maxX = surfaceHint?.right !== undefined ? Math.round(surfaceHint.right + sideSlack) : Infinity;
-
-  for (let index = -halfSamples; index <= halfSamples; index += 1) {
-    const x = Math.round(bottomPoint.x + index * step);
-    if (x < minX || x > maxX) {
-      continue;
-    }
-    for (const offsetY of pointOffsetsY) {
-      points.push({ x, y: Math.round(bottomPoint.y + offsetY) });
-    }
-  }
-  points.push({ x: Math.round(bottomPoint.x), y: Math.round(bottomPoint.y) });
-  return points;
+  return windowSurfaceController.buildDockQueryPoints(bottomPoint, surfaceHint);
 }
 
 function scoreDockSurface(bottomPoint, rect) {
-  const distance = Math.abs(bottomPoint.y - rect.top);
-  const horizontalCenter = rect.left + Math.round(rect.width / 2);
-  const horizontalDistance = Math.abs(bottomPoint.x - horizontalCenter);
-  return distance * 4 + horizontalDistance;
+  return windowSurfaceController.scoreDockSurface(bottomPoint, rect);
 }
 
 function getAdaptiveDockThreshold() {
@@ -2313,11 +1963,11 @@ function getAdaptiveDockThreshold() {
 }
 
 function getCachedWindowSurfaceCandidates() {
-  if (!ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
-    return [];
-  }
-  refreshWindowSurfaceCandidatesAsync();
-  return windowSurfaceCandidatesCache || [];
+  return windowSurfaceController.getCachedWindowSurfaceCandidates();
+}
+
+function getLastWindowSurfaceAsyncRefreshAt() {
+  return windowSurfaceController.getLastWindowSurfaceAsyncRefreshAt();
 }
 
 function diagnoseDockTargetFromCache(bounds = petWindow?.getBounds()) {
@@ -4982,7 +4632,7 @@ function updateDragPosition() {
   setPetWindowPosition(next.x, next.y);
   syncWalkTrackX(next.x);
   if (ENABLE_WINDOW_DOCKING) {
-    const sinceLastRefresh = now - lastWindowSurfaceAsyncRefreshAt;
+    const sinceLastRefresh = now - getLastWindowSurfaceAsyncRefreshAt();
     if (sinceLastRefresh >= WINDOW_SURFACE_DRAG_REFRESH_MIN_MS) {
       refreshWindowSurfaceCandidatesAsync();
     }
