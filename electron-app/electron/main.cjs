@@ -62,6 +62,7 @@ const { createAssetLoader } = require("./pet/asset-loader.cjs");
 // pet stats 纯规则与读写边界模块
 const { createPetStatsStore } = require("./pet/pet-stats-store.cjs");
 const petStatsRules = require("./pet/pet-stats-rules.cjs");
+const { createPetStatsController } = require("./pet/pet-stats-controller.cjs");
 const {
   APP_INTERNAL_NAME,
   APP_DISPLAY_NAME,
@@ -374,7 +375,6 @@ let dragState = null;
 let lastDragSample = null;
 let homeDisplayId = null;
 let homeWorkArea = null;
-let petStats = null;
 let petScale = DEFAULT_PET_SCALE;
 let preferredPetScale = DEFAULT_PET_SCALE;
 let randomGreetingTimer = null;
@@ -382,13 +382,8 @@ let tabbyIdlePollTimer = null;
 let tabbySleepPoseTimer = null;
 let tabbySleepPoseSwitchAt = 0;
 let idleGreetingPool = [];
-let intimacyDecayTimer = null;
 let lastUserOperationAt = Date.now();
 let lastTabbyUserOperationAt = Date.now();
-let lastIntimacyDecayAt = Date.now();
-let lastFullnessDecayAt = Date.now();
-let lastHealthDecayAt = Date.now();
-let lastHealthRecoveryAt = Date.now();
 let currentSurface = null;
 let windowSurfacePollTimer = null;
 let lastWindowSurfaceHeavyCheckAt = 0;
@@ -417,6 +412,41 @@ const petStatsStore = createPetStatsStore({
   statsFile,
   legacyStatsFile,
   log: (message) => log(message)
+});
+
+// 接入 pet/pet-stats-controller.cjs：pet stats 状态所有权与副作用编排
+// 采用薄包装接线：14 个 stats 函数保留原函数名，函数体委托给 petStatsController
+// petStats/intimacyDecayTimer/last*DecayAt 所有权迁移到控制器，main.cjs 不再直接持有
+// onStatsChanged/onStatMessages 由 main 持有 UI 副作用（sendStats/showStatMessages，函数声明提升可引用）
+// pickStatMessage 封装 pickRandom(statMessages[key])，使 controller 不感知中文文案
+const petStatsController = createPetStatsController({
+  petStatsRules,
+  petStatsStore,
+  getNow: () => Date.now(),
+  randomStatDelta,
+  pickStatMessage: (key) => pickRandom(statMessages[key]),
+  onStatsChanged: sendStats,
+  onStatMessages: showStatMessages,
+  // 可变状态访问器（实时读取 main.cjs 状态，避免快照）
+  getWalkLoop: () => walkLoop,
+  getWalkPausedAt: () => walkPausedAt,
+  getLastUserOperationAt: () => lastUserOperationAt,
+  getLastTabbyUserOperationAt: () => lastTabbyUserOperationAt,
+  getTabbySleepPoseSwitchAt: () => tabbySleepPoseSwitchAt,
+  // 依赖函数（main.cjs function 声明，hoisted 可用；walk-clock 已 require）
+  getWalkLoopRemainingMs,
+  getLocalDateKey,
+  daysBetween,
+  // 状态常量与配置常量
+  petStatsStateConstants,
+  INTIMACY_DECAY_INTERVAL_MS,
+  PET_STAT_MAX,
+  IDLE_GREETING_DELAY_MS,
+  TABBY_YAWN_IDLE_MS,
+  TABBY_SLEEP_POSE_MS,
+  WALK_LOOP_DURATION_MS,
+  INTERACTION_INTIMACY_GAIN_MIN,
+  INTERACTION_INTIMACY_GAIN_MAX
 });
 
 // 接入 windows/overlay-geometry.cjs：overlay 窗口定位几何统一收口
@@ -1472,58 +1502,15 @@ function markIdleGreetingShown() {
 }
 
 function normalizePetStats(stats) {
-  return petStatsRules.normalizePetStats(stats, Date.now());
+  return petStatsController.normalizePetStats(stats);
 }
 
-function resumeNaturalStatsTimers(now = Date.now()) {
-  if (!petStats) {
-    return;
-  }
-  const offlineElapsedMs = Math.max(0, now - petStats.lastStatsActiveAt);
-  if (offlineElapsedMs <= 0) {
-    petStats.lastStatsActiveAt = now;
-    return;
-  }
-
-  lastIntimacyDecayAt = Math.min(now, lastIntimacyDecayAt + offlineElapsedMs);
-  lastFullnessDecayAt = Math.min(now, lastFullnessDecayAt + offlineElapsedMs);
-  lastHealthDecayAt = Math.min(now, lastHealthDecayAt + offlineElapsedMs);
-  lastHealthRecoveryAt = Math.min(now, lastHealthRecoveryAt + offlineElapsedMs);
-  petStats.lastIntimacyDecayAt = lastIntimacyDecayAt;
-  petStats.lastFullnessDecayAt = lastFullnessDecayAt;
-  petStats.lastHealthDecayAt = lastHealthDecayAt;
-  petStats.lastHealthRecoveryAt = lastHealthRecoveryAt;
-  petStats.lastStatsActiveAt = now;
+function resumeNaturalStatsTimers(now) {
+  return petStatsController.resumeNaturalStatsTimers(now);
 }
 
 function readPetStats() {
-  const today = getLocalDateKey();
-  const now = Date.now();
-  let stats = petStatsRules.createDefaultPetStats(now, today);
-  const result = petStatsStore.readPetStatsFile();
-  if (result.stats) {
-    stats = { ...stats, ...result.stats };
-  }
-  if (!stats.firstRunDate) {
-    stats.firstRunDate = today;
-  }
-  if (!stats.interactionDate) {
-    stats.interactionDate = today;
-  }
-  if (!result.hasStatsActiveAt) {
-    stats.lastIntimacyDecayAt = now;
-    stats.lastFullnessDecayAt = now;
-    stats.lastHealthDecayAt = now;
-    stats.lastHealthRecoveryAt = now;
-  }
-  petStats = normalizePetStats(stats);
-  lastIntimacyDecayAt = petStats.lastIntimacyDecayAt;
-  lastFullnessDecayAt = petStats.lastFullnessDecayAt;
-  lastHealthDecayAt = petStats.lastHealthDecayAt;
-  lastHealthRecoveryAt = petStats.lastHealthRecoveryAt;
-  resumeNaturalStatsTimers(now);
-  syncDailyStats();
-  writePetStats();
+  return petStatsController.readPetStats();
 }
 
 function getPetWindowWidth() {
@@ -2164,47 +2151,15 @@ function sendScaleState() {
 }
 
 function writePetStats() {
-  if (!petStats) {
-    return;
-  }
-  petStats.lastStatsActiveAt = Date.now();
-  petStatsStore.writePetStatsFile(petStats);
+  return petStatsController.writePetStats();
 }
 
-function buildTimerSummary(now = Date.now()) {
-  const walkLoopRemainingMs = getWalkLoopRemainingMs(walkLoop, now, walkPausedAt);
-  return {
-    idleGreetingDelayMs: IDLE_GREETING_DELAY_MS,
-    intimacyDecayDelayMs: INTIMACY_DECAY_INTERVAL_MS,
-    walkLoopDurationMs: WALK_LOOP_DURATION_MS,
-    lastOperationElapsedMs: Math.max(0, now - lastUserOperationAt),
-    lastInteractionElapsedMs: Math.max(0, now - (petStats?.lastInteractionAt || now)),
-    nextIdleGreetingInMs: Math.max(0, IDLE_GREETING_DELAY_MS - (now - lastUserOperationAt)),
-    nextTabbyYawnInMs: Math.max(0, TABBY_YAWN_IDLE_MS - (now - lastTabbyUserOperationAt)),
-    nextTabbySleepPoseInMs: Math.max(0, tabbySleepPoseSwitchAt - now),
-    nextIntimacyDecayInMs: Math.max(0, INTIMACY_DECAY_INTERVAL_MS - (now - lastIntimacyDecayAt)),
-    walkLoopRemainingMs,
-    walkLoopPaused: Boolean(walkLoop?.endsAt && walkPausedAt)
-  };
+function buildTimerSummary(now) {
+  return petStatsController.buildTimerSummary(now);
 }
 
 function buildStatsSummary() {
-  if (!petStats) {
-    readPetStats();
-  }
-  petStats = normalizePetStats(petStats);
-  syncDailyStats();
-  const today = getLocalDateKey();
-
-  return {
-    companionshipDays: daysBetween(petStats.firstRunDate, today),
-    todayInteractions: petStats.todayInteractions,
-    intimacy: petStats.intimacy,
-    fullness: petStats.fullness,
-    health: petStats.health,
-    maxValue: PET_STAT_MAX,
-    timers: buildTimerSummary()
-  };
+  return petStatsController.buildStatsSummary();
 }
 
 function sendStats() {
@@ -2268,99 +2223,27 @@ function recordUserOperation({ scheduleGreeting = true } = {}) {
 }
 
 function recordInteraction() {
-  if (!petStats) {
-    readPetStats();
-  }
-  petStats = normalizePetStats(petStats);
-  syncDailyStats();
-  petStatsRules.recordInteractionRules(petStats, Date.now());
-  writePetStats();
-  sendStats();
+  return petStatsController.recordInteraction();
 }
 
 function updateStatPromptState(messages = []) {
-  const keys = petStatsRules.applyPromptStateRules(petStats);
-  for (const key of keys) {
-    const text = pickRandom(statMessages[key]);
-    if (text) {
-      messages.push(text);
-    }
-  }
-  return messages;
+  return petStatsController.updateStatPromptState(messages);
 }
 
-function applyNaturalStatsTick(now = Date.now()) {
-  if (!petStats) {
-    readPetStats();
-  }
-  petStats = normalizePetStats(petStats);
-  syncDailyStats();
-  const decayRefs = {
-    lastIntimacyDecayAt,
-    lastFullnessDecayAt,
-    lastHealthDecayAt,
-    lastHealthRecoveryAt
-  };
-  const result = petStatsRules.applyNaturalStatsTickRules(petStats, now, decayRefs);
-  if (result.updates.lastIntimacyDecayAt !== undefined) {
-    lastIntimacyDecayAt = result.updates.lastIntimacyDecayAt;
-  }
-  if (result.updates.lastFullnessDecayAt !== undefined) {
-    lastFullnessDecayAt = result.updates.lastFullnessDecayAt;
-  }
-  if (result.updates.lastHealthDecayAt !== undefined) {
-    lastHealthDecayAt = result.updates.lastHealthDecayAt;
-  }
-  if (result.updates.lastHealthRecoveryAt !== undefined) {
-    lastHealthRecoveryAt = result.updates.lastHealthRecoveryAt;
-  }
-  petStats.lastIntimacyDecayAt = lastIntimacyDecayAt;
-  petStats.lastFullnessDecayAt = lastFullnessDecayAt;
-  petStats.lastHealthDecayAt = lastHealthDecayAt;
-  petStats.lastHealthRecoveryAt = lastHealthRecoveryAt;
-  const messages = result.prompts.map(key => pickRandom(statMessages[key])).filter(Boolean);
-  if (result.changed) {
-    writePetStats();
-  }
-  sendStats();
-  showStatMessages(messages);
-  return result.changed;
+function applyNaturalStatsTick(now) {
+  return petStatsController.applyNaturalStatsTick(now);
 }
 
 function startIntimacyDecayTimer() {
-  if (intimacyDecayTimer) {
-    return;
-  }
-  intimacyDecayTimer = setInterval(() => {
-    applyNaturalStatsTick();
-  }, 60 * 1000);
+  return petStatsController.startIntimacyDecayTimer();
 }
 
 function stopIntimacyDecayTimer() {
-  if (!intimacyDecayTimer) {
-    return;
-  }
-  clearInterval(intimacyDecayTimer);
-  intimacyDecayTimer = null;
+  return petStatsController.stopIntimacyDecayTimer();
 }
 
 function applyActionStats(stateId) {
-  if (!petStats) {
-    readPetStats();
-  }
-  petStats = normalizePetStats(petStats);
-  syncDailyStats();
-  const intimacyGainDelta = stateId !== STATE_SQUAT
-    ? randomStatDelta(INTERACTION_INTIMACY_GAIN_MIN, INTERACTION_INTIMACY_GAIN_MAX)
-    : 0;
-  const result = petStatsRules.applyActionStatsRules(petStats, stateId, {
-    intimacyGainDelta,
-    stateConstants: petStatsStateConstants
-  });
-  const messages = result.prompts.map(key => pickRandom(statMessages[key])).filter(Boolean);
-  writePetStats();
-  sendStats();
-  return messages;
+  return petStatsController.applyActionStats(stateId);
 }
 
 function shouldDelayActionStats(stateId) {
@@ -2374,30 +2257,11 @@ function showStatMessages(messages) {
 }
 
 function applyInterruptedWalkStats() {
-  if (!petStats) {
-    readPetStats();
-  }
-  petStats = normalizePetStats(petStats);
-  syncDailyStats();
-  const keys = petStatsRules.applyPromptStateRules(petStats);
-  // 原 applyInterruptedWalkStats 调用 updateStatPromptState() 但不弹气泡：仅更新 prompt 标记
-  void keys;
-  writePetStats();
-  sendStats();
+  return petStatsController.applyInterruptedWalkStats();
 }
 
 function applyCompletedWalkStats() {
-  if (!petStats) {
-    readPetStats();
-  }
-  petStats = normalizePetStats(petStats);
-  syncDailyStats();
-  const intimacyGainDelta = randomStatDelta(INTERACTION_INTIMACY_GAIN_MIN, INTERACTION_INTIMACY_GAIN_MAX);
-  const result = petStatsRules.applyCompletedWalkStatsRules(petStats, { intimacyGainDelta });
-  const messages = result.prompts.map(key => pickRandom(statMessages[key])).filter(Boolean);
-  writePetStats();
-  sendStats();
-  return messages;
+  return petStatsController.applyCompletedWalkStats();
 }
 
 function toFileUrl(filePath) {
@@ -2629,25 +2493,7 @@ function applyDailyDecay(stats, days = 1) {
 }
 
 function syncDailyStats() {
-  if (!petStats) {
-    readPetStats();
-  }
-  petStats = normalizePetStats(petStats);
-  const today = getLocalDateKey();
-  const lastInteractionDate = typeof petStats.interactionDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(petStats.interactionDate)
-    ? petStats.interactionDate
-    : today;
-  if (lastInteractionDate === today) {
-    petStats.interactionDate = today;
-    return false;
-  }
-
-  const overdueDays = Math.max(1, daysBetween(lastInteractionDate, today));
-  applyDailyDecay(petStats, overdueDays);
-  petStats.interactionDate = today;
-  petStats.todayInteractions = 0;
-  writePetStats();
-  return true;
+  return petStatsController.syncDailyStats();
 }
 
 function getRenderedFrameVisibleRect() {
@@ -4793,6 +4639,3 @@ registerIpcHandlers({
     dragEnd: handleDragEnd
   }
 });
-
-
-

@@ -7,8 +7,10 @@ const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.
 const appConstantsSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "app-constants.cjs"), "utf8");
 const runtimeConfigSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "runtime-config.cjs"), "utf8");
 const assetLoaderSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "asset-loader.cjs"), "utf8");
-// 第九轮 A：动作属性规则已抽到 pet-stats-rules.cjs，结构断言需读取 rules 源码
+// 动作属性规则已抽到 pet-stats-rules.cjs，结构断言需读取 rules 源码
 const petStatsRulesSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "pet-stats-rules.cjs"), "utf8");
+// buildTimerSummary 已迁入 pet-stats-controller.cjs，timer 公式断言需读取 controller 源码
+const petStatsControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "pet-stats-controller.cjs"), "utf8");
 // 渲染层已拆分到 renderer/ 目录下多个模块，测试需读取所有模块内容
 const rendererSource = ["shared", "pet-window", "menu-window", "hover-window", "bubble-window", "customization-window"]
   .map((name) => fs.readFileSync(path.join(__dirname, "..", "static", "renderer", `${name}.js`), "utf8"))
@@ -40,8 +42,8 @@ test("tabby sleep purr plays once when sleep starts", () => {
 });
 
 test("tabby extra actions update hover panel stats", () => {
-  // 第九轮 A：动作属性规则迁至 pet-stats-rules.cjs，main.cjs 通过 applyActionStatsRules 委托
-  assert.match(mainSource, /applyActionStatsRules\(petStats, stateId,/);
+  // 第九轮 A：动作属性规则迁至 pet-stats-rules.cjs；第九轮 B4 起 main.cjs 经 petStatsController.applyActionStats 委托，applyActionStatsRules 调用迁入控制器
+  assert.match(petStatsControllerSource, /applyActionStatsRules\(petStats, stateId,/);
   assert.match(petStatsRulesSource, /stateId === stateConstants\.lie[\s\S]*stats\.health/);
   assert.match(petStatsRulesSource, /stateId === stateConstants\.lick[\s\S]*stats\.health/);
   assert.match(petStatsRulesSource, /stateId === stateConstants\.belly[\s\S]*stats\.fullness/);
@@ -51,12 +53,14 @@ test("tabby extra actions update hover panel stats", () => {
 test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(mainSource, /tabbyIdlePollTimer = setInterval\(updateTabbyIdleActions, 1000\)/);
   assert.match(appConstantsSource, /const TABBY_YAWN_IDLE_MS = 2 \* 60 \* 1000/);
-  assert.match(mainSource, /nextTabbyYawnInMs: Math\.max\(0, TABBY_YAWN_IDLE_MS - \(now - lastTabbyUserOperationAt\)\)/);
+  // buildTimerSummary 已迁入 controller，公式经 getLastTabbyUserOperationAt() 读取
+  assert.match(petStatsControllerSource, /nextTabbyYawnInMs: Math\.max\(0, TABBY_YAWN_IDLE_MS - \(now - getLastTabbyUserOperationAt\(\)\)\)/);
   assert.match(mainSource, /setState\(STATE_YAWN, false\)/);
   assert.match(mainSource, /const TABBY_IDLE_STATES = new Set\(\[STATE_YAWN, STATE_SLEEP, STATE_HISS\]\)/);
   assert.match(rendererSource, /tailLoopStart \+ \(\(frameStep - tailLoopStart\) % Math\.max\(1, stepCount - tailLoopStart\)\)/);
   assert.match(appConstantsSource, /const TABBY_SLEEP_POSE_MS = 2 \* 60 \* 1000/);
-  assert.match(mainSource, /nextTabbySleepPoseInMs: Math\.max\(0, tabbySleepPoseSwitchAt - now\)/);
+  // buildTimerSummary 已迁入 controller，公式经 getTabbySleepPoseSwitchAt() 读取
+  assert.match(petStatsControllerSource, /nextTabbySleepPoseInMs: Math\.max\(0, getTabbySleepPoseSwitchAt\(\) - now\)/);
   assert.match(mainSource, /tabbySleepPoseSwitchAt = Date\.now\(\) \+ TABBY_SLEEP_POSE_MS/);
   assert.match(mainSource, /readMetadata\(getState\(renderedFrameState\)\.metadata\)\.tailLoopStart/);
   assert.match(mainSource, /scheduleTabbySleepPose\(STATE_YAWN\)/);
@@ -119,4 +123,44 @@ test("main.cjs 不解构已迁入 rules 的 stats 规则常量", () => {
 test("randomStatDelta 不引用 STAT_CHANGE_MIN/STAT_CHANGE_MAX", () => {
   assert.ok(!mainSource.includes("STAT_CHANGE_MIN"), "randomStatDelta 不应引用 STAT_CHANGE_MIN");
   assert.ok(!mainSource.includes("STAT_CHANGE_MAX"), "randomStatDelta 不应引用 STAT_CHANGE_MAX");
+});
+
+// 第九轮 B：main.cjs 不再持有 stats 运行态（petStats/intimacyDecayTimer/last*DecayAt 已迁入 pet-stats-controller）
+test("main.cjs 不再声明 stats 运行态 let", () => {
+  assert.ok(!mainSource.includes("let petStats ="), "main.cjs 不应再声明 let petStats");
+  assert.ok(!mainSource.includes("let intimacyDecayTimer ="), "main.cjs 不应再声明 let intimacyDecayTimer");
+  assert.ok(!mainSource.includes("let lastIntimacyDecayAt ="), "main.cjs 不应再声明 let lastIntimacyDecayAt");
+  assert.ok(!mainSource.includes("let lastFullnessDecayAt ="), "main.cjs 不应再声明 let lastFullnessDecayAt");
+  assert.ok(!mainSource.includes("let lastHealthDecayAt ="), "main.cjs 不应再声明 let lastHealthDecayAt");
+  assert.ok(!mainSource.includes("let lastHealthRecoveryAt ="), "main.cjs 不应再声明 let lastHealthRecoveryAt");
+});
+
+test("main.cjs 不再直接写 stats 字段", () => {
+  assert.ok(!mainSource.includes("petStats.intimacy ="), "main.cjs 不应再直接写 petStats.intimacy");
+  assert.ok(!mainSource.includes("petStats.fullness ="), "main.cjs 不应再直接写 petStats.fullness");
+  assert.ok(!mainSource.includes("petStats.health ="), "main.cjs 不应再直接写 petStats.health");
+  assert.ok(!mainSource.includes("lastIntimacyDecayAt ="), "main.cjs 不应再直接写 lastIntimacyDecayAt");
+  assert.ok(!mainSource.includes("lastFullnessDecayAt ="), "main.cjs 不应再直接写 lastFullnessDecayAt");
+  assert.ok(!mainSource.includes("lastHealthDecayAt ="), "main.cjs 不应再直接写 lastHealthDecayAt");
+  assert.ok(!mainSource.includes("lastHealthRecoveryAt ="), "main.cjs 不应再直接写 lastHealthRecoveryAt");
+});
+
+test("main.cjs 构造 petStatsController 并经薄包装委托", () => {
+  assert.match(mainSource, /petStatsController = createPetStatsController\(/, "main.cjs 应构造 petStatsController");
+  // 15 个薄包装委托代表项
+  assert.match(mainSource, /petStatsController\.readPetStats\(\)/, "main.cjs readPetStats 应委托 controller");
+  assert.match(mainSource, /petStatsController\.writePetStats\(\)/, "main.cjs writePetStats 应委托 controller");
+  assert.match(mainSource, /petStatsController\.buildStatsSummary\(\)/, "main.cjs buildStatsSummary 应委托 controller");
+  assert.match(mainSource, /petStatsController\.buildTimerSummary\(/, "main.cjs buildTimerSummary 应委托 controller");
+  assert.match(mainSource, /petStatsController\.syncDailyStats\(\)/, "main.cjs syncDailyStats 应委托 controller");
+  assert.match(mainSource, /petStatsController\.normalizePetStats\(/, "main.cjs normalizePetStats 应委托 controller");
+  assert.match(mainSource, /petStatsController\.resumeNaturalStatsTimers\(/, "main.cjs resumeNaturalStatsTimers 应委托 controller");
+  assert.match(mainSource, /petStatsController\.applyNaturalStatsTick\(/, "main.cjs applyNaturalStatsTick 应委托 controller");
+  assert.match(mainSource, /petStatsController\.startIntimacyDecayTimer\(\)/, "main.cjs startIntimacyDecayTimer 应委托 controller");
+  assert.match(mainSource, /petStatsController\.stopIntimacyDecayTimer\(\)/, "main.cjs stopIntimacyDecayTimer 应委托 controller");
+  assert.match(mainSource, /petStatsController\.recordInteraction\(\)/, "main.cjs recordInteraction 应委托 controller");
+  assert.match(mainSource, /petStatsController\.updateStatPromptState\(/, "main.cjs updateStatPromptState 应委托 controller");
+  assert.match(mainSource, /petStatsController\.applyActionStats\(/, "main.cjs applyActionStats 应委托 controller");
+  assert.match(mainSource, /petStatsController\.applyInterruptedWalkStats\(\)/, "main.cjs applyInterruptedWalkStats 应委托 controller");
+  assert.match(mainSource, /petStatsController\.applyCompletedWalkStats\(\)/, "main.cjs applyCompletedWalkStats 应委托 controller");
 });

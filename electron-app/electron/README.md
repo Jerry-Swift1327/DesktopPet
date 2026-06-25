@@ -20,6 +20,7 @@
 | `pet/asset-loader.cjs` | 宠物资源加载，含帧列表、元数据、图标路径 |
 | `pet/pet-stats-rules.cjs` | pet stats 纯规则模块（clamp/normalize/daily decay/natural tick/action stats 规则），不依赖 electron/fs/Date.now/Math.random/中文文案 |
 | `pet/pet-stats-store.cjs` | pet stats 读写边界模块（base64 编码/解码、文件读写、legacy fallback），工厂形式注入 fs/log |
+| `pet/pet-stats-controller.cjs` | pet stats 控制器（持有 stats 状态、读写、自然衰减 timer、交互统计、动作结算、状态摘要），工厂形式注入 rules/store/回调/常量，不直接接触窗口/IPC/bubble |
 | `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
 | `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
 | `windows/overlay-window.cjs` | overlay 窗口公共创建 helper，归纳 BrowserWindow 选项 |
@@ -55,6 +56,7 @@
 | 悬停面板 | `hoverWindow`、`HOVER_` |
 | 气泡 | `startupBubble`、`bubble` |
 | 状态值 | `petStats`、`fullness`、`health`、`intimacy` |
+| pet stats 控制 | `pet/pet-stats-controller.cjs`、`readPetStats`、`applyNaturalStatsTick`、`applyActionStats` |
 | 自启动 | `autoStart`、`WINDOWS_STARTUP_RUN_KEY` |
 | 常量 | `core/app-constants.cjs` |
 | 日志 | `core/logger.cjs`、`log(` |
