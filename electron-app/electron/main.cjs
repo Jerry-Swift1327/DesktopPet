@@ -59,6 +59,9 @@ const { createRuntimeConfig } = require("./core/runtime-config.cjs");
 const { createPreferencesStore } = require("./core/preferences-store.cjs");
 const { createLogger } = require("./core/logger.cjs");
 const { createAssetLoader } = require("./pet/asset-loader.cjs");
+// pet stats 纯规则与读写边界模块
+const { createPetStatsStore } = require("./pet/pet-stats-store.cjs");
+const petStatsRules = require("./pet/pet-stats-rules.cjs");
 const {
   APP_INTERNAL_NAME,
   APP_DISPLAY_NAME,
@@ -331,6 +334,17 @@ const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
 const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_SPIN, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
 const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
+
+// STATE_* 常量映射，传给 rules 模块做相等比较（rules 不依赖 petActionIds）
+const petStatsStateConstants = {
+  squat: STATE_SQUAT,
+  feed: STATE_FEED,
+  lie: STATE_LIE,
+  lick: STATE_LICK,
+  belly: STATE_BELLY,
+  stretch: STATE_STRETCH
+};
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 // sharedGreetings 已从 pet/pet-states.cjs 导入
@@ -424,6 +438,15 @@ const framePixelCache = new Map();
 
 // 接入 core/logger.cjs：文件日志与行走诊断日志
 _logger = createLogger(logDir, { walkDiagnosticsEnabled: WALK_DIAGNOSTICS_ENABLED });
+
+// pet stats 读写边界 store，注入 fs/statsFile/legacyStatsFile/log
+// log 在第 230 行定义为稳定引用（捕获 _logger），此处已可用
+const petStatsStore = createPetStatsStore({
+  fs,
+  statsFile,
+  legacyStatsFile,
+  log: (message) => log(message)
+});
 
 // 接入 windows/overlay-geometry.cjs：overlay 窗口定位几何统一收口
 // state accessor 间接层：menu 状态通过延迟访问器读 menuController（之后创建）
@@ -1445,22 +1468,15 @@ function logInteractionPauseDiagnostic(action, reason) {
 }
 
 function getLocalDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return petStatsRules.getLocalDateKey(date);
 }
 
 function daysBetween(startDateKey, endDateKey) {
-  const [startYear, startMonth, startDay] = startDateKey.split("-").map(Number);
-  const [endYear, endMonth, endDay] = endDateKey.split("-").map(Number);
-  const start = Date.UTC(startYear, startMonth - 1, startDay);
-  const end = Date.UTC(endYear, endMonth - 1, endDay);
-  return Math.max(1, Math.floor((end - start) / 86400000) + 1);
+  return petStatsRules.daysBetween(startDateKey, endDateKey);
 }
 
 function clampStat(value) {
-  return Math.round(clamp(Number(value) || 0, PET_STAT_MIN, PET_STAT_MAX));
+  return petStatsRules.clampStat(value);
 }
 
 function pickRandom(items, fallback = "") {
@@ -1485,23 +1501,7 @@ function markIdleGreetingShown() {
 }
 
 function normalizePetStats(stats) {
-  const now = Date.now();
-  return {
-    ...stats,
-    intimacy: clampStat(Number.isFinite(stats.intimacy) ? stats.intimacy : PET_INTIMACY_DEFAULT),
-    fullness: clampStat(Number.isFinite(stats.fullness) ? stats.fullness : PET_FULLNESS_DEFAULT),
-    health: clampStat(Number.isFinite(stats.health) ? stats.health : PET_HEALTH_DEFAULT),
-    hungerPromptLevel: Number.isInteger(stats.hungerPromptLevel) ? stats.hungerPromptLevel : 0,
-    healthPromptLevel: Number.isInteger(stats.healthPromptLevel) ? stats.healthPromptLevel : 0,
-    fullPrompted: Boolean(stats.fullPrompted),
-    closePrompted: Boolean(stats.closePrompted),
-    lastInteractionAt: Number.isFinite(stats.lastInteractionAt) ? stats.lastInteractionAt : now,
-    lastIntimacyDecayAt: Number.isFinite(stats.lastIntimacyDecayAt) ? stats.lastIntimacyDecayAt : now,
-    lastFullnessDecayAt: Number.isFinite(stats.lastFullnessDecayAt) ? stats.lastFullnessDecayAt : now,
-    lastHealthDecayAt: Number.isFinite(stats.lastHealthDecayAt) ? stats.lastHealthDecayAt : now,
-    lastHealthRecoveryAt: Number.isFinite(stats.lastHealthRecoveryAt) ? stats.lastHealthRecoveryAt : now,
-    lastStatsActiveAt: Number.isFinite(stats.lastStatsActiveAt) ? stats.lastStatsActiveAt : now
-  };
+  return petStatsRules.normalizePetStats(stats, Date.now());
 }
 
 function resumeNaturalStatsTimers(now = Date.now()) {
@@ -1528,52 +1528,23 @@ function resumeNaturalStatsTimers(now = Date.now()) {
 function readPetStats() {
   const today = getLocalDateKey();
   const now = Date.now();
-  let hasStatsActiveAt = false;
-  let stats = {
-    firstRunDate: today,
-    interactionDate: today,
-    todayInteractions: 0,
-    intimacy: PET_INTIMACY_DEFAULT,
-    fullness: PET_FULLNESS_DEFAULT,
-    health: PET_HEALTH_DEFAULT,
-    hungerPromptLevel: 0,
-    healthPromptLevel: 0,
-    fullPrompted: false,
-    closePrompted: false,
-    lastInteractionAt: now,
-    lastIntimacyDecayAt: now,
-    lastFullnessDecayAt: now,
-    lastHealthDecayAt: now,
-    lastHealthRecoveryAt: now,
-    lastStatsActiveAt: now
-  };
-
-  const savedStatsFile = fs.existsSync(statsFile) ? statsFile : legacyStatsFile;
-  if (savedStatsFile && fs.existsSync(savedStatsFile)) {
-    try {
-      const raw = fs.readFileSync(savedStatsFile, "utf8").trim();
-      const decoded = decodeStatsPayload(raw);
-      const savedStats = decoded || JSON.parse(raw);
-      hasStatsActiveAt = Number.isFinite(savedStats.lastStatsActiveAt);
-      stats = { ...stats, ...savedStats };
-    } catch (error) {
-      log(`failed to read pet stats: ${error.stack || error.message}`);
-    }
+  let stats = petStatsRules.createDefaultPetStats(now, today);
+  const result = petStatsStore.readPetStatsFile();
+  if (result.stats) {
+    stats = { ...stats, ...result.stats };
   }
-
   if (!stats.firstRunDate) {
     stats.firstRunDate = today;
   }
   if (!stats.interactionDate) {
     stats.interactionDate = today;
   }
-  if (!hasStatsActiveAt) {
+  if (!result.hasStatsActiveAt) {
     stats.lastIntimacyDecayAt = now;
     stats.lastFullnessDecayAt = now;
     stats.lastHealthDecayAt = now;
     stats.lastHealthRecoveryAt = now;
   }
-
   petStats = normalizePetStats(stats);
   lastIntimacyDecayAt = petStats.lastIntimacyDecayAt;
   lastFullnessDecayAt = petStats.lastFullnessDecayAt;
@@ -2221,26 +2192,12 @@ function sendScaleState() {
   safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
 }
 
-function encodeStatsPayload(data) {
-  return Buffer.from(JSON.stringify(data), "utf8").toString("base64");
-}
-
-function decodeStatsPayload(raw) {
-  if (!raw || typeof raw !== "string") { return null; }
-  try {
-    const json = Buffer.from(raw, "base64").toString("utf8");
-    return JSON.parse(json);
-  } catch (_) {
-    return null;
-  }
-}
-
 function writePetStats() {
   if (!petStats) {
     return;
   }
   petStats.lastStatsActiveAt = Date.now();
-  fs.writeFileSync(statsFile, encodeStatsPayload(petStats), "utf8");
+  petStatsStore.writePetStatsFile(petStats);
 }
 
 function buildTimerSummary(now = Date.now()) {
@@ -2345,50 +2302,18 @@ function recordInteraction() {
   }
   petStats = normalizePetStats(petStats);
   syncDailyStats();
-  petStats.lastInteractionAt = Date.now();
-  petStats.todayInteractions += 1;
+  petStatsRules.recordInteractionRules(petStats, Date.now());
   writePetStats();
   sendStats();
 }
 
 function updateStatPromptState(messages = []) {
-  if (petStats.fullness > HUNGER_PROMPT_CLEAR_THRESHOLD) {
-    petStats.hungerPromptLevel = 0;
-  } else if (petStats.fullness > EXHAUSTED_THRESHOLD && petStats.hungerPromptLevel >= 3) {
-    petStats.hungerPromptLevel = petStats.fullness <= HUNGER_CRITICAL_THRESHOLD
-      ? 2
-      : petStats.fullness <= HUNGER_WARNING_THRESHOLD ? 1 : 0;
-  }
-  if (petStats.fullness < FULL_PROMPT_RESET_THRESHOLD) {
-    petStats.fullPrompted = false;
-  }
-  if (petStats.health > HEALTH_PROMPT_CLEAR_THRESHOLD) {
-    petStats.healthPromptLevel = 0;
-  }
-  if (petStats.intimacy < CLOSE_PROMPT_RESET_THRESHOLD) {
-    petStats.closePrompted = false;
-  }
-  if (petStats.fullness <= EXHAUSTED_THRESHOLD && petStats.hungerPromptLevel < 3) {
-    petStats.hungerPromptLevel = 3;
-    messages.push(pickRandom(statMessages.exhausted));
-  } else if (petStats.fullness <= HUNGER_CRITICAL_THRESHOLD && petStats.hungerPromptLevel < 2) {
-    petStats.hungerPromptLevel = 2;
-    messages.push(pickRandom(statMessages.hungry));
-  } else if (petStats.fullness <= HUNGER_WARNING_THRESHOLD && petStats.hungerPromptLevel < 1) {
-    petStats.hungerPromptLevel = 1;
-    messages.push(pickRandom(statMessages.needFood));
-  }
-  if (petStats.health <= HEALTH_TIRED_THRESHOLD && petStats.healthPromptLevel < 1) {
-    petStats.healthPromptLevel = 1;
-    messages.push(pickRandom(statMessages.tired));
-  }
-  if (petStats.health >= HEALTH_RECOVERED_THRESHOLD && petStats.healthPromptLevel > 0) {
-    petStats.healthPromptLevel = 0;
-    messages.push(pickRandom(statMessages.recovered));
-  }
-  if (petStats.intimacy >= CLOSE_PROMPT_THRESHOLD && !petStats.closePrompted) {
-    petStats.closePrompted = true;
-    messages.push(pickRandom(statMessages.close));
+  const keys = petStatsRules.applyPromptStateRules(petStats);
+  for (const key of keys) {
+    const text = pickRandom(statMessages[key]);
+    if (text) {
+      messages.push(text);
+    }
   }
   return messages;
 }
@@ -2399,47 +2324,36 @@ function applyNaturalStatsTick(now = Date.now()) {
   }
   petStats = normalizePetStats(petStats);
   syncDailyStats();
-  let changed = false;
-  const decayIntimacySteps = Math.floor((now - lastIntimacyDecayAt) / INTIMACY_DECAY_INTERVAL_MS);
-  if (decayIntimacySteps > 0) {
-    petStats.intimacy = clampStat(petStats.intimacy - decayIntimacySteps * STAT_NATURAL_DELTA);
-    lastIntimacyDecayAt += decayIntimacySteps * INTIMACY_DECAY_INTERVAL_MS;
-    changed = true;
+  const decayRefs = {
+    lastIntimacyDecayAt,
+    lastFullnessDecayAt,
+    lastHealthDecayAt,
+    lastHealthRecoveryAt
+  };
+  const result = petStatsRules.applyNaturalStatsTickRules(petStats, now, decayRefs);
+  if (result.updates.lastIntimacyDecayAt !== undefined) {
+    lastIntimacyDecayAt = result.updates.lastIntimacyDecayAt;
   }
-  const decayFullnessSteps = Math.floor((now - lastFullnessDecayAt) / FULLNESS_DECAY_INTERVAL_MS);
-  if (decayFullnessSteps > 0) {
-    petStats.fullness = clampStat(petStats.fullness - decayFullnessSteps * STAT_NATURAL_DELTA);
-    lastFullnessDecayAt += decayFullnessSteps * FULLNESS_DECAY_INTERVAL_MS;
-    changed = true;
+  if (result.updates.lastFullnessDecayAt !== undefined) {
+    lastFullnessDecayAt = result.updates.lastFullnessDecayAt;
   }
-  const decayHealthSteps = Math.floor((now - lastHealthDecayAt) / HEALTH_DECAY_INTERVAL_MS);
-  if (decayHealthSteps > 0) {
-    petStats.health = clampStat(petStats.health - decayHealthSteps * STAT_NATURAL_DELTA);
-    lastHealthDecayAt += decayHealthSteps * HEALTH_DECAY_INTERVAL_MS;
-    changed = true;
+  if (result.updates.lastHealthDecayAt !== undefined) {
+    lastHealthDecayAt = result.updates.lastHealthDecayAt;
   }
-  const recoverySteps = Math.floor((now - lastHealthRecoveryAt) / HEALTH_RECOVERY_INTERVAL_MS);
-  if (recoverySteps > 0) {
-    const recovery = (petStats.intimacy >= HEALTH_RECOVERY_THRESHOLD ? recoverySteps : 0)
-      + (petStats.fullness >= HEALTH_RECOVERY_THRESHOLD ? recoverySteps : 0);
-    if (recovery > 0) {
-      petStats.health = clampStat(petStats.health + recovery);
-      changed = true;
-    }
-    lastHealthRecoveryAt += recoverySteps * HEALTH_RECOVERY_INTERVAL_MS;
-    changed = true;
+  if (result.updates.lastHealthRecoveryAt !== undefined) {
+    lastHealthRecoveryAt = result.updates.lastHealthRecoveryAt;
   }
   petStats.lastIntimacyDecayAt = lastIntimacyDecayAt;
   petStats.lastFullnessDecayAt = lastFullnessDecayAt;
   petStats.lastHealthDecayAt = lastHealthDecayAt;
   petStats.lastHealthRecoveryAt = lastHealthRecoveryAt;
-  const messages = updateStatPromptState();
-  if (changed || messages.length > 0) {
+  const messages = result.prompts.map(key => pickRandom(statMessages[key])).filter(Boolean);
+  if (result.changed) {
     writePetStats();
   }
   sendStats();
   showStatMessages(messages);
-  return changed;
+  return result.changed;
 }
 
 function startIntimacyDecayTimer() {
@@ -2465,36 +2379,17 @@ function applyActionStats(stateId) {
   }
   petStats = normalizePetStats(petStats);
   syncDailyStats();
-  if (stateId !== STATE_SQUAT) {
-    petStats.intimacy = clampStat(petStats.intimacy + randomStatDelta(INTERACTION_INTIMACY_GAIN_MIN, INTERACTION_INTIMACY_GAIN_MAX));
-  }
-  if (stateId === STATE_FEED) {
-    petStats.fullness = PET_STAT_MAX;
-  }
-  if (stateId === STATE_LIE) {
-    petStats.health = clampStat(petStats.health + LIE_HEALTH_GAIN);
-  }
-  if (stateId === STATE_LICK) {
-    petStats.health = clampStat(petStats.health + LICK_HEALTH_GAIN);
-  }
-  if (stateId === STATE_BELLY) {
-    petStats.fullness = clampStat(petStats.fullness - BELLY_FULLNESS_COST);
-  }
-  if (stateId === STATE_STRETCH) {
-    petStats.health = clampStat(petStats.health + STRETCH_HEALTH_GAIN);
-    petStats.fullness = clampStat(petStats.fullness - STRETCH_FULLNESS_COST);
-  }
-
-  const messages = [];
-  if (stateId === STATE_FEED && petStats.fullness >= FULL_PROMPT_THRESHOLD && !petStats.fullPrompted) {
-    petStats.fullPrompted = true;
-    messages.push(pickRandom(statMessages.full));
-  }
-  updateStatPromptState(messages);
-
+  const intimacyGainDelta = stateId !== STATE_SQUAT
+    ? randomStatDelta(INTERACTION_INTIMACY_GAIN_MIN, INTERACTION_INTIMACY_GAIN_MAX)
+    : 0;
+  const result = petStatsRules.applyActionStatsRules(petStats, stateId, {
+    intimacyGainDelta,
+    stateConstants: petStatsStateConstants
+  });
+  const messages = result.prompts.map(key => pickRandom(statMessages[key])).filter(Boolean);
   writePetStats();
   sendStats();
-  return messages.filter(Boolean);
+  return messages;
 }
 
 function shouldDelayActionStats(stateId) {
@@ -2513,7 +2408,9 @@ function applyInterruptedWalkStats() {
   }
   petStats = normalizePetStats(petStats);
   syncDailyStats();
-  updateStatPromptState();
+  const keys = petStatsRules.applyPromptStateRules(petStats);
+  // 原 applyInterruptedWalkStats 调用 updateStatPromptState() 但不弹气泡：仅更新 prompt 标记
+  void keys;
   writePetStats();
   sendStats();
 }
@@ -2524,12 +2421,12 @@ function applyCompletedWalkStats() {
   }
   petStats = normalizePetStats(petStats);
   syncDailyStats();
-  petStats.intimacy = clampStat(petStats.intimacy + randomStatDelta(INTERACTION_INTIMACY_GAIN_MIN, INTERACTION_INTIMACY_GAIN_MAX));
-  const messages = updateStatPromptState();
-
+  const intimacyGainDelta = randomStatDelta(INTERACTION_INTIMACY_GAIN_MIN, INTERACTION_INTIMACY_GAIN_MAX);
+  const result = petStatsRules.applyCompletedWalkStatsRules(petStats, { intimacyGainDelta });
+  const messages = result.prompts.map(key => pickRandom(statMessages[key])).filter(Boolean);
   writePetStats();
   sendStats();
-  return messages.filter(Boolean);
+  return messages;
 }
 
 function toFileUrl(filePath) {
@@ -2757,48 +2654,7 @@ function getFrameVisibleCenterWindowX(centerX, stateId = activeState, frameIndex
 }
 
 function applyDailyDecay(stats, days = 1) {
-  const decayDays = Math.max(0, Math.floor(Number(days) || 0));
-  if (!stats || decayDays <= 0) {
-    return false;
-  }
-
-  let changed = false;
-  const before = {
-    intimacy: stats.intimacy,
-    fullness: stats.fullness,
-    health: stats.health
-  };
-
-  if (decayDays > 0) {
-    stats.fullness = clampStat(stats.fullness - DAILY_DECAY_FULLNESS * decayDays);
-    stats.health = clampStat(stats.health - DAILY_DECAY_HEALTH * decayDays);
-  }
-
-  if (stats.fullness > HUNGER_PROMPT_CLEAR_THRESHOLD) {
-    stats.hungerPromptLevel = 0;
-  }
-  if (stats.fullness < FULL_PROMPT_RESET_THRESHOLD) {
-    stats.fullPrompted = false;
-  }
-  if (stats.health > HEALTH_PROMPT_CLEAR_THRESHOLD) {
-    stats.healthPromptLevel = 0;
-  }
-  if (stats.intimacy < CLOSE_PROMPT_RESET_THRESHOLD) {
-    stats.closePrompted = false;
-  }
-  if (stats.fullness <= HUNGER_CRITICAL_THRESHOLD) {
-    stats.hungerPromptLevel = Math.max(stats.hungerPromptLevel, 2);
-  } else if (stats.fullness <= HUNGER_WARNING_THRESHOLD) {
-    stats.hungerPromptLevel = Math.max(stats.hungerPromptLevel, 1);
-  }
-  if (stats.health <= HEALTH_TIRED_THRESHOLD) {
-    stats.healthPromptLevel = Math.max(stats.healthPromptLevel, 1);
-  }
-
-  changed = before.intimacy !== stats.intimacy
-    || before.fullness !== stats.fullness
-    || before.health !== stats.health;
-  return changed;
+  return petStatsRules.applyDailyDecay(stats, days);
 }
 
 function syncDailyStats() {

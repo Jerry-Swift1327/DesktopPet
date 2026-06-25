@@ -18,6 +18,8 @@
 | `core/preferences-store.cjs` | 偏好存储，统一管理 autoStart/windowRoam/eyeTracking/scale 偏好 |
 | `pet/pet-states.cjs` | 宠物状态定义，含 buildPetState 工厂和 sharedGreetings |
 | `pet/asset-loader.cjs` | 宠物资源加载，含帧列表、元数据、图标路径 |
+| `pet/pet-stats-rules.cjs` | pet stats 纯规则模块（clamp/normalize/daily decay/natural tick/action stats 规则），不依赖 electron/fs/Date.now/Math.random/中文文案 |
+| `pet/pet-stats-store.cjs` | pet stats 读写边界模块（base64 编码/解码、文件读写、legacy fallback），工厂形式注入 fs/log |
 | `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
 | `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
 | `windows/overlay-window.cjs` | overlay 窗口公共创建 helper，归纳 BrowserWindow 选项 |

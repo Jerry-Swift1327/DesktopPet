@@ -7,6 +7,8 @@ const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.
 const appConstantsSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "app-constants.cjs"), "utf8");
 const runtimeConfigSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "runtime-config.cjs"), "utf8");
 const assetLoaderSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "asset-loader.cjs"), "utf8");
+// 第九轮 A：动作属性规则已抽到 pet-stats-rules.cjs，结构断言需读取 rules 源码
+const petStatsRulesSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "pet-stats-rules.cjs"), "utf8");
 // 渲染层已拆分到 renderer/ 目录下多个模块，测试需读取所有模块内容
 const rendererSource = ["shared", "pet-window", "menu-window", "hover-window", "bubble-window", "customization-window"]
   .map((name) => fs.readFileSync(path.join(__dirname, "..", "static", "renderer", `${name}.js`), "utf8"))
@@ -38,10 +40,12 @@ test("tabby sleep purr plays once when sleep starts", () => {
 });
 
 test("tabby extra actions update hover panel stats", () => {
-  assert.match(mainSource, /stateId === STATE_LIE[\s\S]*petStats\.health/);
-  assert.match(mainSource, /stateId === STATE_LICK[\s\S]*petStats\.health/);
-  assert.match(mainSource, /stateId === STATE_BELLY[\s\S]*petStats\.fullness/);
-  assert.match(mainSource, /stateId === STATE_STRETCH[\s\S]*petStats\.health[\s\S]*petStats\.fullness/);
+  // 第九轮 A：动作属性规则迁至 pet-stats-rules.cjs，main.cjs 通过 applyActionStatsRules 委托
+  assert.match(mainSource, /applyActionStatsRules\(petStats, stateId,/);
+  assert.match(petStatsRulesSource, /stateId === stateConstants\.lie[\s\S]*stats\.health/);
+  assert.match(petStatsRulesSource, /stateId === stateConstants\.lick[\s\S]*stats\.health/);
+  assert.match(petStatsRulesSource, /stateId === stateConstants\.belly[\s\S]*stats\.fullness/);
+  assert.match(petStatsRulesSource, /stateId === stateConstants\.stretch[\s\S]*stats\.health[\s\S]*stats\.fullness/);
 });
 
 test("tabby idle actions run outside the idle greeting timer", () => {
