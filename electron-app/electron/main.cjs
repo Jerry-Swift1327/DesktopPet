@@ -49,6 +49,7 @@ const { createWalkController } = require("./behavior/walk-controller.cjs");
 const { createDockController } = require("./behavior/dock-controller.cjs");
 const { createDragController } = require("./behavior/drag-controller.cjs");
 const { createScreenMetricsController } = require("./platform/screen-metrics.cjs");
+const { createAutoStartController } = require("./platform/auto-start.cjs");
 const { createWindowSurfaceController } = require("./platform/window-surfaces.cjs");
 const { registerIpcHandlers } = require("./ipc/register-ipc-handlers.cjs");
 const { registerAppLifecycle } = require("./lifecycle/register-app-lifecycle.cjs");
@@ -328,20 +329,8 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 // sharedGreetings 已从 pet/pet-states.cjs 导入
 
-function getActionAssetFolder(action) {
-  return `animations/${petAnimationPrefix}_${action}`;
-}
-
-function getActionFrameFolder(action) {
-  return `${getActionAssetFolder(action)}/transparent_frames`;
-}
-
-function getActionMetadataPath(action) {
-  return `${getActionAssetFolder(action)}/loop.json`;
-}
-
 // states 已通过 buildPetStates 从 pet/pet-states.cjs 构建
-// 注意：assetsRoot 传 "animations"（相对路径），与原 getActionAssetFolder 返回的 "animations/${prefix}_${action}" 一致；
+// 注意：assetsRoot 传 "animations"（相对路径），与 pet-states.cjs 中 getActionAssetFolder 返回的 "animations/${prefix}_${action}" 一致；
 // listFrames/listFramePaths/readMetadata 均通过 path.join(getAssetsRoot(), folder) 拼接，期望 folder 为相对路径。
 // 任务原指示使用 getAssetsRoot() 会导致生成绝对路径且缺少 "animations" 前缀，破坏路径拼接，故改用 "animations"。
 const states = buildPetStates(petActionIds, "animations", petAnimationPrefix, sharedGreetings);
@@ -398,7 +387,6 @@ let lastWalkScaleApplyAt = 0;
 let lastWalkSurfaceSignature = "";
 let windowDockInProgress = false;
 let windowDockHoverSuppressedUntil = 0;
-let autoStartRefreshInFlight = false;
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
 const logDir = path.join(userDataRoot, "logs");
@@ -1282,60 +1270,29 @@ const dragController = createDragController({
   WINDOW_SURFACE_DRAG_REFRESH_MIN_MS
 });
 
+const autoStartController = createAutoStartController({
+  app,
+  process,
+  execFile,
+  execFileSync,
+  petRuntimeConfig,
+  WINDOWS_STARTUP_RUN_KEY,
+  isAutoStartPreferenceLoaded: () => preferencesStore.isAutoStartPreferenceLoaded(),
+  setAutoStartEnabled: (enabled) => preferencesStore.setAutoStartEnabled(enabled),
+  writeAutoStartPreference: (enabled) => writeAutoStartPreference(enabled),
+  sendMenuConfig
+});
+
 function getAutoStartCommand() {
-  return `"${process.execPath}"`;
+  return autoStartController.getAutoStartCommand();
 }
 
 function readAutoStartEnabledSync() {
-  if (!preferencesStore.isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
-    return false;
-  }
-
-  try {
-    const output = execFileSync("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "$item = Get-ItemProperty -Path $args[0] -Name $args[1] -ErrorAction SilentlyContinue; $value = if ($null -eq $item) { $null } else { $item.PSObject.Properties[$args[1]].Value }; if ([string]$value -eq [string]$args[2]) { [Console]::Out.Write('1') } else { [Console]::Out.Write('0') }",
-      "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-      petRuntimeConfig.autoStartRegistryKey,
-      getAutoStartCommand()
-    ], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 1000,
-      maxBuffer: 64 * 1024
-    });
-    return output.trim() === "1";
-  } catch {
-    return false;
-  }
+  return autoStartController.readAutoStartEnabledSync();
 }
 
 function readAutoStartEnabledAsync(callback) {
-  if (!preferencesStore.isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
-    callback(false);
-    return;
-  }
-
-  execFile("powershell.exe", [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    "$item = Get-ItemProperty -Path $args[0] -Name $args[1] -ErrorAction SilentlyContinue; $value = if ($null -eq $item) { $null } else { $item.PSObject.Properties[$args[1]].Value }; if ([string]$value -eq [string]$args[2]) { [Console]::Out.Write('1') } else { [Console]::Out.Write('0') }",
-    "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-    petRuntimeConfig.autoStartRegistryKey,
-    getAutoStartCommand()
-  ], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 1000,
-    maxBuffer: 64 * 1024
-  }, (error, stdout) => {
-    callback(!error && String(stdout || "").trim() === "1");
-  });
+  return autoStartController.readAutoStartEnabledAsync(callback);
 }
 
 function readAutoStartPreference() {
@@ -1347,58 +1304,11 @@ function writeAutoStartPreference(enabled) {
 }
 
 function refreshAutoStartCacheAsync() {
-  if (autoStartRefreshInFlight) {
-    return;
-  }
-
-  autoStartRefreshInFlight = true;
-  readAutoStartEnabledAsync((enabled) => {
-    if (!preferencesStore.isAutoStartPreferenceLoaded()) {
-      preferencesStore.setAutoStartEnabled(enabled);
-      writeAutoStartPreference(enabled);
-    }
-    autoStartRefreshInFlight = false;
-    sendMenuConfig();
-  });
+  return autoStartController.refreshAutoStartCacheAsync();
 }
 
 function setAutoStartEnabled(enabled) {
-  if (!preferencesStore.canToggleAutoStart()) {
-    throw new Error("Auto start is not available for this build.");
-  }
-
-  if (enabled) {
-    execFileSync("reg.exe", [
-      "add",
-      WINDOWS_STARTUP_RUN_KEY,
-      "/v",
-      petRuntimeConfig.autoStartRegistryKey,
-      "/t",
-      "REG_SZ",
-      "/d",
-      getAutoStartCommand(),
-      "/f"
-    ], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 1000,
-      maxBuffer: 64 * 1024
-    });
-    return;
-  }
-
-  execFileSync("reg.exe", [
-    "delete",
-    WINDOWS_STARTUP_RUN_KEY,
-    "/v",
-    petRuntimeConfig.autoStartRegistryKey,
-    "/f"
-  ], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 1000,
-    maxBuffer: 64 * 1024
-  });
+  return autoStartController.setAutoStartEnabled(enabled);
 }
 
 function buildAutoStartSummary(error = "") {
@@ -1769,12 +1679,6 @@ function preserveBottomAnchorForState(anchor, stateId = activeState, direction =
   setPetWindowPosition(next.x, next.y);
   syncWalkTrackX(next.x);
   return true;
-}
-
-function getVisibleBottomYForSurface(surface, stateId = activeState, direction = walkDirection) {
-  const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-  const visibleHeight = getPetSpriteSize() - visibleInsets.top - visibleInsets.bottom;
-  return Math.round(surface.groundY);
 }
 
 function parseWindowSurfaceItems(rawOutput) {
@@ -2561,15 +2465,6 @@ function getGroundedVisibleTop(area, stateId = activeState, direction = walkDire
   return area.y + area.height - VISIBLE_BOTTOM_GAP - visibleHeight;
 }
 
-function getGroundedWindowY(area, stateId = activeState, direction = walkDirection) {
-  const visibleTop = getGroundedVisibleTop(area, stateId, direction);
-  const windowHeight = getPetWindowHeight();
-  const spriteSize = getPetSpriteSize();
-  const verticalInset = Math.max(0, windowHeight - spriteSize);
-  const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-  return Math.round(visibleTop - verticalInset - visibleInsets.top);
-}
-
 function getRenderedFrameSnapshot(stateId = activeState, direction = walkDirection) {
   const frameInfo = getRenderedFrameInfo();
   if (!frameInfo || frameInfo.stateId !== stateId || !Number.isFinite(frameInfo.frameIndex)) {
@@ -2850,27 +2745,6 @@ function clampPetWindowPosition(x, y) {
   };
 }
 
-function clampPetWindowPositionForState(x, y, stateId = activeState, direction = walkDirection) {
-  const windowWidth = getPetWindowWidth();
-  const windowHeight = getPetWindowHeight();
-  const pointRect = {
-    x: Math.round(x),
-    y: Math.round(y),
-    width: windowWidth,
-    height: windowHeight
-  };
-  const area = screen.getDisplayMatching(pointRect).workArea;
-  const visibleRect = getVisiblePetRectFromBounds(pointRect, stateId, direction);
-  const minX = x + area.x + VISIBLE_SIDE_GAP - visibleRect.x;
-  const maxX = x + area.x + area.width - VISIBLE_SIDE_GAP - (visibleRect.x + visibleRect.width);
-  const minY = y + area.y + VISIBLE_TOP_GAP - visibleRect.y;
-  const maxY = y + area.y + area.height - VISIBLE_BOTTOM_GAP - (visibleRect.y + visibleRect.height);
-  return {
-    x: clamp(Math.round(x), Math.round(minX), Math.round(maxX)),
-    y: clamp(Math.round(y), Math.round(minY), Math.round(maxY))
-  };
-}
-
 function createPetWindow() {
   log("creating pet window");
   // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
@@ -2970,12 +2844,6 @@ function showRandomActionGreeting() {
 
 // cloneRect 已从 shared/bounds.cjs 导入（原本地版本调用 isResolvedOverlayPetRect，导入版本已内联等价检查）
 
-function repositionOverlays() {
-  repositionMenuWindow();
-  repositionHoverWindow();
-  repositionStartupBubbleWindow();
-}
-
 // isPointInsideRect 已从 shared/bounds.cjs 导入
 
 // rectsOverlap 已从 shared/bounds.cjs 导入
@@ -2994,10 +2862,6 @@ function isCursorInsideSpriteRect() {
     return false;
   }
   return isPointInsideRect(screen.getCursorScreenPoint(), rect);
-}
-
-function isCursorInsideCurrentPetHitRect() {
-  return isPointInsideRect(screen.getCursorScreenPoint(), expandRect(getVisiblePetRect(), getHoverBodyHitPaddingForState()));
 }
 
 function isCursorInsideHoverIntentTarget() {
@@ -3144,10 +3008,6 @@ function setPetScale(nextScale) {
   }
 }
 
-function groundPetToWorkArea(stateId = activeState, direction = walkDirection) {
-  groundPetToSurface(stateId, direction, getCurrentSurface());
-}
-
 function adjustPetScale(deltaY) {
   const direction = deltaY < 0 ? 1 : -1;
   setPetScale(petScale + direction * PET_SCALE_STEP);
@@ -3160,10 +3020,6 @@ function resetPetScale() {
 
 function isScreenPoint(value) {
   return value && Number.isFinite(value.screenX) && Number.isFinite(value.screenY);
-}
-
-function isClientPoint(value) {
-  return value && Number.isFinite(value.clientX) && Number.isFinite(value.clientY);
 }
 
 function getState(id) {
@@ -3328,23 +3184,6 @@ function rememberHomeDisplay() {
   homeDisplayId = display.id;
   homeWorkArea = display.workArea;
   currentSurface = getTaskbarSurface(display);
-}
-
-function getWalkArea() {
-  if (homeDisplayId !== null) {
-    const display = screen.getAllDisplays().find((item) => item.id === homeDisplayId);
-    if (display) {
-      homeWorkArea = display.workArea;
-      return homeWorkArea;
-    }
-  }
-
-  if (homeWorkArea) {
-    return homeWorkArea;
-  }
-
-  homeWorkArea = screen.getPrimaryDisplay().workArea;
-  return homeWorkArea;
 }
 
 function clearWalkLoopTimer() {
@@ -3872,11 +3711,6 @@ function setTaskbarWalkWindowPositionForCenter(centerX, y, direction = walkDirec
     force: true,
     reason: "center"
   });
-  return runway?.windowX ?? petWindow.getBounds().x;
-}
-
-function setTaskbarWalkWindowPositionForEdge(edge, value, y, direction = walkDirection) {
-  const runway = setTaskbarWalkRunwayForEdge(edge, value, y, direction, getCurrentSurface());
   return runway?.windowX ?? petWindow.getBounds().x;
 }
 

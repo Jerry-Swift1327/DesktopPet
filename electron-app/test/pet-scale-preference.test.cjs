@@ -8,7 +8,73 @@ const registerIpcSource = fs.readFileSync(path.join(__dirname, "..", "electron",
 const appConstantsSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "app-constants.cjs"), "utf8");
 const runtimeConfigSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "runtime-config.cjs"), "utf8");
 const preferencesStoreSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "preferences-store.cjs"), "utf8");
+const autoStartControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "platform", "auto-start.cjs"), "utf8");
 const installerSource = fs.readFileSync(path.join(__dirname, "..", "build", "installer.nsh"), "utf8");
+
+// 从 function 声明起按花括号配对提取函数体（仅处理字符串与括号/花括号配对）
+// 起始定位只匹配 "function name("，参数列表的结束 ")" 由括号配对扫描确定，
+// 以支持默认参数中含嵌套括号的情形。
+function extractFunctionBody(source, funcName) {
+  const startRe = new RegExp("^\\s*function\\s+" + funcName + "\\s*\\(", "m");
+  const startMatch = source.match(startRe);
+  if (!startMatch) {
+    return "";
+  }
+  // startMatch[0] 形如 "function name("，从 "(" 之后第一个字符开始扫描参数列表
+  let i = startMatch.index + startMatch[0].length;
+  // 1) 按括号深度找到参数列表结束的 ")"，跳过字符串引号与反斜杠转义
+  let parenDepth = 1;
+  while (i < source.length && parenDepth > 0) {
+    const ch = source[i];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      const quote = ch;
+      i++;
+      while (i < source.length && source[i] !== quote) {
+        if (source[i] === "\\") {
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      i++;
+      continue;
+    }
+    if (ch === "(") parenDepth++;
+    else if (ch === ")") parenDepth--;
+    i++;
+  }
+  // 此时 i 指向参数列表 ")" 之后的下一个字符；跳过空白，期望下一个非空白为 "{"
+  while (i < source.length && /\s/.test(source[i])) {
+    i++;
+  }
+  if (i >= source.length || source[i] !== "{") {
+    return "";
+  }
+  // 2) 从 "{" 之后开始按花括号配对提取函数体（深度从 1 起）
+  const bodyStart = i + 1;
+  i = bodyStart;
+  let depth = 1;
+  while (i < source.length && depth > 0) {
+    const ch = source[i];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      const quote = ch;
+      i++;
+      while (i < source.length && source[i] !== quote) {
+        if (source[i] === "\\") {
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      i++;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    i++;
+  }
+  return source.slice(bodyStart, i - 1);
+}
 
 test("pet preferences are stored per variant in an encrypted file", () => {
   assert.match(mainSource, /const variantDataRoot = path\.join\(userDataRoot, "variants", petRuntimeConfig\.variant\);/);
@@ -66,20 +132,20 @@ test("installer no longer writes split auto start preference json", () => {
 });
 
 test("auto start registry state is persisted into preferences", () => {
-  const refreshBody = mainSource.match(/function refreshAutoStartCacheAsync\(\) \{([\s\S]*?)function setAutoStartEnabled/)?.[1] || "";
+  const refreshBody = autoStartControllerSource.match(/function refreshAutoStartCacheAsync\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 
-  assert.match(refreshBody, /if \(!preferencesStore\.isAutoStartPreferenceLoaded\(\)\) \{[\s\S]*writeAutoStartPreference\(enabled\);/);
+  assert.match(refreshBody, /if \(!isAutoStartPreferenceLoaded\(\)\) \{[\s\S]*writeAutoStartPreference\(enabled\);/);
 });
 
 test("pet scale changes persist the preferred scale", () => {
-  const setScaleBody = mainSource.match(/function setPetScale\(nextScale\) \{([\s\S]*?)function groundPetToWorkArea/)?.[1] || "";
+  const setScaleBody = extractFunctionBody(mainSource, "setPetScale");
 
   assert.match(setScaleBody, /preferredPetScale = clampPetScale\(nextScale\);/);
   assert.match(setScaleBody, /writePetScalePreference\(\);/);
 });
 
 test("window dock scale uses the surface-fitted scale", () => {
-  const setScaleBody = mainSource.match(/function setPetScale\(nextScale\) \{([\s\S]*?)function groundPetToWorkArea/)?.[1] || "";
+  const setScaleBody = extractFunctionBody(mainSource, "setPetScale");
 
   assert.match(setScaleBody, /surface\?\.type === "window"[\s\S]*getScaleForSurface\(surface, preferredPetScale, activeState, walkDirection\)/);
 });

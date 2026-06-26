@@ -40,7 +40,7 @@
 | `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
 | `behavior/window-roam-controller.cjs` | 窗口漫游控制器（目标选取、附着、轮询） |
 | `behavior/eye-tracking-controller.cjs` | 眼球追踪控制器（光标追踪、轮询） |
-| `platform/auto-start.cjs` | 开机自启（注册表读写、缓存、摘要） |
+| `platform/auto-start.cjs` | 开机自启平台能力适配器（注册表读写、运行态，业务偏好状态由 preferencesStore 统一管理） |
 | `platform/window-surfaces.cjs` | 窗口候选探测（PowerShell 调用、解析、评分） |
 | `platform/screen-metrics.cjs` | 屏幕度量（任务栏表面、跑道、显示器） |
 | `ipc/register-ipc-handlers.cjs` | IPC 注册模块，集中注册所有 ipcMain.handle/on，handler 由 main.cjs 注入 |
@@ -91,7 +91,7 @@
 | 拖拽控制 | `behavior/drag-controller.cjs`、`handleDragStart`、`handleDragEnd`、`updateDragPosition`、`clearDragState` |
 | 窗口漫游控制 | `behavior/window-roam-controller.cjs`、`tickWindowRoam` |
 | 眼球追踪控制 | `behavior/eye-tracking-controller.cjs`、`tickEyeTracking` |
-| 开机自启 | `platform/auto-start.cjs`、`setAutoStartEnabled` |
+| 开机自启 | `platform/auto-start.cjs`、`createAutoStartController`、`autoStartController`、`setAutoStartEnabled` |
 | 窗口候选探测 | `platform/window-surfaces.cjs`、`listWindowSurfaceCandidates` |
 | 屏幕度量 | `platform/screen-metrics.cjs`、`getTaskbarSurface`、`getSurfaceDisplay` |
 
