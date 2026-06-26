@@ -66,6 +66,7 @@ const { createAssetLoader } = require("./pet/asset-loader.cjs");
 const { createPetStatsStore } = require("./pet/pet-stats-store.cjs");
 const petStatsRules = require("./pet/pet-stats-rules.cjs");
 const { createPetStatsController } = require("./pet/pet-stats-controller.cjs");
+const { createSurfaceScaleController } = require("./pet/surface-scale-controller.cjs");
 const frameGeometry = require("./pet/frame-geometry.cjs");
 const frameVisibleBounds = require("./pet/frame-visible-bounds.cjs");
 const { createFrameBoundsController } = require("./pet/frame-bounds-controller.cjs");
@@ -369,8 +370,6 @@ let walkLoop = null;
 let walkLoopTimer = null;
 let homeDisplayId = null;
 let homeWorkArea = null;
-let petScale = DEFAULT_PET_SCALE;
-let preferredPetScale = DEFAULT_PET_SCALE;
 let randomGreetingTimer = null;
 let tabbyIdlePollTimer = null;
 let tabbySleepPoseTimer = null;
@@ -452,6 +451,70 @@ const frameBoundsController = createFrameBoundsController({
   frameVisibleBounds
 });
 
+// 接入 pet/surface-scale-controller.cjs：surface 缩放副作用编排控制器
+// petScale/preferredPetScale 运行态所有权迁入控制器，main.cjs 保留同名薄包装委托
+// currentSurface/taskbarWalkRunway/walkTrackX 仍由 main.cjs 持有，经 getter/setter 注入
+// 依赖函数均为 main.cjs function 声明（hoisted 可用）；overlay 刷新回调经箭头函数延迟访问
+const surfaceScaleController = createSurfaceScaleController({
+  // 纯计算委托（function 声明，hoisted）
+  clampPetScale,
+  getPetWindowWidth,
+  getPetWindowHeight,
+  getPetSpriteSize,
+  getSpriteLocalXForWindowWidth,
+  // surface/落地回调
+  getSurfaceWorkArea,
+  getVisibleSpriteInsets,
+  getGroundedWindowYForSurface,
+  clampPetWindowPositionToSurface,
+  getTaskbarWalkCenterLimits,
+  ensureTaskbarWalkRunwayForCenter,
+  isTaskbarWalkActive,
+  clearPetWindowHitRegion,
+  getWalkVisibleCenterFromWindowX,
+  getTaskbarWalkRunwayWindowWidth,
+  setPetWindowPosition,
+  syncWalkTrackX,
+  updatePetWindowMousePassthrough,
+  scheduleWalkLoopTimeout,
+  // surface 状态回调
+  resetToTaskbarSurface,
+  setCurrentSurface,
+  getCurrentSurface,
+  getVisiblePetRectFromBounds,
+  setWalkWindowPosition,
+  setTaskbarWalkWindowPositionForCenter,
+  isWalkingState,
+  // overlay 刷新回调（经箭头函数延迟访问各 overlay 控制器，控制器在后续创建）
+  refreshMenuAnchorAfterScale: (...args) => refreshMenuAnchorAfterScale(...args),
+  refreshHoverAnchorAfterScale: (...args) => refreshHoverAnchorAfterScale(...args),
+  refreshCustomizationAnchorAfterScale: (...args) => refreshCustomizationAnchorAfterScale(...args),
+  repositionStartupBubbleWindow: (...args) => repositionStartupBubbleWindow(...args),
+  // 通知回调（封装 safeSend 的 "pet:scale-changed" 通知）
+  sendScaleChanged: (summary) => safeSend(petWindow, "pet:scale-changed", summary),
+  // 偏好持久化
+  preferencesStore,
+  // 窗口与运行态访问器（实时读写 main.cjs 状态，避免快照）
+  getPetWindow: () => petWindow,
+  getActiveState: () => activeState,
+  getWalkDirection: () => walkDirection,
+  getTaskbarWalkRunway: () => taskbarWalkRunway,
+  setTaskbarWalkRunway: (v) => { taskbarWalkRunway = v; },
+  getWalkTrackX: () => walkTrackX,
+  setWalkTrackX: (v) => { walkTrackX = v; },
+  // 日志
+  log,
+  // 常量
+  DEFAULT_PET_SCALE,
+  PET_SCALE_MIN,
+  PET_SCALE_MAX,
+  PET_SCALE_STEP,
+  VISIBLE_TOP_GAP,
+  WINDOW_DOCK_DEBUG,
+  WINDOW_DOCK_COARSE_CORRECTION_LIMIT,
+  WINDOW_DOCK_FINE_CORRECTION_LIMIT
+});
+
 // 接入 windows/overlay-geometry.cjs：overlay 窗口定位几何统一收口
 // state accessor 间接层：menu 状态通过延迟访问器读 menuController（之后创建）
 // hover 状态读 main.cjs 本地状态；customization 状态通过延迟访问器读 customizationController
@@ -461,7 +524,7 @@ const overlayGeometry = createOverlayGeometry({
   getWalkDirection: () => walkDirection,
   getCurrentSurface,
   getPetWindow: () => petWindow,
-  getPetScale: () => petScale,
+  getPetScale: () => surfaceScaleController.getPetScale(),
   getMenuFrozenPetRect: () => menuController ? menuController.getMenuFrozenPetRect() : null,
   getHoverFrozenPetRect: () => hoverController ? hoverController.getHoverFrozenPetRect() : null,
   getCustomizationFrozenPetRect: () => customizationController ? customizationController.getCustomizationAnchorRect() : null,
@@ -1106,8 +1169,8 @@ const walkController = createWalkController({
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
   getPetWindow: () => petWindow,
   getActiveState: () => activeState,
-  getPetScale: () => petScale,
-  getPreferredPetScale: () => preferredPetScale,
+  getPetScale: () => surfaceScaleController.getPetScale(),
+  getPreferredPetScale: () => surfaceScaleController.getPreferredPetScale(),
   getInteractionPauseReasons: () => interactionPauseReasons,
   getWalkTrackX: () => walkTrackX,
   // 行走运行时状态访问器（读 getter / 写 setter，状态存储于 main.cjs）
@@ -1200,8 +1263,8 @@ const dockController = createDockController({
   getWalkDirection: () => walkDirection,
   getDragState: () => dragController.getDragState(),
   getPetRuntimeConfig: () => petRuntimeConfig,
-  getPetScale: () => petScale,
-  getPreferredPetScale: () => preferredPetScale,
+  getPetScale: () => surfaceScaleController.getPetScale(),
+  getPreferredPetScale: () => surfaceScaleController.getPreferredPetScale(),
   getWindowRoamEnabled: () => preferencesStore.getWindowRoamEnabled(),
   // 贴靠轮询状态访问器（读 getter / 写 setter，状态存储于 main.cjs）
   getWindowSurfacePollTimer: () => windowSurfacePollTimer,
@@ -1418,16 +1481,11 @@ function buildEyeTrackingSummary(error = "") {
 }
 
 function readPetScalePreference() {
-  preferencesStore.readPetScalePreference();
-  // 同步运行时变量
-  petScale = preferencesStore.getPetScale();
-  preferredPetScale = preferencesStore.getPreferredPetScale();
+  return surfaceScaleController.readPetScalePreference();
 }
 
 function writePetScalePreference() {
-  // 同步到模块后写入
-  preferencesStore.setPreferredPetScale(preferredPetScale);
-  preferencesStore.writePetScalePreference();
+  return surfaceScaleController.writePetScalePreference();
 }
 
 function buildMenuFeatures() {
@@ -1560,15 +1618,15 @@ function readPetStats() {
 }
 
 function getPetWindowWidth() {
-  return petScaleRules.getPetWindowWidthFromScale(BASE_PET_WINDOW_WIDTH, petScale);
+  return petScaleRules.getPetWindowWidthFromScale(BASE_PET_WINDOW_WIDTH, surfaceScaleController.getPetScale());
 }
 
 function getPetWindowHeight() {
-  return petScaleRules.getPetWindowHeightFromScale(BASE_PET_WINDOW_HEIGHT, petScale);
+  return petScaleRules.getPetWindowHeightFromScale(BASE_PET_WINDOW_HEIGHT, surfaceScaleController.getPetScale());
 }
 
 function getPetSpriteSize() {
-  return petScaleRules.getPetSpriteSizeFromScale(BASE_PET_SPRITE_SIZE, petScale);
+  return petScaleRules.getPetSpriteSizeFromScale(BASE_PET_SPRITE_SIZE, surfaceScaleController.getPetScale());
 }
 
 function getSpriteLocalXForWindowWidth(windowWidth = getPetWindowWidth()) {
@@ -1944,224 +2002,24 @@ function getWindowRoamSurfaceById(windowId) {
   return candidate ? buildWindowSurfaceFromItem(candidate).surface : null;
 }
 
-function getScaleForSurface(surface, requestedScale = preferredPetScale, stateId = activeState, direction = walkDirection) {
-  const currentScale = petScale;
-  const area = getSurfaceWorkArea(surface);
-  const computeFitForScale = (scale) => {
-    petScale = scale;
-    const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-    const spriteSize = getPetSpriteSize();
-    petScale = currentScale;
-    return {
-      visibleWidth: spriteSize - visibleInsets.left - visibleInsets.right,
-      visibleHeight: spriteSize - visibleInsets.top - visibleInsets.bottom
-    };
-  };
-  const result = surfaceFitRules.getScaleCandidateForSurface(
-    surface.left,
-    surface.right,
-    surface.groundY,
-    area.y,
-    VISIBLE_TOP_GAP,
-    requestedScale,
-    PET_SCALE_MIN,
-    PET_SCALE_MAX,
-    PET_SCALE_STEP,
-    computeFitForScale
-  );
-  petScale = currentScale;
-  return result;
+function getScaleForSurface(surface, requestedScale = surfaceScaleController.getPreferredPetScale(), stateId = activeState, direction = walkDirection) {
+  return surfaceScaleController.getScaleForSurface(surface, requestedScale, stateId, direction);
 }
 
 function applySurfaceScale(surface, stateId = activeState, direction = walkDirection) {
-  const nextScale = surface?.type === "window"
-    ? getScaleForSurface(surface, preferredPetScale, stateId, direction)
-    : preferredPetScale;
-  if (!Number.isFinite(nextScale)) {
-    return false;
-  }
-  const changed = Math.abs(petScale - nextScale) >= 0.001;
-  if (!petWindow || petWindow.isDestroyed()) {
-    petScale = clampPetScale(nextScale);
-    return true;
-  }
-  const bounds = petWindow.getBounds();
-  const taskbarWalkActive = isTaskbarWalkActive(surface);
-  if (!changed && !taskbarWalkActive) {
-    const wasRunwayActive = Boolean(taskbarWalkRunway);
-    const needsResize = bounds.width !== getPetWindowWidth() || bounds.height !== getPetWindowHeight();
-    taskbarWalkRunway = null;
-    if (wasRunwayActive) {
-      clearPetWindowHitRegion();
-    }
-    if (needsResize) {
-      const anchorX = bounds.x + Math.round(bounds.width / 2);
-      const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
-      const next = clampPetWindowPositionToSurface(
-        anchorX - Math.round(getPetWindowWidth() / 2),
-        groundedY,
-        surface,
-        stateId,
-        direction
-      );
-      petWindow.setBounds({
-        x: next.x,
-        y: next.y,
-        width: getPetWindowWidth(),
-        height: getPetWindowHeight()
-      }, false);
-    }
-    if (wasRunwayActive || needsResize) {
-      safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-      refreshMenuAnchorAfterScale();
-      refreshHoverAnchorAfterScale();
-      refreshCustomizationAnchorAfterScale();
-      repositionStartupBubbleWindow({ refreshAnchor: true });
-    }
-    return true;
-  }
-  const taskbarCenterAnchor = taskbarWalkActive
-    ? (taskbarWalkRunway?.centerX
-      ?? walkTrackX
-      ?? getWalkVisibleCenterFromWindowX(
-        bounds.x,
-        getGroundedWindowYForSurface(surface, stateId, direction),
-        stateId,
-        direction
-      ))
-    : null;
-  petScale = clampPetScale(nextScale);
-  if (taskbarWalkActive) {
-    const needsRunwayRefresh = !taskbarWalkRunway
-      || taskbarWalkRunway.windowWidth !== getTaskbarWalkRunwayWindowWidth(surface)
-      || taskbarWalkRunway.windowHeight !== getPetWindowHeight();
-    if (!changed && !needsRunwayRefresh) {
-      return true;
-    }
-    const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
-    const centerLimits = getTaskbarWalkCenterLimits(surface, stateId);
-    ensureTaskbarWalkRunwayForCenter(
-      clamp(Math.round(taskbarCenterAnchor), centerLimits.left, centerLimits.right),
-      groundedY,
-      direction,
-      surface,
-      { force: true, reason: "scale" }
-    );
-    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-    refreshMenuAnchorAfterScale();
-    refreshHoverAnchorAfterScale();
-    refreshCustomizationAnchorAfterScale();
-    repositionStartupBubbleWindow({ refreshAnchor: true });
-    return true;
-  }
-  taskbarWalkRunway = null;
-  clearPetWindowHitRegion();
-  const oldWidth = bounds.width;
-  const anchorX = bounds.x + Math.round(oldWidth / 2);
-  const newWidth = getPetWindowWidth();
-  const newHeight = getPetWindowHeight();
-  const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
-  const next = clampPetWindowPositionToSurface(anchorX - Math.round(newWidth / 2), groundedY, surface, stateId, direction);
-  petWindow.setBounds({
-    x: next.x,
-    y: next.y,
-    width: newWidth,
-    height: newHeight
-  }, false);
-  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-  refreshMenuAnchorAfterScale();
-  refreshHoverAnchorAfterScale();
-  refreshCustomizationAnchorAfterScale();
-  repositionStartupBubbleWindow({ refreshAnchor: true });
-  return true;
+  return surfaceScaleController.applySurfaceScale(surface, stateId, direction);
 }
 
 function groundPetToSurface(stateId = activeState, direction = walkDirection, surface = getCurrentSurface()) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  const bounds = petWindow.getBounds();
-  let activeSurface = surface;
-  if (!applySurfaceScale(activeSurface, stateId, direction)) {
-    activeSurface = resetToTaskbarSurface(bounds);
-    applySurfaceScale(activeSurface, stateId, direction);
-  }
-  setCurrentSurface(activeSurface);
-  const groundedY = getGroundedWindowYForSurface(activeSurface, stateId, direction);
-  if (isTaskbarWalkActive(activeSurface)) {
-    const centerLimits = getTaskbarWalkCenterLimits(activeSurface, stateId);
-    const centerX = clamp(
-      taskbarWalkRunway?.centerX
-        ?? walkTrackX
-        ?? getWalkVisibleCenterFromWindowX(bounds.x, groundedY, stateId, direction),
-      centerLimits.left,
-      centerLimits.right
-    );
-    ensureTaskbarWalkRunwayForCenter(centerX, groundedY, direction, activeSurface, {
-      force: true,
-      reason: "ground"
-    });
-    return;
-  }
-  taskbarWalkRunway = null;
-  clearPetWindowHitRegion();
-  const next = clampPetWindowPositionToSurface(bounds.x, groundedY, activeSurface, stateId, direction);
-  setPetWindowPosition(next.x, next.y);
-  if (activeSurface.type === "window") {
-    const applyWindowDockCorrection = (limit, label = "coarse") => {
-      const correctedBounds = petWindow.getBounds();
-      const visible = getVisiblePetRectFromBounds(correctedBounds, stateId, direction);
-      const deltaY = Math.round(activeSurface.groundY - (visible.y + visible.height));
-      if (Math.abs(deltaY) > 0 && Math.abs(deltaY) <= limit) {
-        setPetWindowPosition(correctedBounds.x, correctedBounds.y + deltaY);
-        if (WINDOW_DOCK_DEBUG && Math.abs(deltaY) > WINDOW_DOCK_FINE_CORRECTION_LIMIT) {
-          log(`window-dock ${label}-correct deltaY=${deltaY} surfaceTop=${activeSurface.groundY} visibleBottom=${visible.y + visible.height}`);
-        }
-        return true;
-      }
-      return false;
-    };
-    applyWindowDockCorrection(WINDOW_DOCK_COARSE_CORRECTION_LIMIT, "coarse");
-    setImmediate(() => {
-      if (!petWindow || petWindow.isDestroyed() || getCurrentSurface().type !== "window") {
-        return;
-      }
-      applyWindowDockCorrection(WINDOW_DOCK_FINE_CORRECTION_LIMIT, "fine");
-    });
-  } else {
-    const correctedBounds = petWindow.getBounds();
-    const fallback = clampPetWindowPositionToSurface(correctedBounds.x, correctedBounds.y, activeSurface, stateId, direction);
-    if (fallback.y !== correctedBounds.y || fallback.x !== correctedBounds.x) {
-      setPetWindowPosition(fallback.x, fallback.y);
-    }
-  }
-  syncWalkTrackX(next.x);
+  return surfaceScaleController.groundPetToSurface(stateId, direction, surface);
 }
 
 function buildScaleSummary() {
-  const runwayActive = Boolean(taskbarWalkRunway && isTaskbarWalkActive());
-  const windowWidth = runwayActive ? taskbarWalkRunway.windowWidth : getPetWindowWidth();
-  const spriteOffsetX = runwayActive
-    ? taskbarWalkRunway.spriteOffsetX
-    : getSpriteLocalXForWindowWidth(windowWidth);
-  return petScaleRules.buildScaleSummaryFromState(
-    petScale,
-    PET_SCALE_MIN,
-    PET_SCALE_MAX,
-    PET_SCALE_STEP,
-    windowWidth,
-    getPetWindowHeight(),
-    getPetSpriteSize(),
-    spriteOffsetX,
-    runwayActive
-  );
+  return surfaceScaleController.buildScaleSummary();
 }
 
 function sendScaleState() {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
+  return surfaceScaleController.sendScaleState();
 }
 
 function writePetStats() {
@@ -2701,11 +2559,11 @@ function removeInteractionPause(reason) {
 // expandRect 已从 shared/bounds.cjs 导入
 
 function getScaledOverlayCollisionPadding() {
-  return petScaleRules.getScaledOverlayCollisionPaddingFromScale(petScale, OVERLAY_COLLISION_PADDING_BASE, OVERLAY_COLLISION_PADDING_MIN, OVERLAY_COLLISION_PADDING_MAX);
+  return petScaleRules.getScaledOverlayCollisionPaddingFromScale(surfaceScaleController.getPetScale(), OVERLAY_COLLISION_PADDING_BASE, OVERLAY_COLLISION_PADDING_MIN, OVERLAY_COLLISION_PADDING_MAX);
 }
 
 function getScaledHoverBodyHitPadding() {
-  return petScaleRules.getScaledHoverBodyHitPaddingFromScale(petScale, HOVER_BODY_HIT_PADDING_BASE, HOVER_BODY_HIT_PADDING_MIN, HOVER_BODY_HIT_PADDING_MAX);
+  return petScaleRules.getScaledHoverBodyHitPaddingFromScale(surfaceScaleController.getPetScale(), HOVER_BODY_HIT_PADDING_BASE, HOVER_BODY_HIT_PADDING_MIN, HOVER_BODY_HIT_PADDING_MAX);
 }
 
 function getScaledHoverAvoidPadding() {
@@ -3017,83 +2875,16 @@ function clearDragState({ notify = true, keepPause = false } = {}) {
 }
 
 function setPetScale(nextScale) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  preferredPetScale = clampPetScale(nextScale);
-  writePetScalePreference();
-  const previousScale = petScale;
-  const surface = getCurrentSurface();
-  const clampedScale = surface?.type === "window"
-    ? getScaleForSurface(surface, preferredPetScale, activeState, walkDirection)
-    : clampPetScale(nextScale);
-  if (!Number.isFinite(clampedScale)) {
-    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-    return;
-  }
-  if (Math.abs(previousScale - clampedScale) < 0.001) {
-    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-    return;
-  }
-
-  const bounds = petWindow.getBounds();
-  const walkScaleAnchor = getWalkTrackAnchorForScale(bounds, surface);
-  if (isWalkingState() && isTaskbarWalkActive(surface)) {
-    petScale = clampedScale;
-    const surfaceAfterScale = getCurrentSurface();
-    if (!restoreWalkTrackAnchorAfterScale(walkScaleAnchor, surfaceAfterScale)) {
-      groundPetToSurface(activeState, walkDirection, surfaceAfterScale);
-    }
-    safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-    refreshMenuAnchorAfterScale();
-    refreshHoverAnchorAfterScale();
-    refreshCustomizationAnchorAfterScale();
-    repositionStartupBubbleWindow({ refreshAnchor: true });
-    syncWalkTrackX();
-    updatePetWindowMousePassthrough();
-    scheduleWalkLoopTimeout();
-    return;
-  }
-  const oldWidth = getPetWindowWidth();
-  const anchorX = bounds.x + Math.round(oldWidth / 2);
-  petScale = clampedScale;
-  const newWidth = getPetWindowWidth();
-  const newHeight = getPetWindowHeight();
-  const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
-  const next = clampPetWindowPositionToSurface(anchorX - Math.round(newWidth / 2), groundedY, surface, activeState, walkDirection);
-  petWindow.setBounds({
-    x: next.x,
-    y: next.y,
-    width: newWidth,
-    height: newHeight
-  }, false);
-  const surfaceAfterResize = getCurrentSurface();
-  if (isWalkingState() && surfaceAfterResize?.type !== "window") {
-    if (!restoreWalkTrackAnchorAfterScale(walkScaleAnchor, surfaceAfterResize)) {
-      groundPetToSurface(activeState, walkDirection, surfaceAfterResize);
-    }
-  } else {
-    groundPetToSurface(activeState, walkDirection, surfaceAfterResize);
-  }
-  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-  refreshMenuAnchorAfterScale();
-  refreshHoverAnchorAfterScale();
-  refreshCustomizationAnchorAfterScale();
-  repositionStartupBubbleWindow({ refreshAnchor: true });
-  if (isWalkingState()) {
-    syncWalkTrackX();
-    scheduleWalkLoopTimeout();
-  }
+  return surfaceScaleController.setPetScale(nextScale);
 }
 
 function adjustPetScale(deltaY) {
   const direction = deltaY < 0 ? 1 : -1;
-  setPetScale(petScale + direction * PET_SCALE_STEP);
+  setPetScale(surfaceScaleController.getPetScale() + direction * PET_SCALE_STEP);
 }
 
 function resetPetScale() {
-  setPetScale(DEFAULT_PET_SCALE);
-  groundPetToSurface(activeState, walkDirection, getCurrentSurface());
+  return surfaceScaleController.resetPetScale();
 }
 
 function isScreenPoint(value) {
@@ -3661,41 +3452,6 @@ function setTaskbarWalkWindowPositionForCenter(centerX, y, direction = walkDirec
     reason: "center"
   });
   return runway?.windowX ?? petWindow.getBounds().x;
-}
-
-function getWalkTrackAnchorForScale(bounds = petWindow?.getBounds(), surface = getCurrentSurface()) {
-  if (!bounds || !isWalkingState()) {
-    return null;
-  }
-  if (isTaskbarWalkActive(surface)) {
-    const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
-    return {
-      type: "taskbar-center",
-      value: taskbarWalkRunway?.centerX
-        ?? walkTrackX
-        ?? getWalkVisibleCenterFromWindowX(bounds.x, groundedY, activeState, walkDirection)
-    };
-  }
-  return {
-    type: "window-center",
-    value: bounds.x + Math.round(bounds.width / 2)
-  };
-}
-
-function restoreWalkTrackAnchorAfterScale(anchor, surface = getCurrentSurface()) {
-  if (!anchor || !petWindow || petWindow.isDestroyed() || !isWalkingState()) {
-    return false;
-  }
-  const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
-  if (anchor.type === "taskbar-center" && isTaskbarWalkActive(surface)) {
-    const centerLimits = getTaskbarWalkCenterLimits(surface, activeState);
-    const centerX = clamp(Math.round(anchor.value), centerLimits.left, centerLimits.right);
-    setTaskbarWalkWindowPositionForCenter(centerX, groundedY, walkDirection);
-    return true;
-  }
-  const targetX = Math.round(anchor.value - getPetWindowWidth() / 2);
-  setWalkWindowPosition(targetX, groundedY, surface, walkDirection);
-  return true;
 }
 
 function animatePetWindowTo(targetX, targetY, durationMs = WINDOW_SURFACE_FALLBACK_BLEND_MS) {

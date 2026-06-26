@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "surface-scale-controller.cjs"), "utf8");
 const registerIpcSource = fs.readFileSync(path.join(__dirname, "..", "electron", "ipc", "register-ipc-handlers.cjs"), "utf8");
 const appConstantsSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "app-constants.cjs"), "utf8");
 const runtimeConfigSource = fs.readFileSync(path.join(__dirname, "..", "electron", "core", "runtime-config.cjs"), "utf8");
@@ -138,16 +139,16 @@ test("auto start registry state is persisted into preferences", () => {
 });
 
 test("pet scale changes persist the preferred scale", () => {
-  const setScaleBody = extractFunctionBody(mainSource, "setPetScale");
+  const setScaleBody = extractFunctionBody(controllerSource, "setPetScale");
 
   assert.match(setScaleBody, /preferredPetScale = clampPetScale\(nextScale\);/);
   assert.match(setScaleBody, /writePetScalePreference\(\);/);
 });
 
 test("window dock scale uses the surface-fitted scale", () => {
-  const setScaleBody = extractFunctionBody(mainSource, "setPetScale");
+  const setScaleBody = extractFunctionBody(controllerSource, "setPetScale");
 
-  assert.match(setScaleBody, /surface\?\.type === "window"[\s\S]*getScaleForSurface\(surface, preferredPetScale, activeState, walkDirection\)/);
+  assert.match(setScaleBody, /surface\?\.type === "window"[\s\S]*getScaleForSurface\(surface, preferredPetScale, getActiveState\(\), getWalkDirection\(\)\)/);
 });
 
 test("preferred variant is stored under the base variant local data folder", () => {

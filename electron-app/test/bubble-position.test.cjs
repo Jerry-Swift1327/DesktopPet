@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "surface-scale-controller.cjs"), "utf8");
 const bubbleSource = fs.readFileSync(path.join(__dirname, "..", "electron", "windows", "bubble-controller.cjs"), "utf8");
 
 // 从 function 声明起按花括号配对提取函数体（仅处理字符串与括号/花括号配对）
@@ -91,7 +92,7 @@ test("startup bubble freezes its anchor while visible", () => {
 });
 
 test("explicit pet resize refreshes the frozen bubble anchor", () => {
-  const scaleBody = extractFunctionBody(mainSource, "setPetScale");
+  const scaleBody = extractFunctionBody(controllerSource, "setPetScale");
 
   assert.match(scaleBody, /repositionStartupBubbleWindow\(\{ refreshAnchor: true \}\);/);
 });

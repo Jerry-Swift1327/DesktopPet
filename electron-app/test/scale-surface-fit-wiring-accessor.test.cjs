@@ -5,16 +5,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mainSourceRaw = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const controllerSourceRaw = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "surface-scale-controller.cjs"), "utf8");
 // 剥离注释后再做字符串检查，避免文档性注释误触断言
 const mainSource = mainSourceRaw
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/\/\/[^\n]*/g, "");
+const controllerSource = controllerSourceRaw
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/\/\/[^\n]*/g, "");
 
 // 从 function 声明起按花括号配对提取函数体（注释已剥离，仅处理字符串与括号/花括号配对）
-// 起始定位只匹配 "function name("，参数列表的结束 ")" 由括号配对扫描确定，
-// 以支持默认参数中含嵌套括号的情形（如 surface = getCurrentSurface()）。
+// 起始定位匹配 "function name("（允许前导空白，以兼容控制器内部缩进声明），
+// 参数列表的结束 ")" 由括号配对扫描确定，以支持默认参数中含嵌套括号的情形。
 function extractFunctionBody(source, funcName) {
-  const startRe = new RegExp("^function\\s+" + funcName + "\\s*\\(", "m");
+  const startRe = new RegExp("^\\s*function\\s+" + funcName + "\\s*\\(", "m");
   const startMatch = source.match(startRe);
   if (!startMatch) {
     return "";
@@ -110,8 +114,8 @@ test("clampPetWindowPositionToSurface 委托 surfaceFitRules", () => {
   assert.match(body, /surfaceFitRules\./);
 });
 
-test("getScaleForSurface 委托 surfaceFitRules", () => {
-  const body = extractFunctionBody(mainSource, "getScaleForSurface");
+test("getScaleForSurface 委托 surfaceFitRules（控制器源）", () => {
+  const body = extractFunctionBody(controllerSource, "getScaleForSurface");
   assert.match(body, /surfaceFitRules\./);
 });
 
@@ -120,16 +124,18 @@ test("getSafeWindowXForDirection 委托 surfaceFitRules", () => {
   assert.match(body, /surfaceFitRules\./);
 });
 
-test("applySurfaceScale 仍以 function 声明在 main.cjs", () => {
-  assert.match(mainSource, new RegExp("^function\\s+applySurfaceScale\\s*\\(", "m"));
+test("applySurfaceScale 转为薄包装委托 surfaceScaleController", () => {
+  const body = extractFunctionBody(mainSource, "applySurfaceScale");
+  assert.match(body, /surfaceScaleController\./);
 });
 
-test("setPetScale 仍以 function 声明在 main.cjs", () => {
-  assert.match(mainSource, new RegExp("^function\\s+setPetScale\\s*\\(", "m"));
+test("setPetScale 转为薄包装委托 surfaceScaleController", () => {
+  const body = extractFunctionBody(mainSource, "setPetScale");
+  assert.match(body, /surfaceScaleController\./);
 });
-  
-test("buildScaleSummary 委托 petScaleRules.buildScaleSummaryFromState", () => {
-  const body = extractFunctionBody(mainSource, "buildScaleSummary");
+
+test("buildScaleSummary 委托 petScaleRules.buildScaleSummaryFromState（控制器源）", () => {
+  const body = extractFunctionBody(controllerSource, "buildScaleSummary");
   assert.match(body, /petScaleRules\.buildScaleSummaryFromState/);
 });
 
