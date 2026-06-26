@@ -25,6 +25,8 @@
 | `pet/frame-visible-bounds.cjs` | 帧可见区域 bitmap 扫描纯规则（scanVisibleBounds、scanHeadBounds），不依赖 electron/fs/nativeImage/缓存 |
 | `pet/frame-bounds-controller.cjs` | 帧缓存与读图控制器（visible/head/pixel 缓存、nativeImage 读图、state bounds 合并），工厂形式注入 nativeImage/getState/listFramePaths/常量，不直接接触窗口/IPC/bubble |
 | `pet/frame-hit-test.cjs` | 透明像素命中检测纯规则（point→imageX/imageY 镜像/缩放、alpha 半径扫描），不依赖 electron/fs/nativeImage/缓存/窗口/screen |
+| `pet/pet-scale-rules.cjs` | pet scale 与 spriteSize 纯计算（clampPetScale、windowWidth/Height/SpriteSize、spriteLocalX、overlay/hover padding），不依赖 electron/fs/窗口/IPC/screen/bubble |
+| `pet/surface-fit-rules.cjs` | surface-fit 纯规则（visibleTop/windowY、window 位置约束、scale 候选适配、visible edge/center 互推、taskbar walk center limits、safe window X），不依赖 electron/fs/窗口/IPC/screen/bubble |
 | `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
 | `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
 | `windows/overlay-window.cjs` | overlay 窗口公共创建 helper，归纳 BrowserWindow 选项 |
@@ -73,6 +75,8 @@
 | 帧可见区域扫描 | `pet/frame-visible-bounds.cjs`、`getFrameVisibleBounds`、`getFrameHeadBounds`、`scanVisibleBoundsFromBitmap`、`scanHeadBoundsFromBitmap` |
 | 帧缓存与读图 | `pet/frame-bounds-controller.cjs`、`getFrameVisibleBounds`、`getFramePixelData`、`getFrameHeadBounds`、`getStateVisibleBounds`、`getStateHeadBounds` |
 | 像素命中检测 | `pet/frame-hit-test.cjs`、`isPointInsideRenderedFrame`、`isPointInsideVisiblePixels` |
+| 缩放纯计算 | `pet/pet-scale-rules.cjs`、`clampPetScale`、`getPetWindowWidth`、`getPetWindowHeight`、`getPetSpriteSize`、`getSpriteLocalXForWindowWidth`、`getScaledOverlayCollisionPadding`、`getScaledHoverBodyHitPadding`、`getScaledHoverAvoidPadding` |
+| surface-fit 纯规则 | `pet/surface-fit-rules.cjs`、`getSurfaceVisibleTop`、`getGroundedWindowYForSurface`、`clampPetWindowPositionToSurface`、`getScaleForSurface`、`getWindowXForVisibleEdge`、`getVisibleRectFromSpriteLeft`、`getWindowXForVisibleCenter`、`getTaskbarWalkCenterLimits`、`getSafeWindowXForDirection` |
 | 消息广播 | `shared/messaging.cjs`、`safeSend`、`broadcastToWindows` |
 | IPC 注册 | `ipc/register-ipc-handlers.cjs`、`registerIpcHandlers` |
 | 窗口创建 | `windows/overlay-window.cjs`、`createOverlayWindow` |

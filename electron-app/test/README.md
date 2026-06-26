@@ -41,6 +41,9 @@ node --test "test/**/*.test.cjs"
 | `frame-visible-bounds.test.cjs` | 帧可见区域 bitmap 扫描纯规则（scanVisibleBounds、scanHeadBounds） | `../electron/pet/frame-visible-bounds.cjs` |
 | `frame-bounds-controller.test.cjs` | frame-bounds 控制器缓存命中、无效图片 fallback、state bounds 合并、moving stable bottom 修正、结构断言 | `../electron/pet/frame-bounds-controller.cjs` |
 | `frame-hit-test.test.cjs` | 透明像素命中检测纯规则（命中/不命中/镜像/hitPadding 半径/边界 clamp） | `../electron/pet/frame-hit-test.cjs` |
+| `frame-bounds-controller-accessor.test.cjs` | main.cjs 帧接线结构护栏（不声明帧缓存、不直接 nativeImage.createFromPath、5 个 frame bounds 函数委托 frameBoundsController、isPointInsideRenderedFrame 委托 frameHitTest、getPetWindowPositionForVisibleRect 委托 frameGeometry） | `../electron/main.cjs` |
+| `pet-scale-rules.test.cjs` | pet scale 纯计算（clampPetScale NaN/min/max/四舍五入、windowWidth/Height/SpriteSize、spriteLocalX、overlay/hover padding 边界值） | `../electron/pet/pet-scale-rules.cjs` |
+| `surface-fit-rules.test.cjs` | surface-fit 纯规则（visibleTop/groundedWindowY、clampWindowPositionToSurface、getScaleCandidateForSurface 候选适配、edge/center 互推、taskbarWalkCenterLimits、safeWindowXForDirection） | `../electron/pet/surface-fit-rules.cjs` |
 
 ## 何时补测试
 

@@ -67,6 +67,8 @@ const frameGeometry = require("./pet/frame-geometry.cjs");
 const frameVisibleBounds = require("./pet/frame-visible-bounds.cjs");
 const { createFrameBoundsController } = require("./pet/frame-bounds-controller.cjs");
 const frameHitTest = require("./pet/frame-hit-test.cjs");
+const petScaleRules = require("./pet/pet-scale-rules.cjs");
+const surfaceFitRules = require("./pet/surface-fit-rules.cjs");
 const {
   APP_INTERNAL_NAME,
   APP_DISPLAY_NAME,
@@ -1529,19 +1531,19 @@ function readPetStats() {
 }
 
 function getPetWindowWidth() {
-  return Math.round(BASE_PET_WINDOW_WIDTH * petScale);
+  return petScaleRules.getPetWindowWidthFromScale(BASE_PET_WINDOW_WIDTH, petScale);
 }
 
 function getPetWindowHeight() {
-  return Math.round(BASE_PET_WINDOW_HEIGHT * petScale);
+  return petScaleRules.getPetWindowHeightFromScale(BASE_PET_WINDOW_HEIGHT, petScale);
 }
 
 function getPetSpriteSize() {
-  return Math.round(BASE_PET_SPRITE_SIZE * petScale);
+  return petScaleRules.getPetSpriteSizeFromScale(BASE_PET_SPRITE_SIZE, petScale);
 }
 
 function getSpriteLocalXForWindowWidth(windowWidth = getPetWindowWidth()) {
-  return Math.max(0, Math.round((Math.round(windowWidth) - getPetSpriteSize()) / 2));
+  return petScaleRules.getSpriteLocalXForWindowWidthAndSpriteSize(windowWidth, getPetSpriteSize());
 }
 
 function getTaskbarWalkRunwayPadding() {
@@ -1565,7 +1567,7 @@ function getDarwinBottomDock(display) {
 }
 
 function clampPetScale(value) {
-  return Math.round(clamp(Number(value) || 1, PET_SCALE_MIN, PET_SCALE_MAX) * 100) / 100;
+  return petScaleRules.clampPetScale(value, PET_SCALE_MIN, PET_SCALE_MAX);
 }
 
 function getTaskbarSurface(display = screen.getPrimaryDisplay()) {
@@ -1676,17 +1678,15 @@ function getSurfaceGroundY(surface = getCurrentSurface(), visibleLeft = null, vi
 
 function getSurfaceVisibleTop(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection, visibleLeft = null, visibleRight = null) {
   const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-  const visibleHeight = getPetSpriteSize() - visibleInsets.top - visibleInsets.bottom;
-  return Math.round(getSurfaceGroundY(surface, visibleLeft, visibleRight) - visibleHeight);
+  const groundY = getSurfaceGroundY(surface, visibleLeft, visibleRight);
+  return surfaceFitRules.getSurfaceVisibleTopFromGroundY(groundY, getPetSpriteSize(), visibleInsets.top, visibleInsets.bottom);
 }
 
 function getGroundedWindowYForSurface(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection, visibleLeft = null, visibleRight = null) {
-  const visibleTop = getSurfaceVisibleTop(surface, stateId, direction, visibleLeft, visibleRight);
-  const windowHeight = getPetWindowHeight();
-  const spriteSize = getPetSpriteSize();
-  const verticalInset = Math.max(0, windowHeight - spriteSize);
   const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-  return Math.round(visibleTop - verticalInset - visibleInsets.top);
+  const groundY = getSurfaceGroundY(surface, visibleLeft, visibleRight);
+  const visibleTop = surfaceFitRules.getSurfaceVisibleTopFromGroundY(groundY, getPetSpriteSize(), visibleInsets.top, visibleInsets.bottom);
+  return surfaceFitRules.getGroundedWindowYFromSurface(visibleTop, getPetWindowHeight(), getPetSpriteSize(), visibleInsets.top);
 }
 
 function clampPetWindowPositionToSurface(x, y, surface = getCurrentSurface(), stateId = activeState, direction = walkDirection) {
@@ -1699,13 +1699,11 @@ function clampPetWindowPositionToSurface(x, y, surface = getCurrentSurface(), st
     height: windowHeight
   };
   const visibleRect = getVisiblePetRectFromBounds(pointRect, stateId, direction);
-  const surfaceY = getGroundedWindowYForSurface(surface, stateId, direction, visibleRect.x, visibleRect.x + visibleRect.width);
-  const minX = x + surface.left - visibleRect.x;
-  const maxX = x + surface.right - (visibleRect.x + visibleRect.width);
-  return {
-    x: clamp(Math.round(x), Math.round(minX), Math.round(maxX)),
-    y: Math.round(surfaceY)
-  };
+  const visibleInsets = getVisibleSpriteInsets(stateId, direction);
+  const groundY = getSurfaceGroundY(surface, visibleRect.x, visibleRect.x + visibleRect.width);
+  const visibleTop = surfaceFitRules.getSurfaceVisibleTopFromGroundY(groundY, getPetSpriteSize(), visibleInsets.top, visibleInsets.bottom);
+  const surfaceY = surfaceFitRules.getGroundedWindowYFromSurface(visibleTop, windowHeight, getPetSpriteSize(), visibleInsets.top);
+  return surfaceFitRules.clampWindowPositionToSurface(x, y, surface.left, surface.right, visibleRect, surfaceY);
 }
 
 function getVisibleBottomPoint(bounds = petWindow?.getBounds(), stateId = activeState, direction = walkDirection) {
@@ -1940,23 +1938,31 @@ function getWindowRoamSurfaceById(windowId) {
 
 function getScaleForSurface(surface, requestedScale = preferredPetScale, stateId = activeState, direction = walkDirection) {
   const currentScale = petScale;
-  let candidate = clampPetScale(requestedScale);
   const area = getSurfaceWorkArea(surface);
-  while (candidate >= PET_SCALE_MIN) {
-    petScale = candidate;
+  const computeFitForScale = (scale) => {
+    petScale = scale;
     const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-    const visibleWidth = getPetSpriteSize() - visibleInsets.left - visibleInsets.right;
-    const visibleHeight = getPetSpriteSize() - visibleInsets.top - visibleInsets.bottom;
-    const hasWidth = visibleWidth <= Math.max(1, surface.right - surface.left);
-    const hasHeight = surface.groundY - visibleHeight >= area.y + VISIBLE_TOP_GAP;
+    const spriteSize = getPetSpriteSize();
     petScale = currentScale;
-    if (hasWidth && hasHeight) {
-      return candidate;
-    }
-    candidate = Math.round((candidate - PET_SCALE_STEP) * 100) / 100;
-  }
+    return {
+      visibleWidth: spriteSize - visibleInsets.left - visibleInsets.right,
+      visibleHeight: spriteSize - visibleInsets.top - visibleInsets.bottom
+    };
+  };
+  const result = surfaceFitRules.getScaleCandidateForSurface(
+    surface.left,
+    surface.right,
+    surface.groundY,
+    area.y,
+    VISIBLE_TOP_GAP,
+    requestedScale,
+    PET_SCALE_MIN,
+    PET_SCALE_MAX,
+    PET_SCALE_STEP,
+    computeFitForScale
+  );
   petScale = currentScale;
-  return null;
+  return result;
 }
 
 function applySurfaceScale(surface, stateId = activeState, direction = walkDirection) {
@@ -2696,23 +2702,15 @@ function removeInteractionPause(reason) {
 // expandRect 已从 shared/bounds.cjs 导入
 
 function getScaledOverlayCollisionPadding() {
-  return Math.round(clamp(
-    OVERLAY_COLLISION_PADDING_BASE * petScale,
-    OVERLAY_COLLISION_PADDING_MIN,
-    OVERLAY_COLLISION_PADDING_MAX
-  ));
+  return petScaleRules.getScaledOverlayCollisionPaddingFromScale(petScale, OVERLAY_COLLISION_PADDING_BASE, OVERLAY_COLLISION_PADDING_MIN, OVERLAY_COLLISION_PADDING_MAX);
 }
 
 function getScaledHoverBodyHitPadding() {
-  return Math.round(clamp(
-    HOVER_BODY_HIT_PADDING_BASE * petScale,
-    HOVER_BODY_HIT_PADDING_MIN,
-    HOVER_BODY_HIT_PADDING_MAX
-  ));
+  return petScaleRules.getScaledHoverBodyHitPaddingFromScale(petScale, HOVER_BODY_HIT_PADDING_BASE, HOVER_BODY_HIT_PADDING_MIN, HOVER_BODY_HIT_PADDING_MAX);
 }
 
 function getScaledHoverAvoidPadding() {
-  return Math.max(HOVER_PANEL_AVOID_PADDING_MIN, Math.round(getPetSpriteSize() * HOVER_PANEL_AVOID_PADDING_SCALE));
+  return petScaleRules.getScaledHoverAvoidPaddingFromSpriteSize(getPetSpriteSize(), HOVER_PANEL_AVOID_PADDING_MIN, HOVER_PANEL_AVOID_PADDING_SCALE);
 }
 
 function getCurrentPetHitRect() {
@@ -3443,19 +3441,12 @@ function getWindowXForVisibleEdge(edge, value, stateId = activeState, direction 
   const windowHeight = getPetWindowHeight();
   const probe = { x: 0, y: 0, width: windowWidth, height: windowHeight };
   const visibleRect = getVisiblePetRectFromBounds(probe, stateId, direction);
-  return edge === "right"
-    ? Math.round(value - visibleRect.width - (visibleRect.x - probe.x))
-    : Math.round(value - (visibleRect.x - probe.x));
+  return surfaceFitRules.getWindowXForVisibleEdge(edge, value, visibleRect, probe);
 }
 
 function getVisibleRectFromSpriteLeft(spriteLeft, spriteTop, stateId = activeState, direction = walkDirection) {
   const insets = getVisibleSpriteInsets(stateId, direction);
-  return {
-    x: Math.round(spriteLeft + insets.left),
-    y: Math.round(spriteTop + insets.top),
-    width: Math.max(1, getPetSpriteSize() - insets.left - insets.right),
-    height: Math.max(1, getPetSpriteSize() - insets.top - insets.bottom)
-  };
+  return surfaceFitRules.getVisibleRectFromSpriteLeft(spriteLeft, spriteTop, getPetSpriteSize(), insets);
 }
 
 function getVisibleCenterFromSpriteLeft(spriteLeft, spriteTop, stateId = activeState, direction = walkDirection) {
@@ -3496,23 +3487,15 @@ function getWindowXForVisibleCenter(centerX, stateId = activeState, direction = 
   const windowHeight = getPetWindowHeight();
   const probe = { x: 0, y: 0, width: windowWidth, height: windowHeight };
   const visibleRect = getVisiblePetRectFromBounds(probe, stateId, direction);
-  return Math.round(centerX - (visibleRect.x - probe.x) - visibleRect.width / 2);
+  return surfaceFitRules.getWindowXForVisibleCenter(centerX, visibleRect, probe);
 }
 
 function getTaskbarWalkCenterLimits(surface = getCurrentSurface(), stateId = activeState) {
   const limits = getWalkVisibleLimits(surface);
+  const spriteSize = getPetSpriteSize();
   const leftInsets = getVisibleSpriteInsets(stateId, -1);
   const rightInsets = getVisibleSpriteInsets(stateId, 1);
-  const leftVisibleWidth = Math.max(1, getPetSpriteSize() - leftInsets.left - leftInsets.right);
-  const rightVisibleWidth = Math.max(1, getPetSpriteSize() - rightInsets.left - rightInsets.right);
-  const halfWidth = Math.max(leftVisibleWidth, rightVisibleWidth) / 2;
-  const left = Math.ceil(limits.left + halfWidth);
-  const right = Math.floor(limits.right - halfWidth);
-  if (left > right) {
-    const center = Math.round((limits.left + limits.right) / 2);
-    return { left: center, right: center };
-  }
-  return { left, right };
+  return surfaceFitRules.getTaskbarWalkCenterLimits(limits, spriteSize, leftInsets, rightInsets);
 }
 
 function buildTaskbarRunwayLayout(centerX, y, direction = walkDirection, surface = getCurrentSurface()) {
@@ -3827,14 +3810,7 @@ function setTaskbarWalkRunwayForEdge(edge, value, y, direction = walkDirection, 
 function getSafeWindowXForDirection(x, surface = getCurrentSurface(), stateId = activeState, direction = walkDirection) {
   const limits = getWalkVisibleLimits(surface);
   const visibleRect = getWalkVisibleRectFromWindowX(x, 0, stateId, direction);
-  let nextX = Math.round(x);
-  if (visibleRect.x < limits.left) {
-    nextX += limits.left - visibleRect.x;
-  }
-  if (visibleRect.x + visibleRect.width > limits.right) {
-    nextX -= visibleRect.x + visibleRect.width - limits.right;
-  }
-  return Math.round(nextX);
+  return surfaceFitRules.getSafeWindowXForDirection(x, limits, visibleRect);
 }
 
 function syncWalkTrackX(x = null) {

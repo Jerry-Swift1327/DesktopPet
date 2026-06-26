@@ -24,8 +24,8 @@ test("frame-geometry 不引用 nativeImage/窗口/缓存/IPC/bubble", () => {
   }
 });
 
-test("frame-geometry 导出 9 个函数", () => {
-  const expected = ["getStableGroundBottom", "combineFrameBoundsList", "applyStableGroundBottomCorrection", "getSpriteRectFromBounds", "getVisibleSpriteInsetsFromBounds", "getVisiblePetRectFromBounds", "getFrameVisibleRectFromBounds", "getBottomAnchorFromVisibleRect", "getFrameVisibleCenterWindowX"];
+test("frame-geometry 导出 10 个函数", () => {
+  const expected = ["getStableGroundBottom", "combineFrameBoundsList", "applyStableGroundBottomCorrection", "getSpriteRectFromBounds", "getVisibleSpriteInsetsFromBounds", "getVisiblePetRectFromBounds", "getFrameVisibleRectFromBounds", "getBottomAnchorFromVisibleRect", "getFrameVisibleCenterWindowX", "getWindowPositionForVisibleRect"];
   for (const fn of expected) {
     assert.equal(typeof frameGeometry[fn], "function", `应导出 ${fn}`);
   }
