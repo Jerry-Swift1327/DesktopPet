@@ -48,6 +48,7 @@ const { createWindowRoamController } = require("./behavior/window-roam-controlle
 const { createWalkController } = require("./behavior/walk-controller.cjs");
 const { createDockController } = require("./behavior/dock-controller.cjs");
 const { createDragController } = require("./behavior/drag-controller.cjs");
+const { createStateController } = require("./behavior/state-controller.cjs");
 const { createScreenMetricsController } = require("./platform/screen-metrics.cjs");
 const { createAutoStartController } = require("./platform/auto-start.cjs");
 const { createWindowSurfaceController } = require("./platform/window-surfaces.cjs");
@@ -382,7 +383,6 @@ let windowSurfacePollTimer = null;
 let lastWindowSurfaceHeavyCheckAt = 0;
 let windowSurfaceMissingTicks = 0;
 let walkPausedAt = 0;
-let pendingActionStatsState = null;
 let lastWalkScaleApplyAt = 0;
 let lastWalkSurfaceSignature = "";
 let windowDockInProgress = false;
@@ -1268,6 +1268,84 @@ const dragController = createDragController({
   // 常量
   ENABLE_WINDOW_DOCKING,
   WINDOW_SURFACE_DRAG_REFRESH_MIN_MS
+});
+
+// 接入 behavior/state-controller.cjs：状态切换、one-shot 动作结算、起点复位与静默归位编排
+// 采用薄包装接线：6 个状态机函数保留原函数名，函数体委托给 stateController
+// pendingActionStatsState 所有权迁入控制器，main.cjs 不再直接持有
+// activeState/selectedState/walkDirection 仍由 main.cjs 持有，经 getter/setter 注入
+const stateController = createStateController({
+  // 通知广播器（main.cjs function 声明，hoisted 可用）
+  sendPetState,
+  sendWalkDirection,
+  // surface/scale/window 回调（不迁移，保留在 main.cjs）
+  groundPetToSurface,
+  applySurfaceScale,
+  resetToTaskbarSurface,
+  setCurrentSurface,
+  getCurrentSurface,
+  getSurfaceDisplay,
+  getSurfaceWorkArea,
+  getTaskbarHomeVisibleRight,
+  getSurfaceVisibleTop,
+  getVisibleSpriteInsets,
+  getPetSpriteSize,
+  getPetWindowPositionForVisibleRect,
+  clampPetWindowPositionToSurface,
+  setPetWindowPosition,
+  syncWalkTrackX,
+  suppressCurrentWindowForSettle,
+  preserveBottomAnchorForState,
+  // walk 回调
+  resetWalkRuntime,
+  startWalkLoop,
+  clearTabbySleepPoseTimer,
+  scheduleTabbySleepPose,
+  applyInterruptedWalkStats,
+  applyActionStats,
+  shouldDelayActionStats,
+  clearPendingWalkBubbleMessage,
+  showPendingWalkBubbleMessage,
+  materializeTaskbarWalkRunwayForState,
+  // 菜单/hover/bubble 回调
+  hideStartupBubble,
+  hidePetMenu,
+  hideHoverPanel,
+  showStatMessages,
+  // stats 回调
+  recordUserOperation,
+  recordInteraction,
+  // 状态查询回调
+  getDefaultDirectionForState,
+  getTransitionBottomAnchor,
+  getState,
+  // 拖拽回调
+  clearDragState,
+  // home display setter（moveToStartPosition 写入 homeDisplayId/homeWorkArea）
+  setHomeDisplayId: (id) => { homeDisplayId = id; },
+  setHomeWorkArea: (area) => { homeWorkArea = area; },
+  // 日志
+  log,
+  // 共享运行态 getter/setter（实时读写 main.cjs 状态，避免快照）
+  getActiveState: () => activeState,
+  setActiveState: (next) => { activeState = next; },
+  getSelectedState: () => selectedState,
+  setSelectedState: (next) => { selectedState = next; },
+  getWalkDirection: () => walkDirection,
+  setWalkDirectionValue: (next) => { walkDirection = next; },
+  // 共享运行态访问器
+  getTaskbarWalkRunway: () => taskbarWalkRunway,
+  // 窗口访问器
+  getPetWindow: () => petWindow,
+  // 常量
+  DEFAULT_STATE,
+  STATE_WALK,
+  STATE_SLEEP,
+  STATE_YAWN,
+  STATE_HISS,
+  TABBY_IDLE_STATES,
+  ONE_SHOT_STATES,
+  states
 });
 
 const autoStartController = createAutoStartController({
@@ -3027,156 +3105,27 @@ function getState(id) {
 }
 
 function setWalkDirection(nextDirection) {
-  const normalizedDirection = nextDirection >= 0 ? 1 : -1;
-  if (walkDirection === normalizedDirection) {
-    return;
-  }
-  walkDirection = normalizedDirection;
-  sendWalkDirection();
+  return stateController.setWalkDirection(nextDirection);
 }
 
 function setState(state, shouldRecordInteraction = true) {
-  if (!states.some((item) => item.id === state)) {
-    return;
-  }
-
-  if (shouldRecordInteraction && TABBY_IDLE_STATES.has(state)) {
-    return;
-  }
-  const previousState = activeState;
-  const nextState = getState(state);
-  const transitionAnchor = previousState !== state && !nextState?.moving
-    ? getTransitionBottomAnchor(previousState, walkDirection)
-    : null;
-  const leavingMovingState = Boolean(getState(previousState)?.moving && !nextState?.moving);
-  const leavingTaskbarWalkRunway = Boolean(taskbarWalkRunway && previousState === STATE_WALK && !nextState?.moving);
-  if (leavingMovingState) {
-    walkDirection = getDefaultDirectionForState(state);
-  }
-  if (leavingTaskbarWalkRunway) {
-    materializeTaskbarWalkRunwayForState(state, walkDirection, { notifyScale: false });
-    sendWalkDirection();
-  }
-
-  let statMessagesToShow = [];
-  if (shouldRecordInteraction) {
-    recordUserOperation();
-    recordInteraction();
-    if (previousState === STATE_WALK && state !== STATE_WALK) {
-      applyInterruptedWalkStats();
-    }
-    if (shouldDelayActionStats(state)) {
-      pendingActionStatsState = state;
-    } else if (state === STATE_WALK) {
-      pendingActionStatsState = null;
-    } else {
-      pendingActionStatsState = null;
-      if (!(previousState === STATE_WALK && state === DEFAULT_STATE)) {
-        statMessagesToShow = applyActionStats(state);
-      }
-    }
-  }
-  selectedState = state;
-  activeState = state;
-  if (previousState !== state) {
-    clearTabbySleepPoseTimer();
-  }
-  if (previousState === STATE_WALK && activeState !== DEFAULT_STATE) {
-    clearPendingWalkBubbleMessage();
-  }
-  if (getState(activeState)?.moving) {
-    hideStartupBubble({ force: true });
-    hidePetMenu();
-    hideHoverPanel();
-    resetWalkRuntime();
-    startWalkLoop();
-  } else {
-    resetWalkRuntime();
-    groundPetToSurface(activeState, walkDirection, getCurrentSurface());
-    preserveBottomAnchorForState(transitionAnchor, activeState, walkDirection, getCurrentSurface());
-  }
-  sendPetState();
-  if (activeState === STATE_SLEEP) {
-    scheduleTabbySleepPose(activeState);
-  }
-  showStatMessages(statMessagesToShow);
-  showPendingWalkBubbleMessage();
+  return stateController.setState(state, shouldRecordInteraction);
 }
 
 function completeOneShotState(state) {
-  if (!ONE_SHOT_STATES.has(state) || activeState !== state) {
-    return;
-  }
-  const shouldApplyPendingStats = pendingActionStatsState === state;
-  setState(DEFAULT_STATE, false);
-  if (shouldApplyPendingStats) {
-    pendingActionStatsState = null;
-    showStatMessages(applyActionStats(state));
-  }
+  return stateController.completeOneShotState(state);
 }
 
 function isWalkingState() {
-  return Boolean(getState(activeState)?.moving);
+  return stateController.isWalkingState();
 }
 
 function moveToStartPosition(shouldRecordOperation = true) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  clearDragState({ notify: true });
-  hideStartupBubble({ force: true });
-  hidePetMenu();
-  hideHoverPanel();
-
-  let surface = getCurrentSurface();
-  if (surface.type !== "window") {
-    surface = resetToTaskbarSurface();
-  }
-  if (!applySurfaceScale(surface, activeState, walkDirection)) {
-    surface = resetToTaskbarSurface();
-    applySurfaceScale(surface, activeState, walkDirection);
-  }
-  setCurrentSurface(surface);
-  const display = getSurfaceDisplay(surface);
-  const area = getSurfaceWorkArea(surface);
-  homeDisplayId = display.id;
-  homeWorkArea = area;
-  walkDirection = -1;
-  const visibleInsets = getVisibleSpriteInsets(activeState, walkDirection);
-  const visibleWidth = getPetSpriteSize() - visibleInsets.left - visibleInsets.right;
-  const visibleLeft = getTaskbarHomeVisibleRight(surface, activeState, walkDirection) - visibleWidth;
-  const { x, y } = getPetWindowPositionForVisibleRect(visibleLeft, getSurfaceVisibleTop(surface, activeState, walkDirection), activeState, walkDirection);
-  const next = clampPetWindowPositionToSurface(x, y, surface, activeState, walkDirection);
-  setPetWindowPosition(next.x, next.y);
-  syncWalkTrackX(next.x);
-  const bounds = petWindow.getBounds();
-  log(`reset-position target=${next.x},${next.y} actual=${bounds.x},${bounds.y},${bounds.width},${bounds.height} surface=${surface.type} state=${activeState}`);
-  if (shouldRecordOperation) {
-    recordUserOperation();
-  }
-  sendPetState();
+  return stateController.moveToStartPosition(shouldRecordOperation);
 }
 
 function settlePetQuietly() {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-
-  pendingActionStatsState = null;
-  clearDragState({ notify: true });
-  hideStartupBubble({ force: true });
-  hidePetMenu();
-  hideHoverPanel();
-  const surface = getCurrentSurface();
-  if (surface.type === "window") {
-    suppressCurrentWindowForSettle(surface);
-    resetToTaskbarSurface(petWindow.getBounds());
-  }
-  resetWalkRuntime();
-  selectedState = DEFAULT_STATE;
-  activeState = DEFAULT_STATE;
-  walkDirection = -1;
-  moveToStartPosition(true);
+  return stateController.settlePetQuietly();
 }
 
 function rememberHomeDisplay() {

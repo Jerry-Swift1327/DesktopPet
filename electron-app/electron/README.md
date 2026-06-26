@@ -6,7 +6,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `main.cjs` | 主进程核心逻辑，负责窗口、状态、动作、菜单、拖拽、贴靠、行走和自启动 |
+| `main.cjs` | 主进程核心逻辑，负责窗口、菜单、拖拽、贴靠、行走、状态机薄包装和自启动 |
 | `preload.cjs` | 安全暴露 IPC API 给渲染层 |
 | `pet-variants.cjs` | 宠物变体、动作 ID、渠道配置和打包 profile |
 | `walk-clock.cjs` | 行走循环暂停/恢复计时 |
@@ -38,6 +38,7 @@
 | `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏跑道） |
 | `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
 | `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
+| `behavior/state-controller.cjs` | 状态控制器（状态切换、one-shot 动作结算、起点复位、静默归位），工厂形式注入依赖，持有 pendingActionStatsState，不直接接触窗口/IPC/bubble |
 | `behavior/window-roam-controller.cjs` | 窗口漫游控制器（目标选取、附着、轮询） |
 | `behavior/eye-tracking-controller.cjs` | 眼球追踪控制器（光标追踪、轮询） |
 | `platform/auto-start.cjs` | 开机自启平台能力适配器（注册表读写、运行态，业务偏好状态由 preferencesStore 统一管理） |
@@ -54,7 +55,8 @@
 | --- | --- |
 | 应用生命周期 | `app.whenReady`、`before-quit`、`requestSingleInstanceLock` |
 | IPC | `ipcMain.handle`、`ipcMain.on`、`pet:` |
-| 宠物动作 | `states`、`setState`、`completeOneShotState` |
+| 宠物动作 | `states`、`setState`（薄包装）、`completeOneShotState`（薄包装） |
+| 状态控制 | `behavior/state-controller.cjs`、`createStateController`、`setState`、`completeOneShotState`、`moveToStartPosition`、`settlePetQuietly`、`setWalkDirection`、`isWalkingState` |
 | 行走 | `advanceWalkStep`、`walkLoop`、`WALK_` |
 | 拖拽 | `dragController`、`dragState`、`drag-start`、`drag-end`、`behavior/drag-controller.cjs` |
 | 窗口贴靠 | `WINDOW_DOCK_`、`windowSurface`、`dockPetAfterDrag` |
