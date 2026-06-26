@@ -6,7 +6,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `main.cjs` | 主进程核心逻辑，负责窗口、菜单、拖拽、贴靠、行走、状态机薄包装、surface 缩放薄包装和自启动 |
+| `main.cjs` | 主进程核心逻辑，负责菜单、拖拽、贴靠、行走、状态机薄包装、surface 缩放薄包装和自启动；宠物窗口对象已委托 `windows/pet-window-controller.cjs` |
 | `preload.cjs` | 安全暴露 IPC API 给渲染层 |
 | `pet-variants.cjs` | 宠物变体、动作 ID、渠道配置和打包 profile |
 | `walk-clock.cjs` | 行走循环暂停/恢复计时 |
@@ -84,7 +84,7 @@
 | surface 缩放编排 | `pet/surface-scale-controller.cjs`、`createSurfaceScaleController`、`applySurfaceScale`、`setPetScale`、`groundPetToSurface` |
 | 消息广播 | `shared/messaging.cjs`、`safeSend`、`broadcastToWindows` |
 | IPC 注册 | `ipc/register-ipc-handlers.cjs`、`registerIpcHandlers` |
-| 窗口创建 | `windows/overlay-window.cjs`、`createOverlayWindow` |
+| 窗口创建 | `windows/overlay-window.cjs`、`createOverlayWindow`、`windows/pet-window-controller.cjs`、`createPetWindow`、`ensurePetWindow` |
 | 窗口定位 | `windows/overlay-geometry.cjs`、`getOverlayPlacementRect`、`getMenuPosition` |
 | 气泡控制 | `windows/bubble-controller.cjs`、`showStartupBubble`、`hideStartupBubble` |
 | 菜单控制 | `windows/menu-controller.cjs`、`showPetMenu`、`hidePetMenu` |

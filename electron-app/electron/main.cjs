@@ -33,6 +33,8 @@ const { safeSend, broadcastToWindows } = require("./shared/messaging.cjs");
 const { sharedGreetings, buildPetStates } = require("./pet/pet-states.cjs");
 // overlay 窗口公共创建 helper，供 createXxxWindow 共享 BrowserWindow 创建逻辑
 const { createOverlayWindow } = require("./windows/overlay-window.cjs");
+// 宠物主窗口生命周期与位置包装控制器，持有 petWindow 运行态
+const { createPetWindowController } = require("./windows/pet-window-controller.cjs");
 // 气泡窗口控制器，管理启动气泡的创建、显示、隐藏和定位
 const { createBubbleController } = require("./windows/bubble-controller.cjs");
  // 自定义面板控制器，管理联系作者面板的创建、显示、隐藏和定位
@@ -347,7 +349,6 @@ const statMessages = {
   close: ["亲密度爆表，今天也最喜欢你", "你一出现，我就自动开心"]
 };
 
-let petWindow;
 const interactionPauseReasons = new Set();
 let activeState = DEFAULT_STATE;
 let selectedState = DEFAULT_STATE;
@@ -491,11 +492,11 @@ const surfaceScaleController = createSurfaceScaleController({
   refreshCustomizationAnchorAfterScale: (...args) => refreshCustomizationAnchorAfterScale(...args),
   repositionStartupBubbleWindow: (...args) => repositionStartupBubbleWindow(...args),
   // 通知回调（封装 safeSend 的 "pet:scale-changed" 通知）
-  sendScaleChanged: (summary) => safeSend(petWindow, "pet:scale-changed", summary),
+  sendScaleChanged: (summary) => safeSend(getPetWindow(), "pet:scale-changed", summary),
   // 偏好持久化
   preferencesStore,
   // 窗口与运行态访问器（实时读写 main.cjs 状态，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
   getTaskbarWalkRunway: () => taskbarWalkRunway,
@@ -523,7 +524,7 @@ const overlayGeometry = createOverlayGeometry({
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
   getCurrentSurface,
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getPetScale: () => surfaceScaleController.getPetScale(),
   getMenuFrozenPetRect: () => menuController ? menuController.getMenuFrozenPetRect() : null,
   getHoverFrozenPetRect: () => hoverController ? hoverController.getHoverFrozenPetRect() : null,
@@ -639,7 +640,7 @@ const bubbleController = createBubbleController({
   clampPanelRect,
   pickBestOverlayCandidate,
   // 窗口访问器
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getMenuWindow: () => menuController ? menuController.getMenuWindow() : null,
   getHoverWindow: () => hoverController ? hoverController.getHoverWindow() : null,
   // 状态访问器
@@ -709,7 +710,7 @@ const customizationController = createCustomizationController({
   getAppPageUrl,
   log,
   // 窗口和状态访问器
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   // 跨控制器互斥
   hidePetMenu: () => menuController.hidePetMenu(),
   hideHoverPanel: () => hoverController.hideHoverPanel(),
@@ -770,7 +771,7 @@ const menuController = createMenuController({
   // 菜单特性
   buildMenuFeatures,
   // 窗口和状态访问器
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
   isCustomizationVisible,
@@ -856,7 +857,7 @@ const hoverController = createHoverController({
   safeSend,
   buildPetConfig,
   // 宠物窗口与状态访问器
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
   getCurrentSurface,
   getDragState: () => dragController.getDragState(),
@@ -978,7 +979,7 @@ const screenMetricsController = createScreenMetricsController({
   getSurfaceWorkArea,
   moveToStartPosition,
   // 可变状态访问器（实时读取 main.cjs 状态，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getDragState: () => dragController.getDragState(),
   getCurrentSurfaceValue: () => currentSurface,
   // 常量
@@ -1010,7 +1011,7 @@ const windowSurfaceController = createWindowSurfaceController({
   isValidRect,
   isLikelyDesktopOrSystemWindow,
   // 可变状态访问器（实时读取 main.cjs 状态，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getDragState: () => dragController.getDragState(),
   getLastDragSample: () => dragController.getLastDragSample(),
   getUserDataRoot: () => userDataRoot,
@@ -1039,7 +1040,7 @@ const eyeTrackingController = createEyeTrackingController({
   // Electron 与运行时
   screen,
   // 窗口与状态访问器（实时读取，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getMenuWindow,
   getHoverWindow,
   getActiveState: () => activeState,
@@ -1073,7 +1074,7 @@ const {
 // 运行时可变状态通过访问器注入，避免创建瞬间固化快照；漫游私有状态由 controller 管理
 const windowRoamController = createWindowRoamController({
   // 窗口与状态访问器（实时读取，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
   getDragState: () => dragController.getDragState(),
@@ -1167,7 +1168,7 @@ const walkController = createWalkController({
   setWalkWindowPositionDirect,
   setWalkWindowPosition,
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
   getPetScale: () => surfaceScaleController.getPetScale(),
   getPreferredPetScale: () => surfaceScaleController.getPreferredPetScale(),
@@ -1258,7 +1259,7 @@ const dockController = createDockController({
   // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag
   retryDockPetAfterDrag: (...args) => dockPetAfterDrag(...args),
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
   getDragState: () => dragController.getDragState(),
@@ -1321,7 +1322,7 @@ const dragController = createDragController({
   // dock 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag（仍委托 dockController）
   dockPetAfterDrag: (...args) => dockPetAfterDrag(...args),
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
   getCurrentSurface,
@@ -1399,7 +1400,7 @@ const stateController = createStateController({
   // 共享运行态访问器
   getTaskbarWalkRunway: () => taskbarWalkRunway,
   // 窗口访问器
-  getPetWindow: () => petWindow,
+  getPetWindow: () => petWindowController.getPetWindow(),
   // 常量
   DEFAULT_STATE,
   STATE_WALK,
@@ -1409,6 +1410,37 @@ const stateController = createStateController({
   TABBY_IDLE_STATES,
   ONE_SHOT_STATES,
   states
+});
+
+// 接入 windows/pet-window-controller.cjs：宠物主窗口生命周期与位置包装控制器
+// 采用薄包装接线：6 个窗口函数保留原函数名，函数体委托给 petWindowController
+// petWindow 运行态所有权迁入控制器，main.cjs 不再直接持有
+const petWindowController = createPetWindowController({
+  // Electron 与运行时
+  BrowserWindow,
+  createOverlayWindow,
+  path,
+  __dirname,
+  getAppPageUrl,
+  getAppIconPath,
+  log,
+  process,
+  screen,
+  // 依赖函数（main.cjs function 声明，hoisted 可用）
+  getPetWindowWidth,
+  getPetWindowHeight,
+  getVisiblePetRectFromBounds,
+  moveToStartPosition,
+  sendPetState,
+  showStartupBubble,
+  repositionStartupBubbleWindow,
+  recordUserOperation,
+  clamp,
+  // 常量
+  VISIBLE_SIDE_GAP,
+  VISIBLE_TOP_GAP,
+  VISIBLE_BOTTOM_GAP,
+  WINDOW_SURFACE_FALLBACK_BLEND_MS
 });
 
 const autoStartController = createAutoStartController({
@@ -1732,7 +1764,7 @@ function setCurrentSurface(surface) {
   return currentSurface;
 }
 
-function resetToTaskbarSurface(bounds = petWindow?.getBounds()) {
+function resetToTaskbarSurface(bounds = getPetWindow()?.getBounds()) {
   const surface = getTaskbarSurfaceForBounds(bounds);
   return setCurrentSurface(surface);
 }
@@ -1778,7 +1810,7 @@ function clampPetWindowPositionToSurface(x, y, surface = getCurrentSurface(), st
   return surfaceFitRules.clampWindowPositionToSurface(x, y, surface.left, surface.right, visibleRect, surfaceY);
 }
 
-function getVisibleBottomPoint(bounds = petWindow?.getBounds(), stateId = activeState, direction = walkDirection) {
+function getVisibleBottomPoint(bounds = getPetWindow()?.getBounds(), stateId = activeState, direction = walkDirection) {
   if (!bounds) {
     return null;
   }
@@ -1786,7 +1818,7 @@ function getVisibleBottomPoint(bounds = petWindow?.getBounds(), stateId = active
   return frameGeometry.getBottomAnchorFromVisibleRect(visibleRect);
 }
 
-function getRenderedFrameBottomAnchor(bounds = petWindow?.getBounds(), stateId = activeState, direction = walkDirection) {
+function getRenderedFrameBottomAnchor(bounds = getPetWindow()?.getBounds(), stateId = activeState, direction = walkDirection) {
   if (!bounds) {
     return null;
   }
@@ -1802,11 +1834,11 @@ function getTransitionBottomAnchor(stateId = activeState, direction = walkDirect
   if (visibleRect) {
     return frameGeometry.getBottomAnchorFromVisibleRect(visibleRect);
   }
-  return getRenderedFrameBottomAnchor(petWindow?.getBounds(), stateId, direction);
+  return getRenderedFrameBottomAnchor(getPetWindow()?.getBounds(), stateId, direction);
 }
 
 function preserveBottomAnchorForState(anchor, stateId = activeState, direction = walkDirection, surface = getCurrentSurface()) {
-  if (!anchor || !petWindow || petWindow.isDestroyed()) {
+  if (!anchor || !getPetWindow() || getPetWindow().isDestroyed()) {
     return false;
   }
   const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
@@ -1914,7 +1946,7 @@ function getLastWindowSurfaceAsyncRefreshAt() {
   return windowSurfaceController.getLastWindowSurfaceAsyncRefreshAt();
 }
 
-function diagnoseDockTargetFromCache(bounds = petWindow?.getBounds()) {
+function diagnoseDockTargetFromCache(bounds = getPetWindow()?.getBounds()) {
   const bottom = getVisibleBottomPoint(bounds);
   if (!bottom) {
     return { ok: false, reason: "missing-bottom-point", surface: null, elapsedMs: 0 };
@@ -2035,11 +2067,11 @@ function buildStatsSummary() {
 }
 
 function sendStats() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return;
   }
   const stats = buildStatsSummary();
-  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:stats-changed", stats);
+  broadcastToWindows([getPetWindow(), getMenuWindow(), getHoverWindow()], "pet:stats-changed", stats);
 }
 
 function scheduleIdleGreeting(delayMs = IDLE_GREETING_DELAY_MS) {
@@ -2169,7 +2201,7 @@ function buildPetConfig() {
     activeState,
     stats: buildStatsSummary(),
     scale: buildScaleSummary(),
-    alwaysOnTop: petWindow?.isAlwaysOnTop() ?? true,
+    alwaysOnTop: getPetWindow()?.isAlwaysOnTop() ?? true,
     states: states.filter((state) => visibleActionIds.has(state.id)).map((state) => {
       const frames = listFrames(state.folder);
       const metadata = readMetadata(state.metadata);
@@ -2268,7 +2300,7 @@ function syncDailyStats() {
 }
 
 function getRenderedFrameVisibleRect() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
 
@@ -2290,7 +2322,7 @@ function getRenderedFrameVisibleRect() {
       }, stateId, frameIndex, direction);
     }
   }
-  return getFrameVisibleRectFromBounds(petWindow.getBounds(), stateId, frameIndex, direction);
+  return getFrameVisibleRectFromBounds(getPetWindow().getBounds(), stateId, frameIndex, direction);
 }
 
 function getRenderedFrameInfo() {
@@ -2339,32 +2371,32 @@ function randomStatDelta(min, max) {
 }
 
 function getPetSpriteRect() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
 
-  return getSpriteRectFromBounds(petWindow.getBounds());
+  return getSpriteRectFromBounds(getPetWindow().getBounds());
 }
 
 function getVisiblePetRect() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
 
-  return getVisiblePetRectFromBounds(petWindow.getBounds(), activeState, walkDirection);
+  return getVisiblePetRectFromBounds(getPetWindow().getBounds(), activeState, walkDirection);
 }
 
 function getCurrentPetVisualRect(stateId = activeState, direction = walkDirection) {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
   return taskbarWalkRunway && isTaskbarWalkActive()
     ? getTaskbarRunwayVisualRect(stateId, direction)
-    : getVisiblePetRectFromBounds(petWindow.getBounds(), stateId, direction);
+    : getVisiblePetRectFromBounds(getPetWindow().getBounds(), stateId, direction);
 }
 
 function getCurrentPetVisualCenterX(stateId = activeState, direction = walkDirection) {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
   const rect = getCurrentPetVisualRect(stateId, direction);
@@ -2503,10 +2535,10 @@ function isInteractionPaused() {
 }
 
 function sendInteractionPauseState() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return;
   }
-  safeSend(petWindow, "pet:pause-state-changed", isInteractionPaused());
+  safeSend(getPetWindow(), "pet:pause-state-changed", isInteractionPaused());
 }
 
 function pauseWalkLoopClock() {
@@ -2571,7 +2603,7 @@ function getScaledHoverAvoidPadding() {
 }
 
 function getCurrentPetHitRect() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
   return expandRect(getRenderedFrameVisibleRect() || getVisiblePetRect(), getHoverBodyHitPaddingForState());
@@ -2589,7 +2621,7 @@ function isCursorInsidePetVisibleRect() {
 }
 
 function isPointInsideRenderedFrame(point, frameInfo = null) {
-  if (!petWindow || petWindow.isDestroyed() || !point) {
+  if (!getPetWindow() || getPetWindow().isDestroyed() || !point) {
     return false;
   }
 
@@ -2613,7 +2645,7 @@ function isPointInsideRenderedFrame(point, frameInfo = null) {
       width: getPetSpriteSize(),
       height: getPetSpriteSize()
     }
-    : getSpriteRectFromBounds(petWindow.getBounds());
+    : getSpriteRectFromBounds(getPetWindow().getBounds());
   const hitPadding = getHoverBodyHitPaddingForState(safeFrameInfo.stateId);
   if (!isPointInsideRect(point, expandRect(spriteRect, hitPadding))) {
     return false;
@@ -2646,69 +2678,24 @@ function setFixedWindowBounds(targetWindow, bounds, width, height, cacheKey) {
   }
 }
 
-function setPetWindowPosition(x, y) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
+function getPetWindow() {
+  return petWindowController.getPetWindow();
+}
 
-  petWindow.setBounds({
-    x: Math.round(x),
-    y: Math.round(y),
-    width: getPetWindowWidth(),
-    height: getPetWindowHeight()
-  }, false);
-  repositionStartupBubbleWindow();
+function setPetWindowPosition(x, y) {
+  return petWindowController.setPetWindowPosition(x, y);
 }
 
 function clampPetWindowPosition(x, y) {
-  const windowWidth = getPetWindowWidth();
-  const windowHeight = getPetWindowHeight();
-  const pointRect = {
-    x: Math.round(x),
-    y: Math.round(y),
-    width: windowWidth,
-    height: windowHeight
-  };
-  const area = screen.getDisplayMatching(pointRect).workArea;
-  const visibleRect = getVisiblePetRectFromBounds(pointRect);
-  const minX = x + area.x + VISIBLE_SIDE_GAP - visibleRect.x;
-  const maxX = x + area.x + area.width - VISIBLE_SIDE_GAP - (visibleRect.x + visibleRect.width);
-  const minY = y + area.y + VISIBLE_TOP_GAP - visibleRect.y;
-  const maxY = y + area.y + area.height - VISIBLE_BOTTOM_GAP - (visibleRect.y + visibleRect.height);
-  return {
-    x: clamp(Math.round(x), Math.round(minX), Math.round(maxX)),
-    y: clamp(Math.round(y), Math.round(minY), Math.round(maxY))
-  };
+  return petWindowController.clampPetWindowPosition(x, y);
 }
 
 function createPetWindow() {
-  log("creating pet window");
-  // 通过 createOverlayWindow 统一创建 BrowserWindow，内部处理 setAlwaysOnTop 与 loadURL
-  petWindow = createOverlayWindow({
-    BrowserWindow, path, __dirname, getAppPageUrl, getAppIconPath, log, process,
-    hash: "pet",
-    width: getPetWindowWidth(),
-    height: getPetWindowHeight(),
-    movable: true,
-    focusable: true,
-    onDidFailLoad: (_event, errorCode, errorDescription, validatedURL) => {
-      log(`pet did-fail-load ${errorCode} ${errorDescription} ${validatedURL}`);
-    },
-    onReady: () => {
-      log("pet window ready-to-show");
-      moveToStartPosition(false);
-      petWindow.show();
-      if (process.platform === "darwin") {
-        moveToStartPosition(false);
-      }
-      sendPetState();
-      showStartupBubble();
-    }
-  });
+  return petWindowController.createPetWindow();
 }
 
 function restoreHoverAfterBubbleIfNeeded() {
-  if (!petWindow || petWindow.isDestroyed() || dragController.getDragState() || shouldSuppressHoverPanel()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed() || dragController.getDragState() || shouldSuppressHoverPanel()) {
     return;
   }
   const menuWin = getMenuWindow();
@@ -2749,7 +2736,7 @@ function scheduleRandomGreeting(delayMs = null) {
 }
 
 function showRandomActionGreeting() {
-  if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed() || !getPetWindow().isVisible()) {
     scheduleRandomGreeting(RANDOM_GREETING_RETRY_MS);
     return;
   }
@@ -2817,30 +2804,25 @@ function togglePetMenu() {
 }
 
 function ensurePetWindow() {
-  if (!petWindow || petWindow.isDestroyed()) {
-    createPetWindow();
-    return;
-  }
-  petWindow.show();
-  sendPetState();
+  return petWindowController.ensurePetWindow();
 }
 
 function sendPetState() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return;
   }
-  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:state-changed", activeState);
-  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:direction-changed", walkDirection);
-  safeSend(petWindow, "pet:scale-changed", buildScaleSummary());
-  safeSend(petWindow, "pet:eye-tracking-look", getLastEyeTrackingLook());
+  broadcastToWindows([getPetWindow(), getMenuWindow(), getHoverWindow()], "pet:state-changed", activeState);
+  broadcastToWindows([getPetWindow(), getMenuWindow(), getHoverWindow()], "pet:direction-changed", walkDirection);
+  safeSend(getPetWindow(), "pet:scale-changed", buildScaleSummary());
+  safeSend(getPetWindow(), "pet:eye-tracking-look", getLastEyeTrackingLook());
   sendStats();
 }
 
 function sendWalkDirection() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return;
   }
-  broadcastToWindows([petWindow, getMenuWindow(), getHoverWindow()], "pet:direction-changed", walkDirection);
+  broadcastToWindows([getPetWindow(), getMenuWindow(), getHoverWindow()], "pet:direction-changed", walkDirection);
 }
 
 function sendDragState(isDragging) {
@@ -2954,11 +2936,11 @@ function resetWalkRuntime({ keepLoop = false } = {}) {
 }
 
 function getInitialWalkDirection(surface = getCurrentSurface(), fallbackDirection = -1) {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return fallbackDirection >= 0 ? 1 : -1;
   }
 
-  const bounds = petWindow.getBounds();
+  const bounds = getPetWindow().getBounds();
   const limits = getWalkVisibleLimits(surface);
   const leftFacingRect = getVisiblePetRectFromBounds(bounds, STATE_WALK, -1);
   const rightFacingRect = getVisiblePetRectFromBounds(bounds, STATE_WALK, 1);
@@ -2977,7 +2959,7 @@ function getInitialWalkDirection(surface = getCurrentSurface(), fallbackDirectio
 }
 
 function alignWalkLoopToSurface(fallbackDirection = -1) {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return;
   }
 
@@ -2986,7 +2968,7 @@ function alignWalkLoopToSurface(fallbackDirection = -1) {
   const nextDirection = getInitialWalkDirection(surface, fallbackDirection);
   setWalkDirection(nextDirection);
   groundPetToSurface(activeState, walkDirection, surface);
-  const bounds = petWindow.getBounds();
+  const bounds = getPetWindow().getBounds();
   const groundedY = getGroundedWindowYForSurface(getCurrentSurface(), activeState, walkDirection);
   const activeSurface = getCurrentSurface();
   if (isTaskbarWalkActive(activeSurface)) {
@@ -3115,10 +3097,10 @@ function buildTaskbarRunwayLayout(centerX, y, direction = walkDirection, surface
 }
 
 function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
-  if (!layout || !petWindow || petWindow.isDestroyed()) {
+  if (!layout || !getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
-  const bounds = petWindow.getBounds();
+  const bounds = getPetWindow().getBounds();
   const nextRunway = {
     windowX: Math.round(layout.windowX),
     windowY: Math.round(layout.windowY),
@@ -3142,7 +3124,7 @@ function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
     || bounds.width !== nextRunway.windowWidth
     || bounds.height !== nextRunway.windowHeight;
   if (boundsChanged) {
-    petWindow.setBounds({
+    getPetWindow().setBounds({
       x: nextRunway.windowX,
       y: nextRunway.windowY,
       width: nextRunway.windowWidth,
@@ -3184,7 +3166,7 @@ function getTaskbarRunwaySpriteLeftForRect(stateId = activeState, direction = wa
 }
 
 function setPetWindowMousePassthrough(shouldIgnore) {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     petWindowMousePassthrough = false;
     return;
   }
@@ -3193,16 +3175,16 @@ function setPetWindowMousePassthrough(shouldIgnore) {
     return;
   }
   petWindowMousePassthrough = nextValue;
-  petWindow.setIgnoreMouseEvents(nextValue, { forward: true });
+  getPetWindow().setIgnoreMouseEvents(nextValue, { forward: true });
 }
 
 function clearPetWindowHitRegion() {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     petWindowHitRegionKey = "";
     return;
   }
-  if (typeof petWindow.setShape === "function") {
-    const bounds = petWindow.getBounds();
+  if (typeof getPetWindow().setShape === "function") {
+    const bounds = getPetWindow().getBounds();
     applyPetWindowHitRegion({
       x: 0,
       y: 0,
@@ -3215,14 +3197,14 @@ function clearPetWindowHitRegion() {
 }
 
 function getTaskbarWalkHitRect() {
-  if (!taskbarWalkRunway || !isTaskbarWalkActive() || !petWindow || petWindow.isDestroyed()) {
+  if (!taskbarWalkRunway || !isTaskbarWalkActive() || !getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
   const visualRect = getTaskbarRunwayVisualRect(activeState, walkDirection);
   if (!visualRect) {
     return null;
   }
-  const bounds = petWindow.getBounds();
+  const bounds = getPetWindow().getBounds();
   const localX = clamp(
     Math.floor(visualRect.x - bounds.x),
     0,
@@ -3252,7 +3234,7 @@ function getTaskbarWalkHitRect() {
 }
 
 function applyPetWindowHitRegion(rect) {
-  if (!petWindow || petWindow.isDestroyed() || typeof petWindow.setShape !== "function") {
+  if (!getPetWindow() || getPetWindow().isDestroyed() || typeof getPetWindow().setShape !== "function") {
     return;
   }
   const shapeRect = rect
@@ -3270,7 +3252,7 @@ function applyPetWindowHitRegion(rect) {
     return;
   }
   petWindowHitRegionKey = nextKey;
-  petWindow.setShape(shapeRect ? [shapeRect] : []);
+  getPetWindow().setShape(shapeRect ? [shapeRect] : []);
 }
 
 function updatePetWindowMousePassthrough() {
@@ -3283,7 +3265,7 @@ function updatePetWindowMousePassthrough() {
 }
 
 function materializeTaskbarWalkRunway({ stateId = activeState, direction = walkDirection, notifyScale = true } = {}) {
-  if (!taskbarWalkRunway || !petWindow || petWindow.isDestroyed()) {
+  if (!taskbarWalkRunway || !getPetWindow() || getPetWindow().isDestroyed()) {
     return false;
   }
   const spriteLeft = getTaskbarRunwaySpriteLeftForRect(stateId, direction);
@@ -3302,7 +3284,7 @@ function materializeTaskbarWalkRunway({ stateId = activeState, direction = walkD
   taskbarWalkRunway = null;
   walkTrackX = null;
   setPetWindowMousePassthrough(false);
-  petWindow.setBounds(nextBounds, false);
+  getPetWindow().setBounds(nextBounds, false);
   clearPetWindowHitRegion();
   if (notifyScale) {
     sendScaleState();
@@ -3311,7 +3293,7 @@ function materializeTaskbarWalkRunway({ stateId = activeState, direction = walkD
 }
 
 function materializeTaskbarWalkRunwayForState(stateId, direction = getDefaultDirectionForState(stateId), { notifyScale = true } = {}) {
-  if (!taskbarWalkRunway || !petWindow || petWindow.isDestroyed()) {
+  if (!taskbarWalkRunway || !getPetWindow() || getPetWindow().isDestroyed()) {
     return false;
   }
   const currentVisualRect = getTaskbarRunwayVisualRect(activeState, walkDirection);
@@ -3326,7 +3308,7 @@ function materializeTaskbarWalkRunwayForState(stateId, direction = getDefaultDir
   taskbarWalkRunway = null;
   walkTrackX = null;
   setPetWindowMousePassthrough(false);
-  petWindow.setBounds({
+  getPetWindow().setBounds({
     x: next.x,
     y: next.y,
     width: getPetWindowWidth(),
@@ -3340,7 +3322,7 @@ function materializeTaskbarWalkRunwayForState(stateId, direction = getDefaultDir
 }
 
 function restoreTaskbarRunwayFromPoint(point, direction = walkDirection, surface = getCurrentSurface()) {
-  if (!point || !isTaskbarWalkActive(surface) || !petWindow || petWindow.isDestroyed()) {
+  if (!point || !isTaskbarWalkActive(surface) || !getPetWindow() || getPetWindow().isDestroyed()) {
     return false;
   }
   const groundedY = getGroundedWindowYForSurface(surface, activeState, direction);
@@ -3406,14 +3388,14 @@ function getSafeWindowXForDirection(x, surface = getCurrentSurface(), stateId = 
 }
 
 function syncWalkTrackX(x = null) {
-  if (!petWindow || petWindow.isDestroyed()) {
+  if (!getPetWindow() || getPetWindow().isDestroyed()) {
     walkTrackX = null;
     taskbarWalkRunway = null;
     clearPetWindowHitRegion();
     return;
   }
 
-  const bounds = petWindow.getBounds();
+  const bounds = getPetWindow().getBounds();
   const surface = getCurrentSurface();
   const sourceX = Number.isFinite(x) ? x : bounds.x;
   if (isTaskbarWalkActive(surface)) {
@@ -3435,14 +3417,14 @@ function syncWalkTrackX(x = null) {
 function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection) {
   const nextX = getSafeWindowXForDirection(x, surface, activeState, direction);
   walkTrackX = nextX;
-  petWindow.setPosition(nextX, Math.round(y), false);
+  getPetWindow().setPosition(nextX, Math.round(y), false);
   return nextX;
 }
 
 function setWalkWindowPositionDirect(x, y) {
   const nextX = Math.round(x);
   walkTrackX = nextX;
-  petWindow.setPosition(nextX, Math.round(y), false);
+  getPetWindow().setPosition(nextX, Math.round(y), false);
   return nextX;
 }
 
@@ -3451,39 +3433,11 @@ function setTaskbarWalkWindowPositionForCenter(centerX, y, direction = walkDirec
     force: true,
     reason: "center"
   });
-  return runway?.windowX ?? petWindow.getBounds().x;
+  return runway?.windowX ?? getPetWindow().getBounds().x;
 }
 
 function animatePetWindowTo(targetX, targetY, durationMs = WINDOW_SURFACE_FALLBACK_BLEND_MS) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  const start = petWindow.getBounds();
-  const fromX = start.x;
-  const fromY = start.y;
-  const toX = Math.round(targetX);
-  const toY = Math.round(targetY);
-  const duration = Math.max(0, Math.round(Number(durationMs) || 0));
-  if (duration <= 0 || (fromX === toX && fromY === toY)) {
-    setPetWindowPosition(toX, toY);
-    return;
-  }
-
-  const startedAt = Date.now();
-  const step = () => {
-    if (!petWindow || petWindow.isDestroyed()) {
-      return;
-    }
-    const progress = Math.min(1, (Date.now() - startedAt) / duration);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const nextX = Math.round(fromX + (toX - fromX) * eased);
-    const nextY = Math.round(fromY + (toY - fromY) * eased);
-    setPetWindowPosition(nextX, nextY);
-    if (progress < 1) {
-      setTimeout(step, 16);
-    }
-  };
-  step();
+  return petWindowController.animatePetWindowTo(targetX, targetY, durationMs);
 }
 
 function buildWalkStepResult({ moved = false } = {}) {
@@ -3774,8 +3728,7 @@ function handleResetScale() {
 }
 
 function handleHidePet() {
-  recordUserOperation();
-  petWindow?.hide();
+  return petWindowController.handleHidePet();
 }
 
 function handleQuit() {

@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "pet", "surface-scale-controller.cjs"), "utf8");
+const petWindowControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "windows", "pet-window-controller.cjs"), "utf8");
 const bubbleSource = fs.readFileSync(path.join(__dirname, "..", "electron", "windows", "bubble-controller.cjs"), "utf8");
 
 // 从 function 声明起按花括号配对提取函数体（仅处理字符串与括号/花括号配对）
@@ -79,7 +80,7 @@ test("startup bubble freezes its anchor while visible", () => {
 
   const resizeBody = bubbleSource.match(/function resizeStartupBubble\(width, height = STARTUP_BUBBLE_HEIGHT\) \{([\s\S]*?)function repositionStartupBubbleWindow/)?.[1] || "";
   const repositionBody = bubbleSource.match(/function repositionStartupBubbleWindow\(\{ refreshAnchor = false \} = \{\}\) \{([\s\S]*?)function showStartupBubble/)?.[1] || "";
-  const moveBody = mainSource.match(/function setPetWindowPosition\(x, y\) \{([\s\S]*?)function clampPetWindowPosition/)?.[1] || "";
+  const moveBody = petWindowControllerSource.match(/function setPetWindowPosition\(x, y\) \{([\s\S]*?)function clampPetWindowPosition/)?.[1] || "";
   const showBody = bubbleSource.match(/function showBubbleMessage\(message = null, durationMs = STARTUP_BUBBLE_DURATION_MS, options = \{\}\) \{([\s\S]*?)function hideStartupBubble/)?.[1] || "";
   const hideBody = bubbleSource.match(/function hideStartupBubble\(options = \{\}\) \{([\s\S]*?)function showPendingWalkBubbleMessage/)?.[1] || "";
 
