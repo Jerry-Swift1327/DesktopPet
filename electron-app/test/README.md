@@ -45,6 +45,7 @@ node --test "test/**/*.test.cjs"
 | `pet-scale-rules.test.cjs` | pet scale 纯计算（clampPetScale NaN/min/max/四舍五入、windowWidth/Height/SpriteSize、spriteLocalX、overlay/hover padding 边界值、buildScaleSummaryFromState） | `../electron/pet/pet-scale-rules.cjs` |
 | `surface-fit-rules.test.cjs` | surface-fit 纯规则（visibleTop/groundedWindowY、clampWindowPositionToSurface、getScaleCandidateForSurface 候选适配、edge/center 互推、taskbarWalkCenterLimits、safeWindowXForDirection、validateWindowSurfaceBounds、getSurfaceGroundYFromSurface） | `../electron/pet/surface-fit-rules.cjs` |
 | `scale-surface-fit-wiring-accessor.test.cjs` | main.cjs 缩放与 surface-fit 薄包装接线结构护栏（9 个原薄包装委托 petScaleRules./surfaceFitRules.、buildScaleSummary/validateWindowSurface/getSurfaceGroundY 转薄包装委托、applySurfaceScale/setPetScale/handleResetScale 仍以 function 声明在 main.cjs） | `../electron/main.cjs` |
+| `drag-behavior-guard.test.cjs` | main.cjs 拖拽链路结构护栏（dragTimer/dragState/lastDragSample 仍在 main.cjs、pet:drag-start/drag-end IPC 接线、clearDragState/handleDragStart/updateDragPosition/handleDragEnd 关键调用、dockPetAfterDrag/applyDockSurfaceAfterDrag 委托 dockController） | `../electron/main.cjs`、`../electron/ipc/register-ipc-handlers.cjs`、`../electron/behavior/dock-controller.cjs` |
 
 ## 何时补测试
 
