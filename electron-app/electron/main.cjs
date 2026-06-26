@@ -1610,25 +1610,16 @@ function validateWindowSurface(surface = currentSurface) {
   if (!surface || surface.type !== "window") {
     return null;
   }
-
   const display = getSurfaceDisplay(surface);
-  const area = display.workArea;
-  const bounds = surface.bounds || {};
-  const left = Math.max(Math.round(bounds.left), area.x + VISIBLE_SIDE_GAP);
-  const right = Math.min(Math.round(bounds.right), area.x + area.width - VISIBLE_SIDE_GAP);
-  const groundY = Math.max(Math.round(bounds.top) - WINDOW_DOCK_GAP, area.y + VISIBLE_TOP_GAP);
-  if (right - left < WINDOW_DOCK_MIN_WIDTH || groundY <= area.y + VISIBLE_TOP_GAP) {
-    return null;
-  }
-
-  return {
-    ...surface,
-    displayId: display.id,
-    left,
-    right,
-    groundY,
-    workArea: { x: area.x, y: area.y, width: area.width, height: area.height }
-  };
+  return surfaceFitRules.validateWindowSurfaceBounds(
+    surface,
+    display.workArea,
+    display.id,
+    VISIBLE_SIDE_GAP,
+    VISIBLE_TOP_GAP,
+    WINDOW_DOCK_GAP,
+    WINDOW_DOCK_MIN_WIDTH
+  );
 }
 
 function getCurrentSurface() {
@@ -1667,13 +1658,7 @@ function getSurfaceWorkArea(surface = getCurrentSurface()) {
 }
 
 function getSurfaceGroundY(surface = getCurrentSurface(), visibleLeft = null, visibleRight = null) {
-  const dock = surface?.darwinBottomDock;
-  if (dock && Number.isFinite(visibleLeft) && Number.isFinite(visibleRight)) {
-    return visibleRight < dock.left || visibleLeft > dock.right
-      ? dock.screenGroundY
-      : surface.groundY;
-  }
-  return surface.groundY;
+  return surfaceFitRules.getSurfaceGroundYFromSurface(surface, visibleLeft, visibleRight);
 }
 
 function getSurfaceVisibleTop(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection, visibleLeft = null, visibleRight = null) {
@@ -2136,17 +2121,17 @@ function buildScaleSummary() {
   const spriteOffsetX = runwayActive
     ? taskbarWalkRunway.spriteOffsetX
     : getSpriteLocalXForWindowWidth(windowWidth);
-  return {
-    value: petScale,
-    min: PET_SCALE_MIN,
-    max: PET_SCALE_MAX,
-    step: PET_SCALE_STEP,
+  return petScaleRules.buildScaleSummaryFromState(
+    petScale,
+    PET_SCALE_MIN,
+    PET_SCALE_MAX,
+    PET_SCALE_STEP,
     windowWidth,
-    windowHeight: getPetWindowHeight(),
-    spriteSize: getPetSpriteSize(),
+    getPetWindowHeight(),
+    getPetSpriteSize(),
     spriteOffsetX,
-    taskbarRunway: runwayActive
-  };
+    runwayActive
+  );
 }
 
 function sendScaleState() {

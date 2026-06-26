@@ -24,9 +24,9 @@ test("pet-scale-rules 不引用 nativeImage/窗口/IPC/screen/safeSend/运行态
   }
 });
 
-test("pet-scale-rules 导出 8 个函数", () => {
-  const expected = ["clampPetScale", "getPetWindowWidthFromScale", "getPetWindowHeightFromScale", "getPetSpriteSizeFromScale", "getSpriteLocalXForWindowWidthAndSpriteSize", "getScaledOverlayCollisionPaddingFromScale", "getScaledHoverBodyHitPaddingFromScale", "getScaledHoverAvoidPaddingFromSpriteSize"];
-  assert.equal(Object.keys(petScaleRules).length, 8);
+test("pet-scale-rules 导出 9 个函数", () => {
+  const expected = ["clampPetScale", "getPetWindowWidthFromScale", "getPetWindowHeightFromScale", "getPetSpriteSizeFromScale", "getSpriteLocalXForWindowWidthAndSpriteSize", "getScaledOverlayCollisionPaddingFromScale", "getScaledHoverBodyHitPaddingFromScale", "getScaledHoverAvoidPaddingFromSpriteSize", "buildScaleSummaryFromState"];
+  assert.equal(Object.keys(petScaleRules).length, 9);
   for (const fn of expected) {
     assert.equal(typeof petScaleRules[fn], "function", `应导出 ${fn}`);
   }
@@ -127,4 +127,19 @@ test("getScaledHoverAvoidPaddingFromSpriteSize min 兜底", () => {
 });
 test("getScaledHoverAvoidPaddingFromSpriteSize scale=1 返回 spriteSize", () => {
   assert.equal(petScaleRules.getScaledHoverAvoidPaddingFromSpriteSize(200, 10, 1), 200);
+});
+
+// buildScaleSummaryFromState
+test("buildScaleSummaryFromState 常规输入返回结构完整", () => {
+  assert.deepEqual(
+    petScaleRules.buildScaleSummaryFromState(1.5, 0.5, 3, 0.1, 200, 200, 100, 50, false),
+    { value: 1.5, min: 0.5, max: 3, step: 0.1, windowWidth: 200, windowHeight: 200, spriteSize: 100, spriteOffsetX: 50, taskbarRunway: false }
+  );
+});
+
+test("buildScaleSummaryFromState taskbarRunway=true 时字段透传", () => {
+  const result = petScaleRules.buildScaleSummaryFromState(1, 0.5, 3, 0.1, 320, 240, 160, 80, true);
+  assert.equal(result.taskbarRunway, true);
+  assert.equal(result.windowWidth, 320);
+  assert.equal(result.spriteOffsetX, 80);
 });

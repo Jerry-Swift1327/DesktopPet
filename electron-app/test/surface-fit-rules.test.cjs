@@ -27,15 +27,17 @@ test("surface-fit-rules 允许 require shared/bounds 但不 require pet-scale-ru
 test("surface-fit-rules 不引用 nativeImage/窗口/screen/IPC/bubble/运行态变量", () => {
   const forbidden = [
     "nativeImage", "petWindow", "menuWindow", "hoverWindow",
-    "screen", "safeSend", "broadcastToWindows", "bubble",
+    "safeSend", "broadcastToWindows", "bubble",
     "petScale", "preferredPetScale", "activeState", "walkDirection"
   ];
   for (const token of forbidden) {
     assert.ok(!sourceCode.includes(token), `不应出现 ${token}`);
   }
+  // screen 单独用词边界断言，避免误判 screenGroundY 等数据字段名
+  assert.doesNotMatch(sourceCode, /\bscreen\b/);
 });
 
-test("surface-fit-rules 导出 9 个函数", () => {
+test("surface-fit-rules 导出 11 个函数", () => {
   const expected = [
     "getSurfaceVisibleTopFromGroundY",
     "getGroundedWindowYFromSurface",
@@ -45,12 +47,14 @@ test("surface-fit-rules 导出 9 个函数", () => {
     "getWindowXForVisibleCenter",
     "getVisibleRectFromSpriteLeft",
     "getTaskbarWalkCenterLimits",
-    "getSafeWindowXForDirection"
+    "getSafeWindowXForDirection",
+    "validateWindowSurfaceBounds",
+    "getSurfaceGroundYFromSurface"
   ];
   for (const fn of expected) {
     assert.equal(typeof surfaceFit[fn], "function", `应导出 ${fn}`);
   }
-  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 9");
+  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 11");
 });
 
 // getSurfaceVisibleTopFromGroundY
@@ -279,4 +283,95 @@ test("getSafeWindowXForDirection 超右边界左移", () => {
     { x: 850, width: 100 }
   );
   assert.equal(result, 800);
+});
+
+// validateWindowSurfaceBounds
+test("validateWindowSurfaceBounds surface 为 null 返回 null", () => {
+  assert.equal(
+    surfaceFit.validateWindowSurfaceBounds(null, { x: 0, y: 0, width: 1920, height: 1080 }, 1, 8, 8, 8, 100),
+    null
+  );
+});
+
+test("validateWindowSurfaceBounds surface.type !== window 返回 null", () => {
+  assert.equal(
+    surfaceFit.validateWindowSurfaceBounds({ type: "taskbar", groundY: 1000 }, { x: 0, y: 0, width: 1920, height: 1080 }, 1, 8, 8, 8, 100),
+    null
+  );
+});
+
+test("validateWindowSurfaceBounds right-left < minWidth 返回 null", () => {
+  // bounds left=100,right=150 → left=100,right=150, right-left=50 < 100
+  assert.equal(
+    surfaceFit.validateWindowSurfaceBounds(
+      { type: "window", bounds: { left: 100, right: 150, top: 500 } },
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      1, 8, 8, 8, 100
+    ),
+    null
+  );
+});
+
+test("validateWindowSurfaceBounds groundY <= area.y + visibleTopGap 返回 null", () => {
+  // workArea y=0, visibleTopGap=8, windowDockGap=8, bounds.top=10
+  // groundY=max(10-8, 0+8)=8, 8<=0+8 → null
+  assert.equal(
+    surfaceFit.validateWindowSurfaceBounds(
+      { type: "window", bounds: { left: 100, right: 800, top: 10 } },
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      1, 8, 8, 8, 100
+    ),
+    null
+  );
+});
+
+test("validateWindowSurfaceBounds 正常返回含 displayId/left/right/groundY/workArea 的对象", () => {
+  // left=max(100,0+8)=100, right=min(800,1920-8)=800, groundY=max(500-8,0+8)=492
+  const result = surfaceFit.validateWindowSurfaceBounds(
+    { type: "window", bounds: { left: 100, right: 800, top: 500 }, hwnd: "0x123" },
+    { x: 0, y: 0, width: 1920, height: 1080 },
+    1, 8, 8, 8, 100
+  );
+  assert.deepEqual(result, {
+    type: "window",
+    bounds: { left: 100, right: 800, top: 500 },
+    hwnd: "0x123",
+    displayId: 1,
+    left: 100,
+    right: 800,
+    groundY: 492,
+    workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+  });
+});
+
+// getSurfaceGroundYFromSurface
+test("getSurfaceGroundYFromSurface 无 darwinBottomDock 返回 surface.groundY", () => {
+  assert.equal(
+    surfaceFit.getSurfaceGroundYFromSurface({ type: "taskbar", groundY: 1000 }, null, null),
+    1000
+  );
+});
+
+test("getSurfaceGroundYFromSurface visibleRight < dock.left 返回 dock.screenGroundY", () => {
+  const surface = { type: "window", groundY: 1040, darwinBottomDock: { left: 500, right: 1000, screenGroundY: 1080 } };
+  // visibleLeft=100, visibleRight=400, 400<500 → 1080
+  assert.equal(surfaceFit.getSurfaceGroundYFromSurface(surface, 100, 400), 1080);
+});
+
+test("getSurfaceGroundYFromSurface visibleLeft > dock.right 返回 dock.screenGroundY", () => {
+  const surface = { type: "window", groundY: 1040, darwinBottomDock: { left: 500, right: 1000, screenGroundY: 1080 } };
+  // visibleLeft=1200, visibleRight=1400, 1200>1000 → 1080
+  assert.equal(surfaceFit.getSurfaceGroundYFromSurface(surface, 1200, 1400), 1080);
+});
+
+test("getSurfaceGroundYFromSurface 区间与 dock 重叠返回 surface.groundY", () => {
+  const surface = { type: "window", groundY: 1040, darwinBottomDock: { left: 500, right: 1000, screenGroundY: 1080 } };
+  // visibleLeft=600, visibleRight=800, 800<500? 否; 600>1000? 否 → 1040
+  assert.equal(surfaceFit.getSurfaceGroundYFromSurface(surface, 600, 800), 1040);
+});
+
+test("getSurfaceGroundYFromSurface visibleLeft/visibleRight 为 null 返回 surface.groundY", () => {
+  const surface = { type: "window", groundY: 1040, darwinBottomDock: { left: 500, right: 1000, screenGroundY: 1080 } };
+  // Number.isFinite(null)===false → 跳过 dock 分支 → 1040
+  assert.equal(surfaceFit.getSurfaceGroundYFromSurface(surface, null, null), 1040);
 });

@@ -110,6 +110,40 @@ function getSafeWindowXForDirection(x, limits, visibleRect) {
   return Math.round(nextX);
 }
 
+// validateWindowSurfaceBounds：根据 workArea 与 bounds 计算窗口 surface 的可见左右沿与 groundY，无效返回 null（纯计算）。
+function validateWindowSurfaceBounds(surface, workArea, displayId, visibleSideGap, visibleTopGap, windowDockGap, windowDockMinWidth) {
+  if (!surface || surface.type !== "window") {
+    return null;
+  }
+  const area = workArea;
+  const bounds = surface.bounds || {};
+  const left = Math.max(Math.round(bounds.left), area.x + visibleSideGap);
+  const right = Math.min(Math.round(bounds.right), area.x + area.width - visibleSideGap);
+  const groundY = Math.max(Math.round(bounds.top) - windowDockGap, area.y + visibleTopGap);
+  if (right - left < windowDockMinWidth || groundY <= area.y + visibleTopGap) {
+    return null;
+  }
+  return {
+    ...surface,
+    displayId,
+    left,
+    right,
+    groundY,
+    workArea: { x: area.x, y: area.y, width: area.width, height: area.height }
+  };
+}
+
+// getSurfaceGroundYFromSurface：根据 darwinBottomDock 与可见区间判定 groundY（纯计算，surface 为 falsy 时保持原抛错语义）。
+function getSurfaceGroundYFromSurface(surface, visibleLeft, visibleRight) {
+  const dock = surface?.darwinBottomDock;
+  if (dock && Number.isFinite(visibleLeft) && Number.isFinite(visibleRight)) {
+    return visibleRight < dock.left || visibleLeft > dock.right
+      ? dock.screenGroundY
+      : surface.groundY;
+  }
+  return surface.groundY;
+}
+
 module.exports = {
   getSurfaceVisibleTopFromGroundY,
   getGroundedWindowYFromSurface,
@@ -119,5 +153,7 @@ module.exports = {
   getWindowXForVisibleCenter,
   getVisibleRectFromSpriteLeft,
   getTaskbarWalkCenterLimits,
-  getSafeWindowXForDirection
+  getSafeWindowXForDirection,
+  validateWindowSurfaceBounds,
+  getSurfaceGroundYFromSurface
 };

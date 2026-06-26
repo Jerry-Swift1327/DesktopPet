@@ -41,6 +41,11 @@ function getScaledHoverAvoidPaddingFromSpriteSize(spriteSize, min, scale) {
   return Math.max(min, Math.round(spriteSize * scale));
 }
 
+// buildScaleSummaryFromState：组装缩放摘要返回对象（纯组装，不读运行态）。
+function buildScaleSummaryFromState(value, min, max, step, windowWidth, windowHeight, spriteSize, spriteOffsetX, taskbarRunway) {
+  return { value, min, max, step, windowWidth, windowHeight, spriteSize, spriteOffsetX, taskbarRunway };
+}
+
 module.exports = {
   clampPetScale,
   getPetWindowWidthFromScale,
@@ -49,5 +54,6 @@ module.exports = {
   getSpriteLocalXForWindowWidthAndSpriteSize,
   getScaledOverlayCollisionPaddingFromScale,
   getScaledHoverBodyHitPaddingFromScale,
-  getScaledHoverAvoidPaddingFromSpriteSize
+  getScaledHoverAvoidPaddingFromSpriteSize,
+  buildScaleSummaryFromState
 };
