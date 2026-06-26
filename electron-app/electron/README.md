@@ -37,6 +37,7 @@
 | `windows/customization-controller.cjs` | 自定义面板控制器（创建、显示、隐藏、定位） |
 | `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏跑道） |
 | `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
+| `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
 | `behavior/window-roam-controller.cjs` | 窗口漫游控制器（目标选取、附着、轮询） |
 | `behavior/eye-tracking-controller.cjs` | 眼球追踪控制器（光标追踪、轮询） |
 | `platform/auto-start.cjs` | 开机自启（注册表读写、缓存、摘要） |
@@ -55,7 +56,7 @@
 | IPC | `ipcMain.handle`、`ipcMain.on`、`pet:` |
 | 宠物动作 | `states`、`setState`、`completeOneShotState` |
 | 行走 | `advanceWalkStep`、`walkLoop`、`WALK_` |
-| 拖拽 | `dragState`、`drag-start`、`drag-end` |
+| 拖拽 | `dragController`、`dragState`、`drag-start`、`drag-end`、`behavior/drag-controller.cjs` |
 | 窗口贴靠 | `WINDOW_DOCK_`、`windowSurface`、`dockPetAfterDrag` |
 | 窗口漫游 | `windowRoam` |
 | 菜单 | `menuWindow`、`PET_MENU_` |
@@ -87,6 +88,7 @@
 | 自定义面板 | `windows/customization-controller.cjs`、`showCustomizationPanel` |
 | 行走控制 | `behavior/walk-controller.cjs`、`advanceWalkStep`、`startWalkLoop` |
 | 贴靠控制 | `behavior/dock-controller.cjs`、`dockPetAfterDrag`、`windowSurfacePoll` |
+| 拖拽控制 | `behavior/drag-controller.cjs`、`handleDragStart`、`handleDragEnd`、`updateDragPosition`、`clearDragState` |
 | 窗口漫游控制 | `behavior/window-roam-controller.cjs`、`tickWindowRoam` |
 | 眼球追踪控制 | `behavior/eye-tracking-controller.cjs`、`tickEyeTracking` |
 | 开机自启 | `platform/auto-start.cjs`、`setAutoStartEnabled` |

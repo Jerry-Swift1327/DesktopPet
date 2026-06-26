@@ -21,6 +21,7 @@ const rendererSources = [
 const controllerSources = [
   fs.readFileSync(path.join(ROOT, "electron", "behavior", "eye-tracking-controller.cjs"), "utf8"),
   fs.readFileSync(path.join(ROOT, "electron", "behavior", "window-roam-controller.cjs"), "utf8"),
+  fs.readFileSync(path.join(ROOT, "electron", "behavior", "drag-controller.cjs"), "utf8"),
   fs.readFileSync(path.join(ROOT, "electron", "windows", "bubble-controller.cjs"), "utf8"),
   fs.readFileSync(path.join(ROOT, "electron", "windows", "hover-controller.cjs"), "utf8"),
   fs.readFileSync(path.join(ROOT, "electron", "windows", "menu-controller.cjs"), "utf8")

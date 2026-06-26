@@ -47,6 +47,7 @@ const { createEyeTrackingController } = require("./behavior/eye-tracking-control
 const { createWindowRoamController } = require("./behavior/window-roam-controller.cjs");
 const { createWalkController } = require("./behavior/walk-controller.cjs");
 const { createDockController } = require("./behavior/dock-controller.cjs");
+const { createDragController } = require("./behavior/drag-controller.cjs");
 const { createScreenMetricsController } = require("./platform/screen-metrics.cjs");
 const { createWindowSurfaceController } = require("./platform/window-surfaces.cjs");
 const { registerIpcHandlers } = require("./ipc/register-ipc-handlers.cjs");
@@ -376,9 +377,6 @@ let walkLeftEdgeStuckSteps = 0;
 let nextWalkStartDirection = null;
 let walkLoop = null;
 let walkLoopTimer = null;
-let dragTimer = null;
-let dragState = null;
-let lastDragSample = null;
 let homeDisplayId = null;
 let homeWorkArea = null;
 let petScale = DEFAULT_PET_SCALE;
@@ -810,7 +808,7 @@ const hoverController = createHoverController({
   getPetWindow: () => petWindow,
   getActiveState: () => activeState,
   getCurrentSurface,
-  getDragState: () => dragState,
+  getDragState: () => dragController.getDragState(),
   getMenuWindow,
   // 几何计算（从 overlay-geometry 注入）
   getHoverPosition,
@@ -930,7 +928,7 @@ const screenMetricsController = createScreenMetricsController({
   moveToStartPosition,
   // 可变状态访问器（实时读取 main.cjs 状态，避免快照）
   getPetWindow: () => petWindow,
-  getDragState: () => dragState,
+  getDragState: () => dragController.getDragState(),
   getCurrentSurfaceValue: () => currentSurface,
   // 常量
   TASKBAR_WALK_RUNWAY_PADDING_SCALE,
@@ -962,8 +960,8 @@ const windowSurfaceController = createWindowSurfaceController({
   isLikelyDesktopOrSystemWindow,
   // 可变状态访问器（实时读取 main.cjs 状态，避免快照）
   getPetWindow: () => petWindow,
-  getDragState: () => dragState,
-  getLastDragSample: () => lastDragSample,
+  getDragState: () => dragController.getDragState(),
+  getLastDragSample: () => dragController.getLastDragSample(),
   getUserDataRoot: () => userDataRoot,
   getCurrentSurfaceValue: () => currentSurface,
   // 常量
@@ -994,7 +992,7 @@ const eyeTrackingController = createEyeTrackingController({
   getMenuWindow,
   getHoverWindow,
   getActiveState: () => activeState,
-  getDragState: () => dragState,
+  getDragState: () => dragController.getDragState(),
   getEyeTrackingEnabled: () => preferencesStore.getEyeTrackingEnabled(),
   getEyeTrackingLookFrameCount: () => assetLoader.getEyeTrackingLookFrameCount(),
   canToggleEyeTracking: () => preferencesStore.canToggleEyeTracking(),
@@ -1027,7 +1025,7 @@ const windowRoamController = createWindowRoamController({
   getPetWindow: () => petWindow,
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
-  getDragState: () => dragState,
+  getDragState: () => dragController.getDragState(),
   getWindowDockInProgress: () => windowDockInProgress,
   getWindowRoamEnabled: () => preferencesStore.getWindowRoamEnabled(),
   canToggleWindowRoam: () => preferencesStore.canToggleWindowRoam(),
@@ -1212,7 +1210,7 @@ const dockController = createDockController({
   getPetWindow: () => petWindow,
   getActiveState: () => activeState,
   getWalkDirection: () => walkDirection,
-  getDragState: () => dragState,
+  getDragState: () => dragController.getDragState(),
   getPetRuntimeConfig: () => petRuntimeConfig,
   getPetScale: () => petScale,
   getPreferredPetScale: () => preferredPetScale,
@@ -1239,6 +1237,49 @@ const dockController = createDockController({
   WINDOW_SURFACE_HEAVY_RECHECK_MS,
   WINDOW_SURFACE_POLL_INTERVAL_MS,
   WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS
+});
+
+// 接入 behavior/drag-controller.cjs：拖拽运行态与拖拽开始、更新、结束流程
+// 采用薄包装接线：6 个拖拽函数保留原函数名，函数体委托给 dragController
+// 拖拽运行态（dragTimer/dragState/lastDragSample）所有权迁入控制器，main.cjs 通过 getter 访问
+const dragController = createDragController({
+  // 依赖函数（main.cjs function 声明，hoisted 可用）
+  safeSend,
+  removeInteractionPause,
+  clampPetWindowPosition,
+  setPetWindowPosition,
+  syncWalkTrackX,
+  getLastWindowSurfaceAsyncRefreshAt,
+  refreshWindowSurfaceCandidatesAsync,
+  getCursorScreenPoint: () => screen.getCursorScreenPoint(),
+  isScreenPoint,
+  isCustomizationVisible,
+  materializeTaskbarWalkRunway,
+  recordUserOperation,
+  addInteractionPause,
+  clearHoverIntent,
+  hideStartupBubble,
+  hidePetMenu,
+  hideHoverPanel,
+  hideCustomizationPanel,
+  setIsPointerOverHoverPanel,
+  log,
+  logWalkDiagnostic,
+  isInteractionPaused,
+  getInteractionPauseSummary,
+  // dock 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag（仍委托 dockController）
+  dockPetAfterDrag: (...args) => dockPetAfterDrag(...args),
+  // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
+  getPetWindow: () => petWindow,
+  getActiveState: () => activeState,
+  getWalkDirection: () => walkDirection,
+  getCurrentSurface,
+  getTaskbarWalkRunway: () => taskbarWalkRunway,
+  getWindowDockInProgress: () => windowDockInProgress,
+  setWindowDockInProgress: (v) => { windowDockInProgress = v; },
+  // 常量
+  ENABLE_WINDOW_DOCKING,
+  WINDOW_SURFACE_DRAG_REFRESH_MIN_MS
 });
 
 function getAutoStartCommand() {
@@ -1814,7 +1855,7 @@ function scoreDockSurface(bottomPoint, rect) {
 }
 
 function getAdaptiveDockThreshold() {
-  const dragSample = dragState?.lastSample || lastDragSample;
+  const dragSample = dragController.getDragState()?.lastSample || dragController.getLastDragSample();
   const now = Date.now();
   const isFastRelease = Boolean(
     dragSample
@@ -2857,7 +2898,7 @@ function createPetWindow() {
 }
 
 function restoreHoverAfterBubbleIfNeeded() {
-  if (!petWindow || petWindow.isDestroyed() || dragState || shouldSuppressHoverPanel()) {
+  if (!petWindow || petWindow.isDestroyed() || dragController.getDragState() || shouldSuppressHoverPanel()) {
     return;
   }
   const menuWin = getMenuWindow();
@@ -2902,7 +2943,7 @@ function showRandomActionGreeting() {
     scheduleRandomGreeting(RANDOM_GREETING_RETRY_MS);
     return;
   }
-  if (dragState) {
+  if (dragController.getDragState()) {
     scheduleRandomGreeting(RANDOM_GREETING_RETRY_MS);
     return;
   }
@@ -3003,10 +3044,7 @@ function sendWalkDirection() {
 }
 
 function sendDragState(isDragging) {
-  if (!petWindow || petWindow.isDestroyed()) {
-    return;
-  }
-  safeSend(petWindow, "pet:drag-state-changed", isDragging);
+  return dragController.sendDragState(isDragging);
 }
 
 function updateRenderedFrame(info) {
@@ -3033,17 +3071,7 @@ function updateRenderedFrame(info) {
 }
 
 function clearDragState({ notify = true, keepPause = false } = {}) {
-  dragState = null;
-  if (dragTimer) {
-    clearInterval(dragTimer);
-    dragTimer = null;
-  }
-  if (!keepPause) {
-    removeInteractionPause("drag");
-  }
-  if (notify) {
-    sendDragState(false);
-  }
+  return dragController.clearDragState({ notify, keepPause });
 }
 
 function setPetScale(nextScale) {
@@ -3668,7 +3696,7 @@ function applyPetWindowHitRegion(rect) {
 
 function updatePetWindowMousePassthrough() {
   setPetWindowMousePassthrough(false);
-  if (!taskbarWalkRunway || !isTaskbarWalkActive() || dragState) {
+  if (!taskbarWalkRunway || !isTaskbarWalkActive() || dragController.getDragState()) {
     clearPetWindowHitRegion();
     return;
   }
@@ -3946,40 +3974,7 @@ function advanceWalkStep(frameStep = 0, elapsedMs = 0) {
 }
 
 function updateDragPosition() {
-  if (!petWindow || petWindow.isDestroyed() || !dragState) {
-    return;
-  }
-  if (dragState.lastPoint) {
-    const now = Date.now();
-    const dx = dragState.lastPoint.x - dragState.originPoint.x;
-    const dy = dragState.lastPoint.y - dragState.originPoint.y;
-    const dt = Math.max(1, now - dragState.lastPoint.at);
-    const distance = Math.hypot(dx, dy);
-    const speedPxPerSec = Math.round((distance * 1000) / dt);
-    dragState.lastSample = {
-      at: now,
-      speedPxPerSec
-    };
-  }
-  const point = screen.getCursorScreenPoint();
-  const now = Date.now();
-  if (dragState.lastPoint) {
-    dragState.originPoint = dragState.lastPoint;
-  }
-  dragState.lastPoint = {
-    x: point.x,
-    y: point.y,
-    at: now
-  };
-  const next = clampPetWindowPosition(point.x - dragState.offsetX, point.y - dragState.offsetY);
-  setPetWindowPosition(next.x, next.y);
-  syncWalkTrackX(next.x);
-  if (ENABLE_WINDOW_DOCKING) {
-    const sinceLastRefresh = now - getLastWindowSurfaceAsyncRefreshAt();
-    if (sinceLastRefresh >= WINDOW_SURFACE_DRAG_REFRESH_MIN_MS) {
-      refreshWindowSurfaceCandidatesAsync();
-    }
-  }
+  return dragController.updateDragPosition();
 }
 
 function fallbackToTaskbarAfterDrag(bounds, reason = "fallback") {
@@ -4048,11 +4043,7 @@ function clearDisplayMetricsSettleTimer() {
 }
 
 function startDragTimer() {
-  if (dragTimer) {
-    clearInterval(dragTimer);
-  }
-  updateDragPosition();
-  dragTimer = setInterval(updateDragPosition, 16);
+  return dragController.startDragTimer();
 }
 
 function runAppReadyStartupSequence() {
@@ -4260,61 +4251,11 @@ function handleAdjustScale(_event, deltaY) {
 }
 
 function handleDragStart(_event, point) {
-  if (!petWindow || petWindow.isDestroyed() || !isScreenPoint(point)) {
-    return;
-  }
-  if (isCustomizationVisible()) {
-    return;
-  }
-
-  if (taskbarWalkRunway) {
-    materializeTaskbarWalkRunway({ stateId: activeState, direction: walkDirection });
-  }
-  const bounds = petWindow.getBounds();
-  recordUserOperation();
-  clearDragState({ notify: false });
-  addInteractionPause("drag");
-  clearHoverIntent();
-  hideStartupBubble({ force: true });
-  hidePetMenu();
-  hideHoverPanel();
-  hideCustomizationPanel();
-  setIsPointerOverHoverPanel(false);
-  const now = Date.now();
-
-  dragState = {
-    offsetX: point.screenX - bounds.x,
-    offsetY: point.screenY - bounds.y,
-    originPoint: { x: point.screenX, y: point.screenY, at: now },
-    lastPoint: { x: point.screenX, y: point.screenY, at: now },
-    lastSample: { at: now, speedPxPerSec: 0 }
-  };
-  lastDragSample = dragState.lastSample;
-  log(`drag-start cursor=${point.screenX},${point.screenY} bounds=${bounds.x},${bounds.y},${bounds.width},${bounds.height}`);
-  sendDragState(true);
-  startDragTimer();
+  return dragController.handleDragStart(_event, point);
 }
 
 function handleDragEnd() {
-  if (dragState && petWindow && !petWindow.isDestroyed()) {
-    if (windowDockInProgress) {
-      clearDragState({ notify: true });
-      return;
-    }
-    windowDockInProgress = true;
-    const bounds = petWindow.getBounds();
-    if (dragState?.lastSample) {
-      lastDragSample = dragState.lastSample;
-    }
-    log(`drag-end bounds=${bounds.x},${bounds.y},${bounds.width},${bounds.height}`);
-    logWalkDiagnostic(`drag-end dock-start state=${activeState} surface=${getCurrentSurface()?.type || "unknown"} paused=${isInteractionPaused()} reasons=${getInteractionPauseSummary()}`);
-    setImmediate(() => {
-      dockPetAfterDrag();
-    });
-    clearDragState({ notify: true, keepPause: true });
-    return;
-  }
-  clearDragState({ notify: true });
+  return dragController.handleDragEnd();
 }
 
 registerIpcHandlers({

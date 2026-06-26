@@ -8,6 +8,10 @@ const controllerSource = fs.readFileSync(
   "utf8"
 );
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const dragControllerSource = fs.readFileSync(
+  path.join(__dirname, "..", "electron", "behavior", "drag-controller.cjs"),
+  "utf8"
+);
 
 // 提取 context 解构块
 const contextBlock = controllerSource.match(/const \{([\s\S]*?)\} = context;/)?.[1] || "";
@@ -173,9 +177,9 @@ test("main.cjs 不再声明 5 个旧窗口候选缓存状态变量", () => {
   assert.doesNotMatch(mainSource, /let lastWindowSurfaceBackgroundRefreshAt\b/, "不应再声明 let lastWindowSurfaceBackgroundRefreshAt");
 });
 
-test("main.cjs updateDragPosition 使用 getLastWindowSurfaceAsyncRefreshAt() 而非裸变量", () => {
-  const funcBlock = mainSource.match(/function updateDragPosition\([\s\S]*?\n\}/)?.[0] || "";
-  assert.ok(funcBlock.length > 0, "应能提取 updateDragPosition 函数");
+test("drag-controller updateDragPosition 使用 getLastWindowSurfaceAsyncRefreshAt() 而非裸变量", () => {
+  const funcBlock = dragControllerSource.match(/function updateDragPosition\([\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(funcBlock.length > 0, "应能从 drag-controller.cjs 提取 updateDragPosition 函数");
   assert.match(funcBlock, /getLastWindowSurfaceAsyncRefreshAt\(\)/, "应使用 getLastWindowSurfaceAsyncRefreshAt()");
   assert.doesNotMatch(funcBlock, /now\s*-\s*lastWindowSurfaceAsyncRefreshAt\b/, "不应直接引用裸变量 lastWindowSurfaceAsyncRefreshAt");
 });
