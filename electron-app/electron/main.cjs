@@ -1612,10 +1612,6 @@ function daysBetween(startDateKey, endDateKey) {
   return petStatsRules.daysBetween(startDateKey, endDateKey);
 }
 
-function clampStat(value) {
-  return petStatsRules.clampStat(value);
-}
-
 function pickRandom(items, fallback = "") {
   const candidates = Array.isArray(items) ? items.filter(Boolean) : [];
   if (candidates.length === 0) {
@@ -2291,10 +2287,6 @@ function getFrameVisibleCenterWindowX(centerX, stateId = activeState, frameIndex
   return frameGeometry.getFrameVisibleCenterWindowX(centerX, probe, visibleRect);
 }
 
-function applyDailyDecay(stats, days = 1) {
-  return petStatsRules.applyDailyDecay(stats, days);
-}
-
 function syncDailyStats() {
   return petStatsController.syncDailyStats();
 }
@@ -2343,10 +2335,6 @@ function getFrameHeadBounds(filePath) {
 
 function getStateHeadBounds(stateId = activeState) {
   return frameBoundsController.getStateHeadBounds(stateId);
-}
-
-function getStableGroundBottom(frameBounds) {
-  return frameGeometry.getStableGroundBottom(frameBounds);
 }
 
 function getVisibleSpriteInsets(stateId = activeState, direction = walkDirection) {
@@ -2425,12 +2413,6 @@ function getPetWindowPositionForVisibleRect(left, top, stateId = activeState, di
   const horizontalInset = getSpriteLocalXForWindowWidth(windowWidth);
   const visibleInsets = getVisibleSpriteInsets(stateId, direction);
   return frameGeometry.getWindowPositionForVisibleRect(left, top, windowWidth, windowHeight, spriteSize, horizontalInset, visibleInsets);
-}
-
-function getGroundedVisibleTop(area, stateId = activeState, direction = walkDirection) {
-  const visibleInsets = getVisibleSpriteInsets(stateId, direction);
-  const visibleHeight = getPetSpriteSize() - visibleInsets.top - visibleInsets.bottom;
-  return area.y + area.height - VISIBLE_BOTTOM_GAP - visibleHeight;
 }
 
 function getRenderedFrameSnapshot(stateId = activeState, direction = walkDirection) {

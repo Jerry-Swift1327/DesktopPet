@@ -17,6 +17,8 @@ function stripComments(source) {
 }
 
 const mainStripped = stripComments(mainSource);
+const autoStartStripped = stripComments(autoStartSource);
+const preferencesStoreStripped = stripComments(preferencesStoreSource);
 
 // 提取 function 起点到下一个 "function " 声明之间的源码块（含嵌套大括号），
 // 用于断言带嵌套 if/try 的函数体内是否包含目标调用。
@@ -111,22 +113,22 @@ test("platform/auto-start.cjs 声明 autoStartRefreshInFlight 运行态", () => 
 });
 
 test("platform/auto-start.cjs 不直接接触窗口/IPC/bubble", () => {
-  assert.ok(!autoStartSource.includes("ipcMain"), "auto-start.cjs 不应出现 ipcMain");
-  assert.ok(!autoStartSource.includes("petWindow"), "auto-start.cjs 不应出现 petWindow");
-  assert.ok(!autoStartSource.includes("safeSend"), "auto-start.cjs 不应出现 safeSend");
-  assert.ok(!autoStartSource.includes("broadcastToWindows"), "auto-start.cjs 不应出现 broadcastToWindows");
-  assert.ok(!autoStartSource.includes("showBubbleMessage"), "auto-start.cjs 不应出现 showBubbleMessage");
-  assert.ok(!autoStartSource.includes("new BrowserWindow"), "auto-start.cjs 不应出现 new BrowserWindow");
+  assert.ok(!autoStartStripped.includes("ipcMain"), "auto-start.cjs 不应出现 ipcMain");
+  assert.ok(!autoStartStripped.includes("petWindow"), "auto-start.cjs 不应出现 petWindow");
+  assert.ok(!autoStartStripped.includes("safeSend"), "auto-start.cjs 不应出现 safeSend");
+  assert.ok(!autoStartStripped.includes("broadcastToWindows"), "auto-start.cjs 不应出现 broadcastToWindows");
+  assert.ok(!autoStartStripped.includes("showBubbleMessage"), "auto-start.cjs 不应出现 showBubbleMessage");
+  assert.ok(!autoStartStripped.includes("new BrowserWindow"), "auto-start.cjs 不应出现 new BrowserWindow");
 });
 
 test("core/preferences-store.cjs 不直接接触窗口/IPC/bubble 且导出摘要/守卫方法", () => {
   // 不直接接触窗口/IPC/bubble
-  assert.ok(!preferencesStoreSource.includes("ipcMain"), "preferences-store.cjs 不应出现 ipcMain");
-  assert.ok(!preferencesStoreSource.includes("petWindow"), "preferences-store.cjs 不应出现 petWindow");
-  assert.ok(!preferencesStoreSource.includes("safeSend"), "preferences-store.cjs 不应出现 safeSend");
-  assert.ok(!preferencesStoreSource.includes("broadcastToWindows"), "preferences-store.cjs 不应出现 broadcastToWindows");
-  assert.ok(!preferencesStoreSource.includes("showBubbleMessage"), "preferences-store.cjs 不应出现 showBubbleMessage");
-  assert.ok(!preferencesStoreSource.includes("new BrowserWindow"), "preferences-store.cjs 不应出现 new BrowserWindow");
+  assert.ok(!preferencesStoreStripped.includes("ipcMain"), "preferences-store.cjs 不应出现 ipcMain");
+  assert.ok(!preferencesStoreStripped.includes("petWindow"), "preferences-store.cjs 不应出现 petWindow");
+  assert.ok(!preferencesStoreStripped.includes("safeSend"), "preferences-store.cjs 不应出现 safeSend");
+  assert.ok(!preferencesStoreStripped.includes("broadcastToWindows"), "preferences-store.cjs 不应出现 broadcastToWindows");
+  assert.ok(!preferencesStoreStripped.includes("showBubbleMessage"), "preferences-store.cjs 不应出现 showBubbleMessage");
+  assert.ok(!preferencesStoreStripped.includes("new BrowserWindow"), "preferences-store.cjs 不应出现 new BrowserWindow");
 
   // 导出块应包含摘要/守卫方法
   const lastReturnIdx = preferencesStoreSource.lastIndexOf("return {");
