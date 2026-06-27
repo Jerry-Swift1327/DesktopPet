@@ -4,6 +4,7 @@ Thumbs.db
 .idea/
 .vscode/
 .trae/
+.agents/
 *.log
 
 # Local archives and transfer packages
@@ -16,6 +17,7 @@ Thumbs.db
 .codex-temp/
 tools/__pycache__/
 tools/pet_actions/__pycache__/
+quality_previews/
 
 # Local handoff/progress notes
 handoff/
@@ -41,13 +43,8 @@ electron-app/logs/
 
 # Build and installer outputs
 electron-app/release/
-electron-app/cat_release/
-electron-app/shorthair_release/
 electron-app/installer/
-electron-app/cat_installer/
-electron-app/shorthair_installer/
 electron-app/mac_installer/
-electron-app/mac_release/
 electron-app/*.dmg
 electron-app/*.app
 electron-app/deliverables/
@@ -56,22 +53,14 @@ electron-app/out/
 
 # Installer sidecars that are not needed for source control
 electron-app/installer/win-unpacked/
-electron-app/cat_installer/win-unpacked/
-electron-app/shorthair_installer/win-unpacked/
 electron-app/installer/*.blockmap
-electron-app/cat_installer/*.blockmap
-electron-app/shorthair_installer/*.blockmap
 electron-app/installer/builder-debug.yml
-electron-app/cat_installer/builder-debug.yml
-electron-app/shorthair_installer/builder-debug.yml
-electron-app/mac_installer/**/*.dmg
-electron-app/mac_installer/**/*.blockmap
-electron-app/mac_installer/**/builder-debug.yml
-electron-app/mac_installer/**/*.app/
-electron-app/mac_installer/**/mac/
 
 # Resource processing intermediate and regeneratable outputs
 assets/animations/*/_replacement_work/
 assets/animations/*/processed_frames/
 assets/animations/*/raw_frames/
 assets/animations/*/*.mp4
+
+# Local private assets (not for remote)
+/contact_qr_code.jpg
