@@ -51,8 +51,7 @@ function createDockController(context) {
     // window-roam-controller 协作方法（状态由 window-roam-controller 统一维护）
     rememberDockedWindowRoamTarget,
     clearWindowRoamSuppression,
-    suppressPreviousWindowAfterDockMiss,
-    setDragFallbackSuppressionUntil,
+    markManualTaskbarSettleUntil,
     markWindowRoamAttached,
     // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag，避免闭包绕过 main.cjs 函数名
     retryDockPetAfterDrag,
@@ -155,11 +154,11 @@ function createDockController(context) {
         }
         clearWindowRoamSuppression();
       } else {
-        if (getWindowRoamEnabled() && previousWindowId) {
-          suppressPreviousWindowAfterDockMiss(previousWindowId);
-        }
         if (getWindowRoamEnabled()) {
-          setDragFallbackSuppressionUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS);
+          const previousSurface = previousWindowId
+            ? { type: "window", sourceWindowId: previousWindowId }
+            : null;
+          markManualTaskbarSettleUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS, previousSurface);
         }
         fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
       }

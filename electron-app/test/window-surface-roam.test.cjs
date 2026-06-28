@@ -70,13 +70,14 @@ function createRoamHarness({ candidates, petBounds = { x: 820, y: 710, width: 12
     getWindowRoamSurfaceById: (id) => candidates.find((item) => item.hwnd === id)?.surface || null,
     WINDOW_ROAM_MAX_MISSING_TICKS: 2,
     WINDOW_ROAM_POLL_INTERVAL_MS: 450,
-    WINDOW_ROAM_START_ATTACH_DELAY_MS: 300,
+    WINDOW_ROAM_START_ATTACH_DELAY_MS: 650,
     WINDOW_ROAM_ATTACH_BLEND_MS: 150
   };
   return {
     controller: createWindowRoamController(context),
     calls,
-    getCurrentSurface: () => currentSurface
+    getCurrentSurface: () => currentSurface,
+    setCurrentSurface: (surface) => { currentSurface = surface; }
   };
 }
 
@@ -88,8 +89,7 @@ test("window roam keeps the current window target when enabled from a window sur
   const prepareBody = controllerSource.match(/function prepareWindowRoamAfterPreferenceEnabled\(currentSurface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
   const resetBody = controllerSource.match(/function resetWindowRoamState\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
   const rememberBody = controllerSource.match(/function rememberDockedWindowRoamTarget\(surface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
-  const suppressPrevBody = controllerSource.match(/function suppressPreviousWindowAfterDockMiss\(previousWindowId\) \{([\s\S]*?)\n  \}/)?.[1] || "";
-  const setDragBody = controllerSource.match(/function setDragFallbackSuppressionUntil\(timestamp\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+  const markManualBody = controllerSource.match(/function markManualTaskbarSettleUntil\(timestamp, surface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 
   // main.cjs 触发链（顶层函数，闭合 } 在行首）
   const setRoamBody = mainSource.match(/function setWindowRoamPreference\(enabled\) \{([\s\S]*?)\n\}/)?.[1] || "";
@@ -114,11 +114,14 @@ test("window roam keeps the current window target when enabled from a window sur
   // controller: rememberDockedWindowRoamTarget 贴靠成功后记录目标
   assert.match(rememberBody, /windowRoamLastTargetId = parseWindowHwnd\(surface\.sourceWindowId\);[\s\S]*windowRoamPreferredTargetId = windowRoamLastTargetId;[\s\S]*windowRoamDragFallbackSuppressedUntil = 0;/);
 
-  // controller: suppressPreviousWindowAfterDockMiss 贴靠失败后抑制旧窗口
-  assert.match(suppressPrevBody, /windowRoamSuppressedWindowId = previousWindowId;/);
+  // controller: markManualTaskbarSettleUntil 设冷却并保留 sticky target（不清空 lastTargetId、不抑制当前窗口）
+  assert.match(markManualBody, /windowRoamDragFallbackSuppressedUntil = timestamp;/);
+  assert.match(markManualBody, /if \(surface && surface\.type === "window"\) \{[\s\S]*windowRoamPreferredTargetId = parseWindowHwnd\(surface\.sourceWindowId\);/);
+  assert.doesNotMatch(markManualBody, /windowRoamSuppressedWindowId/);
+  assert.doesNotMatch(markManualBody, /windowRoamLastTargetId = "";/);
 
-  // controller: setDragFallbackSuppressionUntil 设置回退抑制时间戳
-  assert.match(setDragBody, /windowRoamDragFallbackSuppressedUntil = timestamp;/);
+  // state-controller: settlePetQuietly 调用手动冷却方法（不抑制、不清空 sticky target）
+  assert.match(stateControllerSource, /markManualTaskbarSettleUntil\(Date\.now\(\) \+ WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS, surface\);/);
 
   // main.cjs: setWindowRoamPreference 调用 controller 方法链
   assert.match(setRoamBody, /resetWindowRoamState\(\);/);
@@ -127,7 +130,8 @@ test("window roam keeps the current window target when enabled from a window sur
 
   // dock-controller: dockPetAfterDrag 成功/失败分支调用 controller 方法
   assert.match(dockBody, /rememberDockedWindowRoamTarget\(nextSurface\);[\s\S]*clearWindowRoamSuppression\(\);/);
-  assert.match(dockBody, /suppressPreviousWindowAfterDockMiss\(previousWindowId\);[\s\S]*setDragFallbackSuppressionUntil\(Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS\);/);
+  assert.match(dockBody, /markManualTaskbarSettleUntil\(Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS, previousSurface\);/);
+  assert.doesNotMatch(dockBody, /suppressPreviousWindowAfterDockMiss/);
 });
 
 test("window roam chooses the nearest non-overlapping window and locks the attached target", () => {
@@ -190,7 +194,7 @@ test("window roam polling forces a candidate refresh and waits for the start att
     controller.tickWindowRoam();
     assert.equal(getCurrentSurface().type, "taskbar");
 
-    now = 1301;
+    now = 1651;
     controller.tickWindowRoam();
     assert.equal(getCurrentSurface().sourceWindowId, "b");
     assert.ok(calls.some((call) => call.type === "animate"));
@@ -217,4 +221,63 @@ test("window surface polling falls back when a non-roaming pet is no longer dock
     pollingBody.indexOf('fallbackCurrentSurfaceToTaskbar("window-surface-detached")') < pollingBody.indexOf("const now = Date.now();"),
     "detached window fallback should run before the heavy-check throttle can return"
   );
+});
+
+test("manual taskbar settle cooldown preserves sticky target and skips reattach during cooldown", () => {
+  const surfaceA = createSurface("a", { left: 80, right: 480 });
+  const surfaceB = createSurface("b", { left: 900, right: 1300 });
+  const { controller, calls, getCurrentSurface, setCurrentSurface } = createRoamHarness({
+    candidates: [
+      { hwnd: "a", surface: surfaceA },
+      { hwnd: "b", surface: surfaceB }
+    ]
+  });
+  const originalNow = Date.now;
+  let now = 5000;
+  Date.now = () => now;
+
+  try {
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().sourceWindowId, "b");
+
+    controller.markManualTaskbarSettleUntil(now + 2000, surfaceB);
+    setCurrentSurface({ type: "taskbar", groundY: 900, left: 0, right: 1920 });
+
+    now = 5100;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().type, "taskbar");
+
+    now = 5200;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().type, "taskbar");
+
+    now = 7001;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().sourceWindowId, "b");
+    assert.ok(!calls.some((call) => call.type === "setSurface" && call.id === "a"));
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("manual taskbar settle picks another window only when sticky target is unavailable", () => {
+  const surfaceA = createSurface("a", { left: 80, right: 480 });
+  const surfaceB = createSurface("b", { left: 900, right: 1300 });
+  const { controller, getCurrentSurface, setCurrentSurface } = createRoamHarness({
+    candidates: [{ hwnd: "a", surface: surfaceA }]
+  });
+  const originalNow = Date.now;
+  let now = 5000;
+  Date.now = () => now;
+
+  try {
+    controller.markManualTaskbarSettleUntil(now + 2000, surfaceB);
+    setCurrentSurface({ type: "taskbar", groundY: 900, left: 0, right: 1920 });
+
+    now = 7001;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().sourceWindowId, "a");
+  } finally {
+    Date.now = originalNow;
+  }
 });

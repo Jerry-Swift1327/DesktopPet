@@ -1125,11 +1125,9 @@ const {
   prepareWindowRoamAfterPreferenceEnabled,
   resetWindowRoamState,
   rememberDockedWindowRoamTarget,
-  suppressPreviousWindowAfterDockMiss,
   clearWindowRoamSuppression,
   markWindowRoamAttached,
-  suppressCurrentWindowForSettle,
-  setDragFallbackSuppressionUntil
+  markManualTaskbarSettleUntil
 } = windowRoamController;
 
 // 接入 behavior/walk-controller.cjs：行走循环调度、表面刷新、循环完成、逐步推进
@@ -1260,8 +1258,7 @@ const dockController = createDockController({
   attachPetToWindowRoamSurface,
   rememberDockedWindowRoamTarget,
   clearWindowRoamSuppression,
-  suppressPreviousWindowAfterDockMiss,
-  setDragFallbackSuppressionUntil,
+  markManualTaskbarSettleUntil,
   markWindowRoamAttached,
   // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag
   retryDockPetAfterDrag: (...args) => dockPetAfterDrag(...args),
@@ -1365,7 +1362,7 @@ const stateController = createStateController({
   clampPetWindowPositionToSurface,
   setPetWindowPosition,
   syncWalkTrackX,
-  suppressCurrentWindowForSettle,
+  markManualTaskbarSettleUntil,
   preserveBottomAnchorForState,
   // walk 回调
   resetWalkRuntime,
@@ -1414,6 +1411,7 @@ const stateController = createStateController({
   STATE_SLEEP,
   STATE_YAWN,
   STATE_HISS,
+  WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
   TABBY_IDLE_STATES,
   ONE_SHOT_STATES,
   states
@@ -3709,7 +3707,6 @@ function handleCompleteOneShot(_event, state) {
 function handleResetPosition() {
   recordUserOperation();
   settlePetQuietly();
-  setDragFallbackSuppressionUntil(Date.now() + WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS);
 }
 
 function handleResetScale() {

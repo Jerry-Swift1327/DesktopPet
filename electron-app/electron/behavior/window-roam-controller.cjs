@@ -308,22 +308,18 @@ function createWindowRoamController(context) {
     windowRoamDragFallbackSuppressedUntil = 0;
   }
 
-  // 拖拽贴靠失败后抑制旧窗口（对应 dockPetAfterDrag 失败分支前半段）
-  function suppressPreviousWindowAfterDockMiss(previousWindowId) {
-    if (!getWindowRoamEnabled() || !previousWindowId) {
-      return;
-    }
-    windowRoamSuppressedWindowId = previousWindowId;
-  }
-
-  // 设置回退抑制时间戳（对应 dockPetAfterDrag 失败分支后半段）
-  function setDragFallbackSuppressionUntil(timestamp) {
-    windowRoamDragFallbackSuppressedUntil = timestamp;
-  }
-
   // 清理抑制窗口（对应 dockPetAfterDrag 成功分支末尾）
   function clearWindowRoamSuppression() {
     windowRoamSuppressedWindowId = "";
+  }
+
+  // 手动回任务栏冷却：设置冷却时间戳并把当前窗口记为下一次优先恢复目标，
+  // 保留 sticky target（不清空 lastTargetId、不写入 suppressedWindowId）
+  function markManualTaskbarSettleUntil(timestamp, surface) {
+    windowRoamDragFallbackSuppressedUntil = timestamp;
+    if (surface && surface.type === "window") {
+      windowRoamPreferredTargetId = parseWindowHwnd(surface.sourceWindowId);
+    }
   }
 
   // 窗口表面轮询切换成功时记录目标并清空 miss 计数（对应 startWindowSurfacePolling 漫游切换成功分支）
@@ -334,15 +330,6 @@ function createWindowRoamController(context) {
     windowRoamLastTargetId = parseWindowHwnd(surface.sourceWindowId);
     windowRoamSuppressedWindowId = "";
     windowRoamMissingTicks = 0;
-  }
-
-  // settlePetQuietly 时记录当前窗口为抑制目标并清空 lastTargetId（对应 settlePetQuietly window 分支）
-  function suppressCurrentWindowForSettle(surface) {
-    if (!surface || surface.type !== "window") {
-      return;
-    }
-    windowRoamSuppressedWindowId = parseWindowHwnd(surface.sourceWindowId);
-    windowRoamLastTargetId = "";
   }
 
   return {
@@ -356,11 +343,9 @@ function createWindowRoamController(context) {
     prepareWindowRoamAfterPreferenceEnabled,
     resetWindowRoamState,
     rememberDockedWindowRoamTarget,
-    suppressPreviousWindowAfterDockMiss,
     clearWindowRoamSuppression,
-    markWindowRoamAttached,
-    suppressCurrentWindowForSettle,
-    setDragFallbackSuppressionUntil
+    markManualTaskbarSettleUntil,
+    markWindowRoamAttached
   };
 }
 

@@ -30,7 +30,8 @@ function createStateController(context) {
     clampPetWindowPositionToSurface,
     setPetWindowPosition,
     syncWalkTrackX,
-    suppressCurrentWindowForSettle,
+    markManualTaskbarSettleUntil,
+    WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
     preserveBottomAnchorForState,
     // walk 回调
     resetWalkRuntime,
@@ -236,7 +237,7 @@ function createStateController(context) {
     hideHoverPanel();
     const surface = getCurrentSurface();
     if (surface.type === "window") {
-      suppressCurrentWindowForSettle(surface);
+      markManualTaskbarSettleUntil(Date.now() + WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS, surface);
       resetToTaskbarSurface(win.getBounds());
     }
     resetWalkRuntime();
