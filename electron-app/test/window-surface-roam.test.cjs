@@ -6,6 +6,7 @@ const path = require("node:path");
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "window-roam-controller.cjs"), "utf8");
 const dockControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "dock-controller.cjs"), "utf8");
+const stateControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "state-controller.cjs"), "utf8");
 const { createWindowRoamController } = require("../electron/behavior/window-roam-controller.cjs");
 
 function createSurface(id, { left, top = 100, right, bottom = 500, groundY = 500 }) {
@@ -68,7 +69,8 @@ function createRoamHarness({ candidates, petBounds = { x: 820, y: 710, width: 12
     fallbackCurrentSurfaceToTaskbar: () => calls.push({ type: "fallback" }),
     getWindowRoamSurfaceById: (id) => candidates.find((item) => item.hwnd === id)?.surface || null,
     WINDOW_ROAM_MAX_MISSING_TICKS: 2,
-    WINDOW_ROAM_POLL_INTERVAL_MS: 250,
+    WINDOW_ROAM_POLL_INTERVAL_MS: 450,
+    WINDOW_ROAM_START_ATTACH_DELAY_MS: 300,
     WINDOW_ROAM_ATTACH_BLEND_MS: 150
   };
   return {
@@ -169,18 +171,33 @@ test("window roam keeps top candidate priority for overlapping windows", () => {
   assert.equal(getCurrentSurface().sourceWindowId, "top");
 });
 
-test("window roam polling forces a candidate refresh and runs one immediate tick", () => {
+test("window roam polling forces a candidate refresh and waits for the start attach delay", () => {
   const targetWindow = createSurface("b", { left: 900, right: 1300 });
   const { controller, calls, getCurrentSurface } = createRoamHarness({
     candidates: [{ hwnd: "b", surface: targetWindow }]
   });
+  const originalNow = Date.now;
+  let now = 1000;
+  Date.now = () => now;
 
-  controller.startWindowRoamPolling();
-  controller.stopWindowRoamPolling();
+  try {
+    controller.startWindowRoamPolling();
 
-  assert.deepEqual(calls[0], { type: "refresh", options: { force: true } });
-  assert.equal(getCurrentSurface().sourceWindowId, "b");
-  assert.ok(calls.some((call) => call.type === "animate"));
+    assert.deepEqual(calls[0], { type: "refresh", options: { force: true } });
+    assert.equal(getCurrentSurface().type, "taskbar");
+    assert.equal(calls.filter((call) => call.type === "animate").length, 0);
+
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().type, "taskbar");
+
+    now = 1301;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().sourceWindowId, "b");
+    assert.ok(calls.some((call) => call.type === "animate"));
+  } finally {
+    controller.stopWindowRoamPolling();
+    Date.now = originalNow;
+  }
 });
 
 test("window surface polling falls back when a non-roaming pet is no longer docked", () => {

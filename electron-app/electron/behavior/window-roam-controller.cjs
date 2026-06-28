@@ -39,6 +39,7 @@ function createWindowRoamController(context) {
     // 常量
     WINDOW_ROAM_MAX_MISSING_TICKS,
     WINDOW_ROAM_POLL_INTERVAL_MS,
+    WINDOW_ROAM_START_ATTACH_DELAY_MS,
     WINDOW_ROAM_ATTACH_BLEND_MS
   } = context;
 
@@ -252,7 +253,10 @@ function createWindowRoamController(context) {
       return;
     }
     refreshWindowSurfaceCandidatesAsync({ force: true });
-    tickWindowRoam();
+    windowRoamDragFallbackSuppressedUntil = Math.max(
+      windowRoamDragFallbackSuppressedUntil,
+      Date.now() + WINDOW_ROAM_START_ATTACH_DELAY_MS
+    );
     windowRoamPollTimer = setInterval(tickWindowRoam, WINDOW_ROAM_POLL_INTERVAL_MS);
   }
 
@@ -265,6 +269,7 @@ function createWindowRoamController(context) {
     windowRoamPollTimer = null;
     windowRoamLastTargetId = "";
     windowRoamPreferredTargetId = "";
+    windowRoamDragFallbackSuppressedUntil = 0;
   }
 
   // 根据启用状态切换轮询

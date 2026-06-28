@@ -140,6 +140,8 @@ const {
   WINDOW_ROAM_POLL_INTERVAL_MS,
   WINDOW_ROAM_MAX_MISSING_TICKS,
   WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
+  WINDOW_ROAM_START_ATTACH_DELAY_MS,
+  WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
   WINDOW_ROAM_ATTACH_BLEND_MS,
   EYE_TRACKING_POLL_INTERVAL_MS,
   EYE_TRACKING_FRAME_NAME_PATTERN,
@@ -1109,6 +1111,7 @@ const windowRoamController = createWindowRoamController({
   // 常量
   WINDOW_ROAM_MAX_MISSING_TICKS,
   WINDOW_ROAM_POLL_INTERVAL_MS,
+  WINDOW_ROAM_START_ATTACH_DELAY_MS,
   WINDOW_ROAM_ATTACH_BLEND_MS
 });
 const {
@@ -2879,8 +2882,8 @@ function isWalkingState() {
   return stateController.isWalkingState();
 }
 
-function moveToStartPosition(shouldRecordOperation = true) {
-  return stateController.moveToStartPosition(shouldRecordOperation);
+function moveToStartPosition(options = true) {
+  return stateController.moveToStartPosition(options);
 }
 
 function settlePetQuietly() {
@@ -3706,6 +3709,7 @@ function handleCompleteOneShot(_event, state) {
 function handleResetPosition() {
   recordUserOperation();
   settlePetQuietly();
+  setDragFallbackSuppressionUntil(Date.now() + WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS);
 }
 
 function handleResetScale() {

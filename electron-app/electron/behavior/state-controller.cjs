@@ -179,7 +179,12 @@ function createStateController(context) {
     return Boolean(getState(getActiveState())?.moving);
   }
 
-  function moveToStartPosition(shouldRecordOperation = true) {
+  function moveToStartPosition(options = true) {
+    const hasOptionsObject = options && typeof options === "object";
+    const shouldRecordOperation = hasOptionsObject
+      ? options.shouldRecordOperation !== false
+      : options;
+    const forceTaskbar = hasOptionsObject ? Boolean(options.forceTaskbar) : false;
     const win = getPetWindow();
     if (!win || win.isDestroyed()) {
       return;
@@ -189,8 +194,8 @@ function createStateController(context) {
     hidePetMenu();
     hideHoverPanel();
 
-    let surface = getCurrentSurface();
-    if (surface.type !== "window") {
+    let surface = forceTaskbar ? resetToTaskbarSurface(win.getBounds()) : getCurrentSurface();
+    if (!forceTaskbar && surface.type !== "window") {
       surface = resetToTaskbarSurface();
     }
     if (!applySurfaceScale(surface, getActiveState(), getWalkDirection())) {
@@ -238,7 +243,7 @@ function createStateController(context) {
     setSelectedState(DEFAULT_STATE);
     setActiveState(DEFAULT_STATE);
     setWalkDirectionValue(-1);
-    moveToStartPosition(true);
+    moveToStartPosition({ shouldRecordOperation: true, forceTaskbar: true });
   }
 
   return {
