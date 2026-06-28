@@ -46,6 +46,7 @@ function createPetWindowController(context) {
       hash: "pet",
       width: getPetWindowWidth(),
       height: getPetWindowHeight(),
+      skipTaskbar: false,
       movable: true,
       focusable: true,
       onDidFailLoad: (_event, errorCode, errorDescription, validatedURL) => {

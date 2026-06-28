@@ -30,7 +30,7 @@
 | `pet/surface-scale-controller.cjs` | surface 缩放副作用编排控制器（petScale/preferredPetScale 运行态、surface 缩放适配、落地编排、overlay 锚点刷新、偏好持久化），工厂形式注入依赖，不直接接触窗口/IPC/bubble |
 | `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
 | `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
-| `windows/overlay-window.cjs` | overlay 窗口公共创建 helper，归纳 BrowserWindow 选项 |
+| `windows/overlay-window.cjs` | overlay 窗口公共创建 helper，归纳 BrowserWindow 选项；overlay 默认不进任务栏，宠物主窗口可单独显示任务栏图标 |
 | `windows/overlay-geometry.cjs` | overlay 定位几何，含菜单/悬停/自定义面板位置计算 |
 | `windows/bubble-controller.cjs` | 气泡窗口控制器（创建、显示、隐藏、定位） |
 | `windows/menu-controller.cjs` | 菜单窗口控制器（创建、显示、隐藏、定位、可见性） |
@@ -40,7 +40,7 @@
 | `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
 | `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
 | `behavior/state-controller.cjs` | 状态控制器（状态切换、one-shot 动作结算、起点复位、静默归位），工厂形式注入依赖，持有 pendingActionStatsState，不直接接触窗口/IPC/bubble |
-| `behavior/window-roam-controller.cjs` | 窗口漫游控制器（目标选取、附着、轮询） |
+| `behavior/window-roam-controller.cjs` | 窗口漫游控制器（最近/锁定目标选取、附着、轮询） |
 | `behavior/eye-tracking-controller.cjs` | 眼球追踪控制器（光标追踪、轮询） |
 | `platform/auto-start.cjs` | 开机自启平台能力适配器（注册表读写、运行态，业务偏好状态由 preferencesStore 统一管理） |
 | `platform/window-surfaces.cjs` | 窗口候选探测（PowerShell 调用、解析、评分） |

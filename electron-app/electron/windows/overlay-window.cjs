@@ -25,7 +25,8 @@ function createOverlayWindow({
   onReady = null,
   onClose = null,
   onBlur = null,
-  onDidFailLoad = null
+  onDidFailLoad = null,
+  skipTaskbar = true
 }) {
   // 获取应用图标，缺失时回退 undefined 让 Electron 使用默认图标
   const iconPath = getAppIconPath();
@@ -40,7 +41,7 @@ function createOverlayWindow({
     resizable: false,
     movable: movable,
     hasShadow: hasShadow,
-    skipTaskbar: true,
+    skipTaskbar: skipTaskbar,
     alwaysOnTop: true,
     show: false,
     focusable: focusable,

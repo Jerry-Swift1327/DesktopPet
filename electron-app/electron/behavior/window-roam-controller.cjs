@@ -17,6 +17,7 @@ function createWindowRoamController(context) {
     parseWindowHwnd,
     getCachedWindowSurfaceCandidates,
     buildWindowSurfaceFromItem,
+    getVisiblePetRectFromBounds,
     applySurfaceScale,
     setCurrentSurface,
     groundPetToSurface,
@@ -26,6 +27,7 @@ function createWindowRoamController(context) {
     getSurfaceVisibleTop,
     clampPetWindowPositionToSurface,
     setPetWindowPosition,
+    animatePetWindowTo,
     syncWalkTrackX,
     isWalkingState,
     refreshWalkLoopAfterSurfaceChange,
@@ -36,7 +38,8 @@ function createWindowRoamController(context) {
     getWindowRoamSurfaceById,
     // 常量
     WINDOW_ROAM_MAX_MISSING_TICKS,
-    WINDOW_ROAM_POLL_INTERVAL_MS
+    WINDOW_ROAM_POLL_INTERVAL_MS,
+    WINDOW_ROAM_ATTACH_BLEND_MS
   } = context;
 
   // 控制器私有状态：轮询定时器与漫游目标记录
@@ -49,10 +52,10 @@ function createWindowRoamController(context) {
   let lastWindowSurfaceHeavyCheckAt = 0;
 
   // 选取首个可附着的窗口表面，可排除指定窗口与当前抑制的窗口
-  function getTopWindowRoamSurface(excludedWindowId = "") {
-    refreshWindowSurfaceCandidatesAsync();
+  function collectWindowRoamSurfaceEntries(excludedWindowId = "") {
     const excludedId = parseWindowHwnd(excludedWindowId);
     const candidates = getCachedWindowSurfaceCandidates();
+    const entries = [];
     for (const item of candidates) {
       const itemWindowId = parseWindowHwnd(item.hwnd);
       if (itemWindowId === windowRoamSuppressedWindowId || (excludedId && itemWindowId === excludedId)) {
@@ -60,10 +63,101 @@ function createWindowRoamController(context) {
       }
       const built = buildWindowSurfaceFromItem(item);
       if (built.surface) {
-        return built.surface;
+        entries.push({ id: itemWindowId, surface: built.surface });
       }
     }
-    return null;
+    return entries;
+  }
+
+  function findWindowRoamSurfaceById(windowId, entries) {
+    const targetId = parseWindowHwnd(windowId);
+    if (!targetId || targetId === windowRoamSuppressedWindowId) {
+      return null;
+    }
+    const entry = entries.find((item) => item.id === targetId);
+    if (entry?.surface) {
+      return entry.surface;
+    }
+    const surface = getWindowRoamSurfaceById(targetId);
+    return parseWindowHwnd(surface?.sourceWindowId) === targetId ? surface : null;
+  }
+
+  function getPetVisibleCenter() {
+    const petWindow = getPetWindow();
+    if (!petWindow || petWindow.isDestroyed()) {
+      return null;
+    }
+    const visibleRect = getVisiblePetRectFromBounds(
+      petWindow.getBounds(),
+      getActiveState(),
+      getWalkDirection()
+    );
+    if (!visibleRect) {
+      return null;
+    }
+    return {
+      x: visibleRect.x + Math.round(visibleRect.width / 2),
+      y: visibleRect.y + Math.round(visibleRect.height / 2)
+    };
+  }
+
+  function getDistanceToWindowSurface(surface, point) {
+    const surfaceX = Math.max(surface.left, Math.min(point.x, surface.right));
+    const surfaceY = surface.groundY;
+    return Math.pow(point.x - surfaceX, 2) + Math.pow(point.y - surfaceY, 2);
+  }
+
+  function doWindowRectsOverlap(a, b) {
+    if (!a || !b) {
+      return false;
+    }
+    return Math.min(a.right, b.right) > Math.max(a.left, b.left)
+      && Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top);
+  }
+
+  function chooseNearestWindowRoamSurface(entries) {
+    if (entries.length <= 1) {
+      return entries[0]?.surface || null;
+    }
+    const petCenter = getPetVisibleCenter();
+    if (!petCenter) {
+      return entries[0].surface;
+    }
+
+    let best = null;
+    for (const entry of entries) {
+      const score = getDistanceToWindowSurface(entry.surface, petCenter);
+      if (!best) {
+        best = { ...entry, score };
+        continue;
+      }
+      if (doWindowRectsOverlap(best.surface.bounds, entry.surface.bounds)) {
+        continue;
+      }
+      if (score < best.score) {
+        best = { ...entry, score };
+      }
+    }
+    return best?.surface || null;
+  }
+
+  function selectWindowRoamSurface(excludedWindowId = "") {
+    refreshWindowSurfaceCandidatesAsync();
+    const entries = collectWindowRoamSurfaceEntries(excludedWindowId);
+    const currentLockedId = getCurrentSurface().type === "window" ? windowRoamLastTargetId : "";
+    const preferredSurface = windowRoamPreferredTargetId
+      ? findWindowRoamSurfaceById(windowRoamPreferredTargetId, entries)
+      : null;
+    const lockedSurface = !preferredSurface && currentLockedId
+      ? findWindowRoamSurfaceById(currentLockedId, entries)
+      : null;
+    windowRoamPreferredTargetId = "";
+    return preferredSurface || lockedSurface || chooseNearestWindowRoamSurface(entries);
+  }
+
+  function getTopWindowRoamSurface(excludedWindowId = "") {
+    refreshWindowSurfaceCandidatesAsync();
+    return collectWindowRoamSurfaceEntries(excludedWindowId)[0]?.surface || null;
   }
 
   // 将宠物附着到指定窗口表面，更新缩放、位置与行走轨道
@@ -90,7 +184,11 @@ function createWindowRoamController(context) {
       walkDirection
     );
     const next = clampPetWindowPositionToSurface(target.x, target.y, nextSurface, activeState, walkDirection);
-    setPetWindowPosition(next.x, next.y);
+    if (isWalkingState()) {
+      setPetWindowPosition(next.x, next.y);
+    } else {
+      animatePetWindowTo(next.x, next.y, WINDOW_ROAM_ATTACH_BLEND_MS);
+    }
     syncWalkTrackX(next.x);
     lastWindowSurfaceHeavyCheckAt = Date.now();
     if (isWalkingState()) {
@@ -122,11 +220,7 @@ function createWindowRoamController(context) {
       return;
     }
 
-    const preferredSurface = windowRoamPreferredTargetId
-      ? getWindowRoamSurfaceById(windowRoamPreferredTargetId)
-      : null;
-    windowRoamPreferredTargetId = "";
-    const surface = preferredSurface || getTopWindowRoamSurface();
+    const surface = selectWindowRoamSurface();
     if (!surface) {
       windowRoamMissingTicks += 1;
       if (windowRoamMissingTicks >= WINDOW_ROAM_MAX_MISSING_TICKS) {
@@ -157,6 +251,7 @@ function createWindowRoamController(context) {
     if (windowRoamPollTimer || !canToggleWindowRoam()) {
       return;
     }
+    refreshWindowSurfaceCandidatesAsync({ force: true });
     tickWindowRoam();
     windowRoamPollTimer = setInterval(tickWindowRoam, WINDOW_ROAM_POLL_INTERVAL_MS);
   }

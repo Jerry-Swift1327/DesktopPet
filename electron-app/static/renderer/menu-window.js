@@ -1,4 +1,6 @@
 // 快捷菜单窗口渲染：菜单项、按钮交互、状态显示
+const MENU_FEEDBACK_HIDE_DELAY_MS = 200;
+
 async function renderQuickMenuWindow() {
   let config = await window.desktopPet.getPetConfig();
   const showWindowRoam = Boolean(config.features?.windowRoam);
@@ -138,6 +140,10 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
     button.title = eyeTracking.error || "";
   }
 
+  function hideMenuAfterFeedback() {
+    window.setTimeout(() => window.desktopPet.hideMenu(), MENU_FEEDBACK_HIDE_DELAY_MS);
+  }
+
   app.addEventListener("contextmenu", (event) => {
     event.preventDefault();
   });
@@ -188,7 +194,7 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
       window.setTimeout(() => {
         window.desktopPet.hideMenu();
         window.desktopPet.switchVariant(selectedVariant);
-      }, 1000);
+      }, MENU_FEEDBACK_HIDE_DELAY_MS);
       return;
     }
 
@@ -204,7 +210,7 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
         }
       };
       updateAutoStartState();
-      window.setTimeout(() => window.desktopPet.hideMenu(), 1000);
+      hideMenuAfterFeedback();
       window.desktopPet.setAutoStart(nextEnabled).then((autoStart) => {
         config = {
           ...config,
@@ -233,22 +239,20 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
         }
       };
       updateWindowRoamState();
-      window.setTimeout(() => {
-        window.desktopPet.hideMenu();
-        window.desktopPet.setWindowRoam(nextEnabled).then((windowRoam) => {
-          config = {
-            ...config,
-            windowRoam
-          };
-          updateWindowRoamState();
-        }).catch(() => {
-          config = {
-            ...config,
-            windowRoam: previousWindowRoam
-          };
-          updateWindowRoamState();
-        });
-      }, 1000);
+      hideMenuAfterFeedback();
+      window.desktopPet.setWindowRoam(nextEnabled).then((windowRoam) => {
+        config = {
+          ...config,
+          windowRoam
+        };
+        updateWindowRoamState();
+      }).catch(() => {
+        config = {
+          ...config,
+          windowRoam: previousWindowRoam
+        };
+        updateWindowRoamState();
+      });
       return;
     }
 
@@ -264,22 +268,20 @@ ${showCustomization ? `      <button type="button" class="quick-menu__item" data
         }
       };
       updateEyeTrackingState();
-      window.setTimeout(() => {
-        window.desktopPet.hideMenu();
-        window.desktopPet.setEyeTracking(nextEnabled).then((eyeTracking) => {
-          config = {
-            ...config,
-            eyeTracking
-          };
-          updateEyeTrackingState();
-        }).catch(() => {
-          config = {
-            ...config,
-            eyeTracking: previousEyeTracking
-          };
-          updateEyeTrackingState();
-        });
-      }, 1000);
+      hideMenuAfterFeedback();
+      window.desktopPet.setEyeTracking(nextEnabled).then((eyeTracking) => {
+        config = {
+          ...config,
+          eyeTracking
+        };
+        updateEyeTrackingState();
+      }).catch(() => {
+        config = {
+          ...config,
+          eyeTracking: previousEyeTracking
+        };
+        updateEyeTrackingState();
+      });
       return;
     }
 

@@ -140,6 +140,7 @@ const {
   WINDOW_ROAM_POLL_INTERVAL_MS,
   WINDOW_ROAM_MAX_MISSING_TICKS,
   WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
+  WINDOW_ROAM_ATTACH_BLEND_MS,
   EYE_TRACKING_POLL_INTERVAL_MS,
   EYE_TRACKING_FRAME_NAME_PATTERN,
   DARWIN_DISPLAY_METRICS_SETTLE_MS,
@@ -1086,6 +1087,7 @@ const windowRoamController = createWindowRoamController({
   parseWindowHwnd,
   getCachedWindowSurfaceCandidates,
   buildWindowSurfaceFromItem,
+  getVisiblePetRectFromBounds,
   applySurfaceScale,
   setCurrentSurface,
   groundPetToSurface,
@@ -1095,6 +1097,7 @@ const windowRoamController = createWindowRoamController({
   getSurfaceVisibleTop,
   clampPetWindowPositionToSurface,
   setPetWindowPosition,
+  animatePetWindowTo,
   syncWalkTrackX,
   isWalkingState,
   refreshWalkLoopAfterSurfaceChange,
@@ -1105,7 +1108,8 @@ const windowRoamController = createWindowRoamController({
   getWindowRoamSurfaceById,
   // 常量
   WINDOW_ROAM_MAX_MISSING_TICKS,
-  WINDOW_ROAM_POLL_INTERVAL_MS
+  WINDOW_ROAM_POLL_INTERVAL_MS,
+  WINDOW_ROAM_ATTACH_BLEND_MS
 });
 const {
   getTopWindowRoamSurface,

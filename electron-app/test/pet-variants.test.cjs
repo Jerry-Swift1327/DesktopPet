@@ -56,10 +56,12 @@ test("pet runtime config keeps internal features separate from shorthair", () =>
 
   assert.equal(dogConfig.features.autoStart, true);
   assert.equal(dogConfig.features.windowRoam, true);
+  assert.equal(dogConfig.features.switchPet, false);
   assert.equal(dogConfig.defaultScale, 1.1);
   assert.equal(dogConfig.autoStartRegistryKey, "ChongbanDesktopPet-dog");
   assert.equal(catConfig.features.autoStart, true);
   assert.equal(catConfig.features.windowRoam, true);
+  assert.equal(catConfig.features.switchPet, false);
   assert.equal(catConfig.defaultScale, 1);
   assert.equal(catConfig.autoStartRegistryKey, "ChongbanDesktopPet-cat");
   assert.equal(shorthairConfig.features.autoStart, false);
@@ -196,14 +198,14 @@ test("platform features hide Windows-only menu items on macOS", () => {
     windowRoam: false,
     eyeTracking: false,
     customization: true,
-    switchPet: true
+    switchPet: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "cat", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
     eyeTracking: false,
     customization: true,
-    switchPet: true
+    switchPet: false
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "tabby", platform: "win32" }), {
     autoStart: true,
@@ -249,8 +251,10 @@ test("platform features hide Windows-only menu items on macOS", () => {
   });
 });
 
-test("switchable variants include dog and cat", () => {
+test("switchable variants keep dog and cat logic available while menu entry is hidden", () => {
   assert.deepEqual(SWITCHABLE_VARIANTS, ["dog", "cat"]);
+  assert.equal(buildPetRuntimeConfig({ variant: "dog" }).features.switchPet, false);
+  assert.equal(buildPetRuntimeConfig({ variant: "cat" }).features.switchPet, false);
 });
 
 test("variant assets follow the existing animation folder convention", () => {

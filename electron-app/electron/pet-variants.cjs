@@ -43,7 +43,7 @@ const PET_VARIANT_PROFILES = Object.freeze({
       autoStart: true,
       windowRoam: true,
       customization: true,
-      switchPet: true
+      switchPet: false
     })
   }),
   cat: Object.freeze({
@@ -63,7 +63,7 @@ const PET_VARIANT_PROFILES = Object.freeze({
       autoStart: true,
       windowRoam: true,
       customization: true,
-      switchPet: true
+      switchPet: false
     })
   }),
   shorthair: Object.freeze({
