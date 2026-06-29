@@ -6,13 +6,18 @@
   "frameSize": 256,
   "qualityProfile": "enhanced_2x_conservative",
   "sourceFrameCount": 167,
+  "trimGroundAlphaMode": "processed-auto",
+  "trimGroundAlpha": 128,
+  "trimGroundPadding": 1,
+  "alignReferenceAction": "van_squat",
+  "alignReferenceCenterX": true,
+  "alignReferenceBottom": true,
+  "alignReferenceMaxShift": 32,
   "frameCount": 106,
   "loopStart": 0,
   "loopEnd": 105,
   "sourceLoopStart": 60,
   "sourceLoopEnd": 165,
   "score": 0.0,
-  "loopSelection": "manual",
-  "trimGroundAlpha": 128,
-  "trimGroundPadding": 1
+  "loopSelection": "manual"
 }

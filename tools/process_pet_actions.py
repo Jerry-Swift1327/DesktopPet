@@ -39,6 +39,7 @@ from pet_actions.frames import (  # noqa: E402
 )
 from pet_actions.loops import resolve_source_range  # noqa: E402
 from pet_actions.manifest import update_manifest  # noqa: E402
+from pet_actions.audit import build_variant_audit, write_audit_report  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +65,13 @@ def process_action_core(
     use_full_range: bool = False,
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
+    trim_ground_alpha_auto: bool = False,
     visible_height: int | None = None,
     visible_max_width: int | None = None,
+    align_reference_action: str | None = None,
+    align_reference_center_x: bool = False,
+    align_reference_bottom: bool = False,
+    align_reference_max_shift: int = 32,
     keep_raw: bool = False,
     is_replace: bool = False,
     direction_count: int | None = None,
@@ -100,7 +106,21 @@ def process_action_core(
     extract_frames(ffmpeg, video_path, raw_dir, fps)
 
     # Step 2: Generate processed_frames (256px enhanced asset pool)
-    process_frames_to_processed(raw_dir, processed_dir, visible_height, visible_max_width)
+    processed_trim_ground_alpha = trim_ground_alpha if trim_ground_alpha > 0 else 128
+    align_reference = load_reference_geometry(align_reference_action) if align_reference_action else None
+    process_frames_to_processed(
+        raw_dir,
+        processed_dir,
+        visible_height,
+        visible_max_width,
+        trim_ground_alpha_auto=trim_ground_alpha_auto,
+        trim_ground_alpha=processed_trim_ground_alpha,
+        trim_ground_padding=trim_ground_padding,
+        align_reference=align_reference,
+        align_center_x=align_reference_center_x,
+        align_bottom=align_reference_bottom,
+        align_max_shift=align_reference_max_shift,
+    )
     processed_frame_count = len(list(processed_dir.glob("frame_*.png")))
     print(f"[{action}] processed_frames: {processed_frame_count} frames")
 
@@ -114,6 +134,15 @@ def process_action_core(
         "qualityProfile": QUALITY_PROFILE,
         "sourceFrameCount": processed_frame_count,
     }
+    if trim_ground_alpha_auto:
+        metadata["trimGroundAlphaMode"] = "processed-auto"
+        metadata["trimGroundAlpha"] = processed_trim_ground_alpha
+        metadata["trimGroundPadding"] = max(0, trim_ground_padding)
+    if align_reference_action:
+        metadata["alignReferenceAction"] = align_reference_action
+        metadata["alignReferenceCenterX"] = bool(align_reference_center_x)
+        metadata["alignReferenceBottom"] = bool(align_reference_bottom)
+        metadata["alignReferenceMaxShift"] = int(align_reference_max_shift)
 
     if not no_loop:
         # Detect brightness anomaly
@@ -196,7 +225,7 @@ def process_action_core(
             if long_loop:
                 metadata["qualityScore"] = float(loop.get("qualityScore", loop["score"]))
                 metadata["targetLength"] = int(loop.get("targetLength", frame_count))
-            if trim_ground_alpha > 0:
+            if trim_ground_alpha > 0 and not trim_ground_alpha_auto:
                 metadata["trimGroundAlpha"] = trim_ground_alpha
                 metadata["trimGroundPadding"] = max(0, trim_ground_padding)
             if search_start is not None:
@@ -236,6 +265,42 @@ def process_action_core(
     return metadata
 
 
+def load_reference_geometry(action: str) -> dict[str, float | int] | None:
+    """Load first-frame geometry from an already processed reference action."""
+    from pet_actions.chroma import get_frame_geometry
+    from PIL import Image
+
+    reference_frame = ANIMATIONS_ROOT / action / "processed_frames" / "frame_000.png"
+    if not reference_frame.exists():
+        reference_frame = ANIMATIONS_ROOT / action / "transparent_frames" / "frame_000.png"
+    if not reference_frame.exists():
+        raise FileNotFoundError(f"Missing reference frame for alignment: {reference_frame}")
+    image = Image.open(reference_frame).convert("RGBA")
+    geometry = get_frame_geometry(image)
+    if geometry is None:
+        raise RuntimeError(f"Reference frame has no visible pixels: {reference_frame}")
+    return geometry
+
+
+def resolve_align_reference_action(
+    explicit_reference: str | None,
+    variant: str | None,
+    action: str,
+    align_center_x: bool,
+    align_bottom: bool,
+) -> str | None:
+    """Resolve default squat reference when any alignment option is enabled."""
+    if explicit_reference:
+        return explicit_reference
+    if not (align_center_x or align_bottom):
+        return None
+    if variant:
+        return f"{variant}_squat"
+    if "_" in action:
+        return f"{action.split('_', 1)[0]}_squat"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # CLI: process subcommand
 # ---------------------------------------------------------------------------
@@ -252,6 +317,13 @@ def cmd_process(args: argparse.Namespace) -> None:
     results = []
     for action in args.actions:
         action_name = f"{args.variant}_{action}"
+        align_reference_action = resolve_align_reference_action(
+            args.align_reference_action,
+            args.variant,
+            action_name,
+            args.align_reference_center_x,
+            args.align_reference_bottom,
+        )
         metadata = process_action_core(
             action=action_name,
             ffmpeg=ffmpeg,
@@ -272,8 +344,13 @@ def cmd_process(args: argparse.Namespace) -> None:
             use_full_range=args.use_full_range,
             trim_ground_alpha=args.trim_ground_alpha,
             trim_ground_padding=args.trim_ground_padding,
+            trim_ground_alpha_auto=args.trim_ground_alpha_auto,
             visible_height=args.visible_height,
             visible_max_width=args.visible_max_width,
+            align_reference_action=align_reference_action,
+            align_reference_center_x=args.align_reference_center_x,
+            align_reference_bottom=args.align_reference_bottom,
+            align_reference_max_shift=args.align_reference_max_shift,
             keep_raw=args.keep_raw,
             direction_count=args.direction_count,
         )
@@ -309,8 +386,19 @@ def cmd_replace(args: argparse.Namespace) -> None:
         use_full_range=args.use_full_range,
         trim_ground_alpha=args.trim_ground_alpha,
         trim_ground_padding=args.trim_ground_padding,
+        trim_ground_alpha_auto=args.trim_ground_alpha_auto,
         visible_height=args.visible_height,
         visible_max_width=args.visible_max_width,
+        align_reference_action=resolve_align_reference_action(
+            args.align_reference_action,
+            None,
+            args.action,
+            args.align_reference_center_x,
+            args.align_reference_bottom,
+        ),
+        align_reference_center_x=args.align_reference_center_x,
+        align_reference_bottom=args.align_reference_bottom,
+        align_reference_max_shift=args.align_reference_max_shift,
         keep_raw=args.keep_raw,
         is_replace=True,
         direction_count=args.direction_count,
@@ -339,10 +427,34 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--use-full-range", action="store_true", help="Use the full extracted frame range instead of auto loop selection.")
     parser.add_argument("--trim-ground-alpha", type=int, default=0, help="Clear rows below last solid-alpha row. Disabled by default.")
     parser.add_argument("--trim-ground-padding", type=int, default=1, help="Rows to keep below last solid-alpha row when --trim-ground-alpha is enabled.")
+    parser.add_argument("--trim-ground-alpha-auto", action="store_true", help="Apply safe ground-alpha cleanup to processed_frames before runtime frames are selected.")
     parser.add_argument("--visible-height", type=int, default=None, help="Override sprite visible height for this action.")
     parser.add_argument("--visible-max-width", type=int, default=None, help="Override sprite visible max width for this action.")
+    parser.add_argument("--align-reference-action", default=None, help="Action folder whose first frame is used as geometry alignment reference.")
+    parser.add_argument("--align-reference-center-x", action="store_true", help="Align processed_frames visible center X to --align-reference-action.")
+    parser.add_argument("--align-reference-bottom", action="store_true", help="Align processed_frames visible bottom to --align-reference-action.")
+    parser.add_argument("--align-reference-max-shift", type=int, default=32, help="Maximum per-axis pixel shift for reference alignment.")
     parser.add_argument("--keep-raw", action="store_true", help="Keep raw_frames after processing.")
     parser.add_argument("--direction-count", type=int, default=None, help="Sample N direction frames (for eye-tracking actions like tabby_look).")
+
+
+def cmd_audit(args: argparse.Namespace) -> None:
+    variants = args.variants if args.variants else None
+    report = build_variant_audit(ANIMATIONS_ROOT, variants=variants, frame_folder=args.frame_folder)
+    if args.output:
+        write_audit_report(report, Path(args.output))
+        print(f"Audit report written: {args.output}")
+    risks = report.get("risks", [])
+    if isinstance(risks, list):
+        print("Top geometry risks:")
+        for item in risks[: args.top]:
+            if not isinstance(item, dict):
+                continue
+            print(
+                f"{float(item['score']):6.1f} "
+                f"{item.get('variant')} {item.get('action')} "
+                f"frames={item.get('frameCount')}"
+            )
 
 
 def main() -> None:
@@ -365,12 +477,20 @@ def main() -> None:
     replace_parser.add_argument("--manifest", required=True, help="Manifest file name to update, e.g. tabby_actions_manifest.json.")
     add_common_args(replace_parser)
 
+    audit_parser = subparsers.add_parser("audit", help="Audit current action frame geometry without modifying resources.")
+    audit_parser.add_argument("--variants", nargs="*", default=None, help="Variant names to audit. Defaults to all variants.")
+    audit_parser.add_argument("--frame-folder", default="transparent_frames", help="Frame folder to inspect, default transparent_frames.")
+    audit_parser.add_argument("--output", default=None, help="Optional JSON report output path.")
+    audit_parser.add_argument("--top", type=int, default=20, help="Number of top risks to print.")
+
     args = parser.parse_args()
 
     if args.command == "process":
         cmd_process(args)
     elif args.command == "replace":
         cmd_replace(args)
+    elif args.command == "audit":
+        cmd_audit(args)
 
 
 if __name__ == "__main__":

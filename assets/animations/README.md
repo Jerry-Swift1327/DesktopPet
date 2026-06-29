@@ -29,12 +29,14 @@
 
 ### processed_frames 与 transparent_frames 的关系
 
-- `processed_frames`：素材池，存放从源视频生成的全部 256px 增强透明帧。
-- `transparent_frames`：运行时帧，从素材池中选取的最佳循环片段或方向采样帧。Electron 应用只加载此目录。
+- `processed_frames`：本机处理时的最终素材池，存放从源视频生成并完成裁剪、贴地、底部 alpha 清理或参考动作对齐后的全部 256px 增强透明帧。
+- `transparent_frames`：跨机器同步的最终运行帧，从素材池中选取的最佳循环片段或方向采样帧。Electron 应用只加载此目录。
 
 对于使用完整帧范围的动作（`loopSelection: "full"`），`transparent_frames` 的内容与 `processed_frames` 一致。
 对于选取循环段的动作，`transparent_frames` 只包含循环段内的帧。
 对于方向采样动作（如 `tabby_look`），`transparent_frames` 包含 64 帧均匀采样方向帧。
+
+`processed_frames` 和源视频用于本机维护，不提交到 Git；`transparent_frames`、`loop.json` 和 manifest 需要提交以保证跨机器运行一致。修复资源时应先通过处理脚本修正素材池生成结果，再导出运行帧，避免只改运行帧导致下次重新导出时丢失修复。
 
 ## Manifest
 
@@ -74,6 +76,12 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 python tools\process_pet_actions.py replace --action dog_feed --video path\to\new.mp4 --manifest dog_actions_manifest.json
 ```
 
+审计当前动作几何：
+
+```powershell
+python tools\process_pet_actions.py audit --output .tmp\pet-action-audit.json --top 25
+```
+
 生成画质预览：
 
 ```powershell
@@ -85,5 +93,6 @@ python tools\build_quality_previews.py --actions dog_feed --clean
 - `electron-app/electron/pet-variants.cjs` 定义变体、动作顺序和打包资源列表。
 - 打包脚本只复制运行需要的 `transparent_frames`、`loop.json` 和 manifest。
 - `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库。
+- 底部低透明 alpha、动作偏移或缩放突变应优先在素材池生成阶段处理，再重新导出 `transparent_frames`。
 - 替换资源后，先检查 `loop.json` 和 manifest，再启动应用确认动作播放、落地点和循环是否正常。
 - 如果动作帧尺寸或命名规则变化，需要同步主进程资源加载、渲染层播放逻辑和测试。

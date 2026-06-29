@@ -65,6 +65,67 @@ def get_visible_bounds(image: Image.Image) -> tuple[int, int, int, int] | None:
     return left, top, right, bottom
 
 
+def get_frame_geometry(image: Image.Image, alpha_threshold: int = ALPHA_CROP_THRESHOLD) -> dict[str, float | int] | None:
+    """Return visible alpha geometry for a normalized RGBA frame."""
+    alpha = np.array(image.convert("RGBA").getchannel("A"))
+    visible_pixels = np.argwhere(alpha > alpha_threshold)
+    if visible_pixels.size == 0:
+        return None
+
+    top, left = visible_pixels.min(axis=0)
+    bottom, right = visible_pixels.max(axis=0)
+    width = int(right - left + 1)
+    height = int(bottom - top + 1)
+    return {
+        "left": int(left),
+        "top": int(top),
+        "right": int(right),
+        "bottom": int(bottom),
+        "width": width,
+        "height": height,
+        "centerX": float((left + right + 1) / 2.0),
+        "centerY": float((top + bottom + 1) / 2.0),
+    }
+
+
+def align_frame_to_reference(
+    image: Image.Image,
+    reference: dict[str, float | int] | None,
+    *,
+    align_center_x: bool = False,
+    align_bottom: bool = False,
+    max_shift: int = 32,
+) -> tuple[Image.Image, dict[str, int | bool]]:
+    """Translate a frame so its visible center/bottom matches a reference."""
+    output = image.convert("RGBA")
+    current = get_frame_geometry(output)
+    if not current or not reference:
+        return output, {"applied": False, "dx": 0, "dy": 0}
+
+    dx = 0
+    dy = 0
+    if align_center_x and "centerX" in reference:
+        dx = int(round(float(reference["centerX"]) - float(current["centerX"])))
+    if align_bottom and "bottom" in reference:
+        dy = int(round(float(reference["bottom"]) - float(current["bottom"])))
+
+    dx = int(np.clip(dx, -max_shift, max_shift))
+    dy = int(np.clip(dy, -max_shift, max_shift))
+    if dx == 0 and dy == 0:
+        return output, {"applied": False, "dx": 0, "dy": 0}
+
+    shifted = Image.new("RGBA", output.size, (0, 0, 0, 0))
+    shifted.alpha_composite(output, (dx, dy))
+    return shifted, {"applied": True, "dx": dx, "dy": dy}
+
+
+def translate_frame(image: Image.Image, dx: int, dy: int) -> Image.Image:
+    """Apply a transparent-canvas translation to one RGBA frame."""
+    output = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    output.alpha_composite(image.convert("RGBA"), (dx, dy))
+    return output
+
+
 def get_global_bounds(raw_frames: list[Path]) -> tuple[int, int, int, int]:
     """计算所有帧的全局可见边界（含 6px padding）。"""
     lefts: list[int] = []
@@ -185,7 +246,17 @@ def normalize_candidate_frame(
 
 
 def process_frames_to_processed(
-    raw_dir: Path, processed_dir: Path, visible_height: int | None = None, visible_max_width: int | None = None
+    raw_dir: Path,
+    processed_dir: Path,
+    visible_height: int | None = None,
+    visible_max_width: int | None = None,
+    trim_ground_alpha_auto: bool = False,
+    trim_ground_alpha: int = 0,
+    trim_ground_padding: int = 1,
+    align_reference: dict[str, float | int] | None = None,
+    align_center_x: bool = False,
+    align_bottom: bool = False,
+    align_max_shift: int = 32,
 ) -> list[Path]:
     """生成 256px 增强帧到 processed_frames（素材池）。"""
     clear_frame_dir(processed_dir)
@@ -194,6 +265,7 @@ def process_frames_to_processed(
         raise RuntimeError(f"No PNG frames found in {raw_dir}")
 
     global_bounds = get_global_bounds(raw_frames)
+    enhanced_frames: list[tuple[str, Image.Image]] = []
     for raw_frame in raw_frames:
         keyed = chroma_key_green_image(raw_frame)
         kwargs = {}
@@ -202,7 +274,28 @@ def process_frames_to_processed(
         if visible_max_width is not None:
             kwargs["visible_max_width"] = visible_max_width
         enhanced = normalize_candidate_frame(keyed, global_bounds, **kwargs)
-        enhanced.save(processed_dir / raw_frame.name)
+        enhanced, _trim_info = trim_ground_alpha_remnants_auto(
+            enhanced,
+            enabled=trim_ground_alpha_auto,
+            solid_threshold=trim_ground_alpha,
+            row_padding=trim_ground_padding,
+        )
+        enhanced_frames.append((raw_frame.name, enhanced))
+
+    align_delta = {"dx": 0, "dy": 0}
+    if enhanced_frames and align_reference and (align_center_x or align_bottom):
+        _aligned, align_delta = align_frame_to_reference(
+            enhanced_frames[0][1],
+            align_reference,
+            align_center_x=align_center_x,
+            align_bottom=align_bottom,
+            max_shift=align_max_shift,
+        )
+
+    for name, enhanced in enhanced_frames:
+        if align_delta["dx"] or align_delta["dy"]:
+            enhanced = translate_frame(enhanced, int(align_delta["dx"]), int(align_delta["dy"]))
+        enhanced.save(processed_dir / name)
 
     return sorted(processed_dir.glob("frame_*.png"))
 
@@ -244,3 +337,66 @@ def trim_ground_alpha_remnants(
         pixels[trim_from:, :, :3] = 0
 
     return Image.fromarray(pixels, "RGBA")
+
+
+def detect_ground_alpha_remnants(
+    image: Image.Image,
+    solid_threshold: int = 128,
+    low_alpha_threshold: int = 48,
+) -> dict[str, int | bool]:
+    """Detect low-alpha rows below the last solid body row."""
+    pixels = np.array(image.convert("RGBA"))
+    alpha = pixels[:, :, 3]
+    solid_rows = np.argwhere(alpha > solid_threshold)
+    if solid_rows.size == 0:
+        return {"hasSolid": False, "lowRows": 0, "lowPixels": 0, "solidBottom": -1, "lowBottom": -1}
+
+    solid_bottom = int(solid_rows[:, 0].max())
+    below = alpha[solid_bottom + 1 :, :]
+    if below.size == 0:
+        return {"hasSolid": True, "lowRows": 0, "lowPixels": 0, "solidBottom": solid_bottom, "lowBottom": solid_bottom}
+
+    low_mask = (below > 0) & (below <= low_alpha_threshold)
+    rows = np.argwhere(low_mask)
+    if rows.size == 0:
+        return {"hasSolid": True, "lowRows": 0, "lowPixels": 0, "solidBottom": solid_bottom, "lowBottom": solid_bottom}
+
+    low_bottom = solid_bottom + 1 + int(rows[:, 0].max())
+    return {
+        "hasSolid": True,
+        "lowRows": int(low_bottom - solid_bottom),
+        "lowPixels": int(low_mask.sum()),
+        "solidBottom": solid_bottom,
+        "lowBottom": low_bottom,
+    }
+
+
+def trim_ground_alpha_remnants_auto(
+    image: Image.Image,
+    *,
+    enabled: bool,
+    solid_threshold: int = 128,
+    low_alpha_threshold: int = 48,
+    row_padding: int = 1,
+    min_low_rows: int = 1,
+) -> tuple[Image.Image, dict[str, int | bool]]:
+    """Safely clear only low-alpha ground residue below the solid body."""
+    output = image.convert("RGBA")
+    info = detect_ground_alpha_remnants(output, solid_threshold, low_alpha_threshold)
+    info = {**info, "applied": False}
+    if not enabled or int(info["lowRows"]) < min_low_rows:
+        return output, info
+
+    pixels = np.array(output)
+    trim_from = min(pixels.shape[0], int(info["solidBottom"]) + max(0, row_padding) + 1)
+    if trim_from >= pixels.shape[0]:
+        return output, info
+
+    tail = pixels[trim_from:, :, 3]
+    if np.any(tail > low_alpha_threshold):
+        return output, info
+
+    pixels[trim_from:, :, 3] = 0
+    pixels[trim_from:, :, :3] = 0
+    info["applied"] = True
+    return Image.fromarray(pixels, "RGBA"), info

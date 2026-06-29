@@ -29,16 +29,16 @@
 
 ## process_pet_actions.py
 
-统一资源处理脚本，包含两个子命令：`process` 和 `replace`。
+统一资源处理脚本，包含三个子命令：`process`、`replace` 和 `audit`。
 
 ### 处理流程
 
 ```
-视频 → 抽帧(raw_frames) → 抠像+归一化+256px增强(processed_frames/素材池)
+视频 → 抽帧(raw_frames) → 抠像+归一化+256px增强(processed_frames/本机最终素材池)
                               ↓
                      [默认] 亮度异常检测 → 确定 excludedFrames
                               ↓
-                     [默认] 选取循环片段 → transparent_frames/ (运行时素材)
+                     [默认] 选取循环片段 → transparent_frames/ (跨机器同步的最终运行帧)
                               ↓
                      生成 loop.json + 更新 manifest
                               ↓
@@ -82,7 +82,10 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--search-start` / `--search-end` | 限制自动寻找循环段的源范围 |
 | `--use-full-range` | 使用完整抽帧范围 |
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
+| `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
 | `--visible-height` / `--visible-max-width` | 覆盖可见高度/宽度 |
+| `--align-reference-action` | 使用指定动作首帧作为几何对齐参考 |
+| `--align-reference-center-x` / `--align-reference-bottom` | 将素材池帧的可见中心 X 或底线对齐到参考动作；未指定参考动作时默认使用同变体 `squat` |
 | `--keep-raw` | 保留 `raw_frames` 中间产物 |
 
 ### replace 子命令
@@ -135,8 +138,26 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 | `frames.py` | 帧签名、运动分析、方向采样和循环帧构建（frame_signature、detect_brightness_anomaly、sample_direction_frames 等） |
 | `loops.py` | 循环片段选取（find_best_loop、find_best_long_loop、resolve_source_range） |
 | `manifest.py` | manifest 文件更新（update_manifest） |
+| `audit.py` | 动作帧几何审计、参考动作差异和风险排序 |
 
 `process_pet_actions.py` 通过 `from pet_actions.xxx import ...` 导入所需函数和常量，仅保留 CLI 入口（process_action_core、cmd_process、cmd_replace、main）。
+
+### audit 子命令
+
+用途：只读审计当前动作帧几何，不修改资源目录。审计内容包括帧尺寸、可见包围盒、视觉中心、alpha 重心、底线、首尾 seam、底部低透明 alpha 残留，以及相对同变体 `squat` 的差异和风险排序。
+
+示例：
+
+```powershell
+python tools\process_pet_actions.py audit --output .tmp\pet-action-audit.json --top 25
+python tools\process_pet_actions.py audit --variants tabby van bshmitted
+```
+
+### 素材池和运行帧边界
+
+- `processed_frames` 是本机处理时的最终素材池，可包含裁剪、贴地、底部 alpha 清理和参考动作对齐结果，但仍属于可再生成维护产物，不提交到 Git。
+- `transparent_frames` 是从素材池选取或采样出的最终运行帧，需要随 `loop.json` 和 manifest 提交，保证跨机器运行一致。
+- 修复动作资源时，先修生成素材池的参数和处理逻辑，再从素材池导出运行帧；不要只手动改 `transparent_frames`，否则后续重新导出会覆盖修复。
 
 ## build_quality_previews.py
 
