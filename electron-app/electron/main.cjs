@@ -142,6 +142,7 @@ const {
   WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
   WINDOW_ROAM_START_ATTACH_DELAY_MS,
   WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
+  WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS,
   WINDOW_ROAM_ATTACH_BLEND_MS,
   EYE_TRACKING_POLL_INTERVAL_MS,
   EYE_TRACKING_FRAME_NAME_PATTERN,
@@ -486,6 +487,7 @@ const surfaceScaleController = createSurfaceScaleController({
   setCurrentSurface,
   getCurrentSurface,
   getVisiblePetRectFromBounds,
+  getWindowXForVisibleCenter,
   setWalkWindowPosition,
   setTaskbarWalkWindowPositionForCenter,
   isWalkingState,
@@ -1128,7 +1130,8 @@ const {
   clearWindowRoamSuppression,
   markWindowRoamAttached,
   markManualTaskbarSettleUntil,
-  completePendingManualTaskbarSettle
+  completePendingManualTaskbarSettle,
+  markWindowInvalidTaskbarSettleUntil
 } = windowRoamController;
 
 // 接入 behavior/walk-controller.cjs：行走循环调度、表面刷新、循环完成、逐步推进
@@ -1260,6 +1263,7 @@ const dockController = createDockController({
   rememberDockedWindowRoamTarget,
   clearWindowRoamSuppression,
   markManualTaskbarSettleUntil,
+  markWindowInvalidTaskbarSettleUntil,
   markWindowRoamAttached,
   // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag
   retryDockPetAfterDrag: (...args) => dockPetAfterDrag(...args),
@@ -1293,7 +1297,8 @@ const dockController = createDockController({
   WINDOW_SURFACE_FALLBACK_BLEND_MS,
   WINDOW_SURFACE_HEAVY_RECHECK_MS,
   WINDOW_SURFACE_POLL_INTERVAL_MS,
-  WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS
+  WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
+  WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS
 });
 
 // 接入 behavior/drag-controller.cjs：拖拽运行态与拖拽开始、更新、结束流程

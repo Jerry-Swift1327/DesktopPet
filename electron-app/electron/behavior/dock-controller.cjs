@@ -52,6 +52,7 @@ function createDockController(context) {
     rememberDockedWindowRoamTarget,
     clearWindowRoamSuppression,
     markManualTaskbarSettleUntil,
+    markWindowInvalidTaskbarSettleUntil,
     markWindowRoamAttached,
     // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag，避免闭包绕过 main.cjs 函数名
     retryDockPetAfterDrag,
@@ -85,7 +86,8 @@ function createDockController(context) {
     WINDOW_SURFACE_FALLBACK_BLEND_MS,
     WINDOW_SURFACE_HEAVY_RECHECK_MS,
     WINDOW_SURFACE_POLL_INTERVAL_MS,
-    WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS
+    WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
+    WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS
   } = context;
 
   function shouldRetryDockAfterDrag(reason) {
@@ -287,11 +289,9 @@ function createDockController(context) {
           markWindowRoamAttached(roamSurface);
           return;
         }
-        const fallback = resetToTaskbarSurface(getPetWindow().getBounds());
-        applySurfaceScale(fallback, getActiveState(), getWalkDirection());
-        groundPetToSurface(getActiveState(), getWalkDirection(), fallback);
-        if (isWalkingState()) {
-          refreshWalkLoopAfterSurfaceChange();
+        fallbackCurrentSurfaceToTaskbar("window-surface-invalidated");
+        if (getWindowRoamEnabled()) {
+          markWindowInvalidTaskbarSettleUntil(Date.now() + WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS);
         }
         if (WINDOW_DOCK_DEBUG) {
           log("window-surface invalidated -> fallback taskbar");

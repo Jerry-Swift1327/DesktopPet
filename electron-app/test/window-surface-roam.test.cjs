@@ -9,6 +9,7 @@ const dockControllerSource = fs.readFileSync(path.join(__dirname, "..", "electro
 const stateControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "state-controller.cjs"), "utf8");
 const { createStateController } = require("../electron/behavior/state-controller.cjs");
 const { createWindowRoamController } = require("../electron/behavior/window-roam-controller.cjs");
+const { createDockController } = require("../electron/behavior/dock-controller.cjs");
 
 function createSurface(id, { left, top = 100, right, bottom = 500, groundY = 500 }) {
   return {
@@ -47,7 +48,7 @@ function createRoamHarness({ candidates, petBounds = { x: 820, y: 710, width: 12
       calls.push({ type: "setSurface", id: surface.sourceWindowId });
       return surface;
     },
-    groundPetToSurface: () => {},
+    groundPetToSurface: () => calls.push({ type: "ground" }),
     getVisibleSpriteInsets: () => ({ left: 0, right: 0 }),
     getPetSpriteSize: () => 100,
     getPetWindowPositionForVisibleRect: (x, y) => ({ x, y }),
@@ -182,6 +183,18 @@ test("window roam keeps top candidate priority for overlapping windows", () => {
   assert.equal(getCurrentSurface().sourceWindowId, "top");
 });
 
+test("window roam non-walking attach animates directly without pre-grounding", () => {
+  const targetWindow = createSurface("b", { left: 900, right: 1300 });
+  const { controller, calls } = createRoamHarness({
+    candidates: [{ hwnd: "b", surface: targetWindow }]
+  });
+
+  controller.attachPetToWindowRoamSurface(targetWindow);
+
+  assert.equal(calls.some((call) => call.type === "animate"), true);
+  assert.equal(calls.some((call) => call.type === "ground"), false);
+});
+
 test("window roam polling forces a candidate refresh and waits for the start attach delay", () => {
   const targetWindow = createSurface("b", { left: 900, right: 1300 });
   const { controller, calls, getCurrentSurface } = createRoamHarness({
@@ -230,6 +243,134 @@ test("window surface polling falls back when a non-roaming pet is no longer dock
   );
 });
 
+test("window surface invalidation uses replacement transfer or unified fallback path", () => {
+  const pollingBody = dockControllerSource.match(/function startWindowSurfacePolling\(\) \{([\s\S]*?)\n  function stopWindowSurfacePolling/)?.[1] || "";
+  const invalidBranch = pollingBody.match(/if \(!validateCurrentWindowSurface\(\)\) \{([\s\S]*?)\n        setWindowSurfaceMissingTicks\(0\);/)?.[1] || "";
+
+  assert.match(invalidBranch, /const roamSurface = getWindowRoamEnabled\(\) \? getTopWindowRoamSurface\(invalidWindowId\) : null;/);
+  assert.match(invalidBranch, /fallbackCurrentSurfaceToTaskbar\("window-surface-invalidated"\);/);
+  assert.match(invalidBranch, /markWindowInvalidTaskbarSettleUntil\(Date\.now\(\) \+ WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS\);/);
+  assert.doesNotMatch(invalidBranch, /groundPetToSurface\(getActiveState\(\), getWalkDirection\(\), fallback\);/);
+});
+
+test("window fallback to taskbar aligns the walking pet visible bottom to taskbar ground", () => {
+  let currentSurface = createSurface("window-a", { left: 300, right: 700, groundY: 520 });
+  let petBounds = { x: 410, y: 380, width: 120, height: 120 };
+  const taskbarSurface = { type: "taskbar", left: 0, right: 1200, groundY: 900 };
+  const calls = [];
+  const visibleWidth = 58;
+  const visibleHeight = 82;
+  const visibleOffsetX = 11;
+  const visibleOffsetY = 24;
+
+  const controller = createDockController({
+    process: { platform: "win32" },
+    log: () => {},
+    setCurrentSurface: (surface) => {
+      currentSurface = surface;
+      return surface;
+    },
+    getCurrentSurface: () => currentSurface,
+    applySurfaceScale: () => true,
+    groundPetToSurface: () => calls.push({ type: "ground" }),
+    clampPetWindowPositionToSurface: (x, y) => ({ x: Math.round(x), y: Math.round(y) }),
+    setPetWindowPosition: (x, y) => {
+      petBounds = { ...petBounds, x: Math.round(x), y: Math.round(y) };
+      calls.push({ type: "setPosition", x: Math.round(x), y: Math.round(y) });
+    },
+    syncWalkTrackX: (x) => calls.push({ type: "syncWalk", x }),
+    isWalkingState: () => true,
+    refreshWalkLoopAfterSurfaceChange: () => calls.push({ type: "refreshWalk" }),
+    clearDragState: () => {},
+    refreshWindowSurfaceCandidatesAsync: () => {},
+    setState: () => {},
+    parseWindowHwnd: (value) => String(value || ""),
+    diagnoseDockTargetFromCache: () => ({ ok: false, reason: "none", elapsedMs: 0, surface: null }),
+    fallbackToTaskbarAfterDrag: () => {},
+    findCandidateByHwnd: () => null,
+    buildWindowSurfaceFromItem: () => ({ surface: null }),
+    getVisiblePetRectFromBounds: (bounds) => ({
+      x: Math.round(bounds.x + visibleOffsetX),
+      y: Math.round(bounds.y + visibleOffsetY),
+      width: visibleWidth,
+      height: visibleHeight
+    }),
+    resetToTaskbarSurface: () => {
+      currentSurface = taskbarSurface;
+      return taskbarSurface;
+    },
+    getGroundedWindowYForSurface: (surface) => surface.groundY - visibleOffsetY - visibleHeight,
+    getVisibleSpriteInsets: () => ({
+      left: visibleOffsetX,
+      right: 120 - visibleOffsetX - visibleWidth
+    }),
+    getPetSpriteSize: () => 120,
+    getPetWindowPositionForVisibleRect: (visibleLeft, visibleTop) => ({
+      x: Math.round(visibleLeft - visibleOffsetX),
+      y: Math.round(visibleTop - visibleOffsetY)
+    }),
+    getSurfaceVisibleTop: (surface) => surface.groundY - visibleHeight,
+    animatePetWindowTo: () => calls.push({ type: "animate" }),
+    maybeRefreshWindowSurfaceCandidatesBackground: () => {},
+    refreshCurrentWindowSurfaceBoundsFromCache: () => true,
+    getTopWindowRoamSurface: () => null,
+    attachPetToWindowRoamSurface: () => false,
+    logWalkDiagnostic: () => {},
+    isInteractionPaused: () => false,
+    getInteractionPauseSummary: () => "",
+    rememberDockedWindowRoamTarget: () => {},
+    clearWindowRoamSuppression: () => {},
+    markManualTaskbarSettleUntil: () => {},
+    markWindowInvalidTaskbarSettleUntil: () => {},
+    markWindowRoamAttached: () => {},
+    retryDockPetAfterDrag: () => {},
+    getPetWindow: () => ({
+      isDestroyed: () => false,
+      getBounds: () => ({ ...petBounds })
+    }),
+    getActiveState: () => "petWalk",
+    getWalkDirection: () => 1,
+    getDragState: () => false,
+    getPetRuntimeConfig: () => ({ features: { dockShake: false } }),
+    getPetScale: () => 1,
+    getPreferredPetScale: () => 1,
+    getWindowRoamEnabled: () => false,
+    getWindowSurfacePollTimer: () => null,
+    setWindowSurfacePollTimer: () => {},
+    getLastWindowSurfaceHeavyCheckAt: () => 0,
+    setLastWindowSurfaceHeavyCheckAt: () => {},
+    getWindowSurfaceMissingTicks: () => 0,
+    setWindowSurfaceMissingTicks: () => {},
+    getWindowDockInProgress: () => false,
+    setWindowDockInProgress: () => {},
+    getWindowDockHoverSuppressedUntil: () => 0,
+    setWindowDockHoverSuppressedUntil: () => {},
+    STATE_SHAKE: "petShake",
+    ENABLE_WINDOW_DOCKING: true,
+    WINDOW_DOCK_DEBUG: false,
+    WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS: 1250,
+    WINDOW_DOCK_DRAG_RETRY_DELAY_MS: 260,
+    WINDOW_DOCK_COARSE_CORRECTION_LIMIT: 28,
+    WINDOW_SURFACE_FALLBACK_BLEND_MS: 90,
+    WINDOW_SURFACE_HEAVY_RECHECK_MS: 500,
+    WINDOW_SURFACE_POLL_INTERVAL_MS: 250,
+    WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS: 2000,
+    WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS: 700
+  });
+
+  controller.fallbackCurrentSurfaceToTaskbar("test-window-invalid");
+
+  const visibleRect = {
+    x: Math.round(petBounds.x + visibleOffsetX),
+    y: Math.round(petBounds.y + visibleOffsetY),
+    width: visibleWidth,
+    height: visibleHeight
+  };
+  assert.equal(visibleRect.y + visibleRect.height, taskbarSurface.groundY);
+  assert.equal(calls.some((call) => call.type === "animate"), false);
+  assert.equal(calls.some((call) => call.type === "refreshWalk"), true);
+});
+
 test("manual taskbar settle cooldown preserves sticky target and skips reattach during cooldown", () => {
   const surfaceA = createSurface("a", { left: 80, right: 480 });
   const surfaceB = createSurface("b", { left: 900, right: 1300 });
@@ -262,6 +403,32 @@ test("manual taskbar settle cooldown preserves sticky target and skips reattach 
     controller.tickWindowRoam();
     assert.equal(getCurrentSurface().sourceWindowId, "b");
     assert.ok(!calls.some((call) => call.type === "setSurface" && call.id === "a"));
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("window invalid fallback suppression is shorter than manual taskbar settle cooldown", () => {
+  const surfaceA = createSurface("a", { left: 80, right: 480 });
+  const { controller, getCurrentSurface, setCurrentSurface } = createRoamHarness({
+    candidates: [{ hwnd: "a", surface: surfaceA }]
+  });
+  const originalNow = Date.now;
+  let now = 5000;
+  Date.now = () => now;
+
+  try {
+    assert.equal(typeof controller.markWindowInvalidTaskbarSettleUntil, "function");
+    controller.markWindowInvalidTaskbarSettleUntil(now + 700);
+    setCurrentSurface({ type: "taskbar", groundY: 900, left: 0, right: 1920 });
+
+    now = 5600;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().type, "taskbar");
+
+    now = 5701;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().sourceWindowId, "a");
   } finally {
     Date.now = originalNow;
   }

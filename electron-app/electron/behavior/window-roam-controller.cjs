@@ -50,6 +50,7 @@ function createWindowRoamController(context) {
   let windowRoamSuppressedWindowId = "";
   let windowRoamDragFallbackSuppressedUntil = 0;
   let pendingManualTaskbarSettle = null;
+  let windowRoamInvalidFallbackSuppressedUntil = 0;
   let windowRoamMissingTicks = 0;
   let lastWindowSurfaceHeavyCheckAt = 0;
 
@@ -175,7 +176,6 @@ function createWindowRoamController(context) {
     }
 
     const nextSurface = setCurrentSurface(surface);
-    groundPetToSurface(activeState, walkDirection, nextSurface);
     const visibleInsets = getVisibleSpriteInsets(activeState, walkDirection);
     const visibleWidth = getPetSpriteSize() - visibleInsets.left - visibleInsets.right;
     const visibleLeft = nextSurface.right - visibleWidth;
@@ -187,6 +187,7 @@ function createWindowRoamController(context) {
     );
     const next = clampPetWindowPositionToSurface(target.x, target.y, nextSurface, activeState, walkDirection);
     if (isWalkingState()) {
+      groundPetToSurface(activeState, walkDirection, nextSurface);
       setPetWindowPosition(next.x, next.y);
     } else {
       animatePetWindowTo(next.x, next.y, WINDOW_ROAM_ATTACH_BLEND_MS);
@@ -219,6 +220,9 @@ function createWindowRoamController(context) {
       return;
     }
     if (Date.now() < windowRoamDragFallbackSuppressedUntil) {
+      return;
+    }
+    if (Date.now() < windowRoamInvalidFallbackSuppressedUntil) {
       return;
     }
     if (pendingManualTaskbarSettle) {
@@ -274,6 +278,7 @@ function createWindowRoamController(context) {
     windowRoamLastTargetId = "";
     windowRoamPreferredTargetId = "";
     windowRoamDragFallbackSuppressedUntil = 0;
+    windowRoamInvalidFallbackSuppressedUntil = 0;
     pendingManualTaskbarSettle = null;
   }
 
@@ -300,6 +305,7 @@ function createWindowRoamController(context) {
     windowRoamPreferredTargetId = "";
     windowRoamSuppressedWindowId = "";
     windowRoamDragFallbackSuppressedUntil = 0;
+    windowRoamInvalidFallbackSuppressedUntil = 0;
     pendingManualTaskbarSettle = null;
     windowRoamMissingTicks = 0;
   }
@@ -312,6 +318,7 @@ function createWindowRoamController(context) {
     windowRoamLastTargetId = parseWindowHwnd(surface.sourceWindowId);
     windowRoamPreferredTargetId = windowRoamLastTargetId;
     windowRoamDragFallbackSuppressedUntil = 0;
+    windowRoamInvalidFallbackSuppressedUntil = 0;
     pendingManualTaskbarSettle = null;
   }
 
@@ -346,6 +353,11 @@ function createWindowRoamController(context) {
     pendingManualTaskbarSettle = null;
   }
 
+  function markWindowInvalidTaskbarSettleUntil(timestamp) {
+    pendingManualTaskbarSettle = null;
+    windowRoamInvalidFallbackSuppressedUntil = timestamp;
+  }
+
   // 窗口表面轮询切换成功时记录目标并清空 miss 计数（对应 startWindowSurfacePolling 漫游切换成功分支）
   function markWindowRoamAttached(surface) {
     if (!surface) {
@@ -353,6 +365,7 @@ function createWindowRoamController(context) {
     }
     windowRoamLastTargetId = parseWindowHwnd(surface.sourceWindowId);
     windowRoamSuppressedWindowId = "";
+    windowRoamInvalidFallbackSuppressedUntil = 0;
     windowRoamMissingTicks = 0;
   }
 
@@ -370,6 +383,7 @@ function createWindowRoamController(context) {
     clearWindowRoamSuppression,
     markManualTaskbarSettleUntil,
     completePendingManualTaskbarSettle,
+    markWindowInvalidTaskbarSettleUntil,
     markWindowRoamAttached
   };
 }

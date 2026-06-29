@@ -41,6 +41,7 @@ function createSurfaceScaleController(context) {
     setCurrentSurface,
     getCurrentSurface,
     getVisiblePetRectFromBounds,
+    getWindowXForVisibleCenter,
     setWalkWindowPosition,
     setTaskbarWalkWindowPositionForCenter,
     isWalkingState,
@@ -145,10 +146,11 @@ function createSurfaceScaleController(context) {
         clearPetWindowHitRegion();
       }
       if (needsResize) {
-        const anchorX = bounds.x + Math.round(bounds.width / 2);
+        const anchorX = getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
+          ?? bounds.x + Math.round(bounds.width / 2);
         const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
         const next = clampPetWindowPositionToSurface(
-          anchorX - Math.round(getPetWindowWidth() / 2),
+          getWindowXForVisibleCenterAnchor(anchorX, stateId, direction),
           groundedY,
           surface,
           stateId,
@@ -207,12 +209,18 @@ function createSurfaceScaleController(context) {
     }
     setTaskbarWalkRunway(null);
     clearPetWindowHitRegion();
-    const oldWidth = bounds.width;
-    const anchorX = bounds.x + Math.round(oldWidth / 2);
+    const anchorX = getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
+      ?? bounds.x + Math.round(bounds.width / 2);
     const newWidth = getPetWindowWidth();
     const newHeight = getPetWindowHeight();
     const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
-    const next = clampPetWindowPositionToSurface(anchorX - Math.round(newWidth / 2), groundedY, surface, stateId, direction);
+    const next = clampPetWindowPositionToSurface(
+      getWindowXForVisibleCenterAnchor(anchorX, stateId, direction),
+      groundedY,
+      surface,
+      stateId,
+      direction
+    );
     win.setBounds({
       x: next.x,
       y: next.y,
@@ -359,13 +367,19 @@ function createSurfaceScaleController(context) {
       scheduleWalkLoopTimeout();
       return;
     }
-    const oldWidth = getPetWindowWidth();
-    const anchorX = bounds.x + Math.round(oldWidth / 2);
+    const anchorX = getVisibleCenterAnchorFromBounds(bounds, getActiveState(), getWalkDirection())
+      ?? bounds.x + Math.round(bounds.width / 2);
     petScale = clampedScale;
     const newWidth = getPetWindowWidth();
     const newHeight = getPetWindowHeight();
     const groundedY = getGroundedWindowYForSurface(surface, getActiveState(), getWalkDirection());
-    const next = clampPetWindowPositionToSurface(anchorX - Math.round(newWidth / 2), groundedY, surface, getActiveState(), getWalkDirection());
+    const next = clampPetWindowPositionToSurface(
+      getWindowXForVisibleCenterAnchor(anchorX, getActiveState(), getWalkDirection()),
+      groundedY,
+      surface,
+      getActiveState(),
+      getWalkDirection()
+    );
     win.setBounds({
       x: next.x,
       y: next.y,
@@ -413,6 +427,33 @@ function createSurfaceScaleController(context) {
       type: "window-center",
       value: bounds.x + Math.round(bounds.width / 2)
     };
+  }
+
+  function getVisibleCenterAnchorFromBounds(bounds, stateId = getActiveState(), direction = getWalkDirection()) {
+    if (!bounds) {
+      return null;
+    }
+    const visibleRect = getVisiblePetRectFromBounds(bounds, stateId, direction);
+    if (!visibleRect) {
+      return null;
+    }
+    return Math.round(visibleRect.x + visibleRect.width / 2);
+  }
+
+  function getWindowXForVisibleCenterAnchor(centerX, stateId = getActiveState(), direction = getWalkDirection()) {
+    const rawX = getWindowXForVisibleCenter(centerX, stateId, direction);
+    const probe = {
+      x: rawX,
+      y: 0,
+      width: getPetWindowWidth(),
+      height: getPetWindowHeight()
+    };
+    const visibleRect = getVisiblePetRectFromBounds(probe, stateId, direction);
+    if (!visibleRect) {
+      return rawX;
+    }
+    const actualCenterX = Math.round(visibleRect.x + visibleRect.width / 2);
+    return Math.round(rawX + (centerX - actualCenterX));
   }
 
   function restoreWalkTrackAnchorAfterScale(anchor, surface = getCurrentSurface()) {
