@@ -158,7 +158,10 @@ function createDockController(context) {
           const previousSurface = previousWindowId
             ? { type: "window", sourceWindowId: previousWindowId }
             : null;
-          markManualTaskbarSettleUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS, previousSurface);
+          const manualTaskbarSettleOptions = getPetRuntimeConfig().features.dockShake
+            ? { deferUntilState: STATE_SHAKE }
+            : {};
+          markManualTaskbarSettleUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS, previousSurface, manualTaskbarSettleOptions);
         }
         fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
       }

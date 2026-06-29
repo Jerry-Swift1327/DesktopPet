@@ -1127,7 +1127,8 @@ const {
   rememberDockedWindowRoamTarget,
   clearWindowRoamSuppression,
   markWindowRoamAttached,
-  markManualTaskbarSettleUntil
+  markManualTaskbarSettleUntil,
+  completePendingManualTaskbarSettle
 } = windowRoamController;
 
 // 接入 behavior/walk-controller.cjs：行走循环调度、表面刷新、循环完成、逐步推进
@@ -1363,6 +1364,7 @@ const stateController = createStateController({
   setPetWindowPosition,
   syncWalkTrackX,
   markManualTaskbarSettleUntil,
+  completePendingManualTaskbarSettle,
   preserveBottomAnchorForState,
   // walk 回调
   resetWalkRuntime,

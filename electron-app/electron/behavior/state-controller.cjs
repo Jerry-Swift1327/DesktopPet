@@ -31,6 +31,7 @@ function createStateController(context) {
     setPetWindowPosition,
     syncWalkTrackX,
     markManualTaskbarSettleUntil,
+    completePendingManualTaskbarSettle,
     WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
     preserveBottomAnchorForState,
     // walk 回调
@@ -141,6 +142,9 @@ function createStateController(context) {
     setActiveState(state);
     if (previousState !== state) {
       clearTabbySleepPoseTimer();
+      if (ONE_SHOT_STATES.has(previousState)) {
+        completePendingManualTaskbarSettle(previousState);
+      }
     }
     if (previousState === STATE_WALK && getActiveState() !== DEFAULT_STATE) {
       clearPendingWalkBubbleMessage();

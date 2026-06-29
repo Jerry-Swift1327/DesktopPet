@@ -7,6 +7,7 @@ const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.
 const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "window-roam-controller.cjs"), "utf8");
 const dockControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "dock-controller.cjs"), "utf8");
 const stateControllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "state-controller.cjs"), "utf8");
+const { createStateController } = require("../electron/behavior/state-controller.cjs");
 const { createWindowRoamController } = require("../electron/behavior/window-roam-controller.cjs");
 
 function createSurface(id, { left, top = 100, right, bottom = 500, groundY = 500 }) {
@@ -89,7 +90,7 @@ test("window roam keeps the current window target when enabled from a window sur
   const prepareBody = controllerSource.match(/function prepareWindowRoamAfterPreferenceEnabled\(currentSurface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
   const resetBody = controllerSource.match(/function resetWindowRoamState\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
   const rememberBody = controllerSource.match(/function rememberDockedWindowRoamTarget\(surface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
-  const markManualBody = controllerSource.match(/function markManualTaskbarSettleUntil\(timestamp, surface\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+  const markManualBody = controllerSource.match(/function markManualTaskbarSettleUntil\(timestamp, surface, options = \{\}\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 
   // main.cjs 触发链（顶层函数，闭合 } 在行首）
   const setRoamBody = mainSource.match(/function setWindowRoamPreference\(enabled\) \{([\s\S]*?)\n\}/)?.[1] || "";
@@ -98,8 +99,11 @@ test("window roam keeps the current window target when enabled from a window sur
 
   // controller: tickWindowRoam 拖拽回退抑制 + 新目标选择 + 同窗附着
   assert.match(tickBody, /if \(Date\.now\(\) < windowRoamDragFallbackSuppressedUntil\) \{[\s\S]*return;[\s\S]*\}/);
+  assert.match(tickBody, /if \(pendingManualTaskbarSettle\) \{[\s\S]*return;[\s\S]*\}/);
   assert.match(tickBody, /const surface = selectWindowRoamSurface\(\);/);
   assert.match(tickBody, /if \(targetId === windowRoamLastTargetId && getCurrentSurface\(\)\.type === "window"\) \{[\s\S]*setCurrentSurface\(surface\);[\s\S]*groundPetToSurface\(activeState, walkDirection, getCurrentSurface\(\)\);/);
+  assert.match(controllerSource, /let pendingManualTaskbarSettle = null;/);
+  assert.match(controllerSource, /function completePendingManualTaskbarSettle\(state\) \{/);
   assert.match(controllerSource, /function selectWindowRoamSurface\(excludedWindowId = ""\) \{[\s\S]*const currentLockedId = getCurrentSurface\(\)\.type === "window" \? windowRoamLastTargetId : "";[\s\S]*return preferredSurface \|\| lockedSurface \|\| chooseNearestWindowRoamSurface\(entries\);[\s\S]*\}/);
   assert.match(controllerSource, /function chooseNearestWindowRoamSurface\(entries\) \{[\s\S]*getDistanceToWindowSurface\(entry\.surface, petCenter\)[\s\S]*if \(doWindowRectsOverlap\(best\.surface\.bounds, entry\.surface\.bounds\)\) \{[\s\S]*continue;[\s\S]*if \(score < best\.score\)/);
   assert.match(controllerSource, /function doWindowRectsOverlap\(a, b\) \{[\s\S]*Math\.min\(a\.right, b\.right\) > Math\.max\(a\.left, b\.left\)[\s\S]*Math\.min\(a\.bottom, b\.bottom\) > Math\.max\(a\.top, b\.top\)/);
@@ -122,15 +126,18 @@ test("window roam keeps the current window target when enabled from a window sur
 
   // state-controller: settlePetQuietly 调用手动冷却方法（不抑制、不清空 sticky target）
   assert.match(stateControllerSource, /markManualTaskbarSettleUntil\(Date\.now\(\) \+ WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS, surface\);/);
+  assert.match(stateControllerSource, /completePendingManualTaskbarSettle\(previousState\);/);
 
   // main.cjs: setWindowRoamPreference 调用 controller 方法链
   assert.match(setRoamBody, /resetWindowRoamState\(\);/);
   assert.match(setRoamBody, /prepareWindowRoamAfterPreferenceEnabled\(currentSurface\);/);
   assert.match(setRoamBody, /updateWindowRoamPolling\(\);/);
+  assert.match(mainSource, /completePendingManualTaskbarSettle/);
 
   // dock-controller: dockPetAfterDrag 成功/失败分支调用 controller 方法
   assert.match(dockBody, /rememberDockedWindowRoamTarget\(nextSurface\);[\s\S]*clearWindowRoamSuppression\(\);/);
-  assert.match(dockBody, /markManualTaskbarSettleUntil\(Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS, previousSurface\);/);
+  assert.match(dockBody, /deferUntilState:\s*STATE_SHAKE/);
+  assert.match(dockBody, /markManualTaskbarSettleUntil\([\s\S]*Date\.now\(\) \+ WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,[\s\S]*previousSurface,[\s\S]*manualTaskbarSettleOptions/);
   assert.doesNotMatch(dockBody, /suppressPreviousWindowAfterDockMiss/);
 });
 
@@ -258,6 +265,122 @@ test("manual taskbar settle cooldown preserves sticky target and skips reattach 
   } finally {
     Date.now = originalNow;
   }
+});
+
+test("deferred manual taskbar settle starts cooldown only after shake completes", () => {
+  const surfaceA = createSurface("a", { left: 80, right: 480 });
+  const surfaceB = createSurface("b", { left: 900, right: 1300 });
+  const { controller, calls, getCurrentSurface, setCurrentSurface } = createRoamHarness({
+    candidates: [
+      { hwnd: "a", surface: surfaceA },
+      { hwnd: "b", surface: surfaceB }
+    ]
+  });
+  const originalNow = Date.now;
+  let now = 5000;
+  Date.now = () => now;
+
+  try {
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().sourceWindowId, "b");
+
+    controller.markManualTaskbarSettleUntil(now + 2000, surfaceB, { deferUntilState: "petShake" });
+    setCurrentSurface({ type: "taskbar", groundY: 900, left: 0, right: 1920 });
+
+    now = 7001;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().type, "taskbar");
+
+    controller.completePendingManualTaskbarSettle("petShake");
+
+    now = 7002;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().type, "taskbar");
+
+    now = 9002;
+    controller.tickWindowRoam();
+    assert.equal(getCurrentSurface().sourceWindowId, "b");
+    assert.ok(!calls.some((call) => call.type === "setSurface" && call.id === "a"));
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("state transition away from shake completes deferred manual taskbar settle", () => {
+  let activeState = "petShake";
+  let selectedState = activeState;
+  let walkDirection = -1;
+  const completed = [];
+  const states = [
+    { id: "petSquat", moving: false },
+    { id: "petShake", moving: false }
+  ];
+  const controller = createStateController({
+    sendPetState: () => {},
+    sendWalkDirection: () => {},
+    groundPetToSurface: () => {},
+    applySurfaceScale: () => true,
+    resetToTaskbarSurface: () => ({ type: "taskbar" }),
+    setCurrentSurface: () => {},
+    getCurrentSurface: () => ({ type: "taskbar" }),
+    getSurfaceDisplay: () => ({ id: 1 }),
+    getSurfaceWorkArea: () => ({ x: 0, y: 0, width: 1000, height: 900 }),
+    getTaskbarHomeVisibleRight: () => 900,
+    getSurfaceVisibleTop: () => 800,
+    getVisibleSpriteInsets: () => ({ left: 0, right: 0 }),
+    getPetSpriteSize: () => 100,
+    getPetWindowPositionForVisibleRect: (x, y) => ({ x, y }),
+    clampPetWindowPositionToSurface: (x, y) => ({ x, y }),
+    setPetWindowPosition: () => {},
+    syncWalkTrackX: () => {},
+    markManualTaskbarSettleUntil: () => {},
+    completePendingManualTaskbarSettle: (state) => completed.push(state),
+    WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS: 2000,
+    preserveBottomAnchorForState: () => {},
+    resetWalkRuntime: () => {},
+    startWalkLoop: () => {},
+    clearTabbySleepPoseTimer: () => {},
+    scheduleTabbySleepPose: () => {},
+    applyInterruptedWalkStats: () => {},
+    applyActionStats: () => [],
+    shouldDelayActionStats: () => false,
+    clearPendingWalkBubbleMessage: () => {},
+    showPendingWalkBubbleMessage: () => {},
+    materializeTaskbarWalkRunwayForState: () => {},
+    hideStartupBubble: () => {},
+    hidePetMenu: () => {},
+    hideHoverPanel: () => {},
+    showStatMessages: () => {},
+    recordUserOperation: () => {},
+    recordInteraction: () => {},
+    getDefaultDirectionForState: () => -1,
+    getTransitionBottomAnchor: () => null,
+    getState: (state) => states.find((item) => item.id === state),
+    clearDragState: () => {},
+    setHomeDisplayId: () => {},
+    setHomeWorkArea: () => {},
+    log: () => {},
+    getActiveState: () => activeState,
+    setActiveState: (state) => { activeState = state; },
+    getSelectedState: () => selectedState,
+    setSelectedState: (state) => { selectedState = state; },
+    getWalkDirection: () => walkDirection,
+    setWalkDirectionValue: (direction) => { walkDirection = direction; },
+    getTaskbarWalkRunway: () => null,
+    getPetWindow: () => ({ isDestroyed: () => false, getBounds: () => ({ x: 0, y: 0, width: 100, height: 100 }) }),
+    DEFAULT_STATE: "petSquat",
+    STATE_WALK: "petWalk",
+    STATE_SLEEP: "petSleep",
+    STATE_YAWN: "petYawn",
+    STATE_HISS: "petHiss",
+    TABBY_IDLE_STATES: new Set(),
+    ONE_SHOT_STATES: new Set(["petShake"]),
+    states
+  });
+
+  controller.setState("petSquat", false);
+
+  assert.deepEqual(completed, ["petShake"]);
 });
 
 test("manual taskbar settle picks another window only when sticky target is unavailable", () => {

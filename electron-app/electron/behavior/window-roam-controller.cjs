@@ -49,6 +49,7 @@ function createWindowRoamController(context) {
   let windowRoamPreferredTargetId = "";
   let windowRoamSuppressedWindowId = "";
   let windowRoamDragFallbackSuppressedUntil = 0;
+  let pendingManualTaskbarSettle = null;
   let windowRoamMissingTicks = 0;
   let lastWindowSurfaceHeavyCheckAt = 0;
 
@@ -220,6 +221,9 @@ function createWindowRoamController(context) {
     if (Date.now() < windowRoamDragFallbackSuppressedUntil) {
       return;
     }
+    if (pendingManualTaskbarSettle) {
+      return;
+    }
 
     const surface = selectWindowRoamSurface();
     if (!surface) {
@@ -270,6 +274,7 @@ function createWindowRoamController(context) {
     windowRoamLastTargetId = "";
     windowRoamPreferredTargetId = "";
     windowRoamDragFallbackSuppressedUntil = 0;
+    pendingManualTaskbarSettle = null;
   }
 
   // 根据启用状态切换轮询
@@ -295,6 +300,7 @@ function createWindowRoamController(context) {
     windowRoamPreferredTargetId = "";
     windowRoamSuppressedWindowId = "";
     windowRoamDragFallbackSuppressedUntil = 0;
+    pendingManualTaskbarSettle = null;
     windowRoamMissingTicks = 0;
   }
 
@@ -306,6 +312,7 @@ function createWindowRoamController(context) {
     windowRoamLastTargetId = parseWindowHwnd(surface.sourceWindowId);
     windowRoamPreferredTargetId = windowRoamLastTargetId;
     windowRoamDragFallbackSuppressedUntil = 0;
+    pendingManualTaskbarSettle = null;
   }
 
   // 清理抑制窗口（对应 dockPetAfterDrag 成功分支末尾）
@@ -315,11 +322,28 @@ function createWindowRoamController(context) {
 
   // 手动回任务栏冷却：设置冷却时间戳并把当前窗口记为下一次优先恢复目标，
   // 保留 sticky target（不清空 lastTargetId、不写入 suppressedWindowId）
-  function markManualTaskbarSettleUntil(timestamp, surface) {
-    windowRoamDragFallbackSuppressedUntil = timestamp;
+  function markManualTaskbarSettleUntil(timestamp, surface, options = {}) {
+    const deferUntilState = typeof options.deferUntilState === "string" ? options.deferUntilState : "";
+    if (deferUntilState) {
+      pendingManualTaskbarSettle = {
+        durationMs: Math.max(0, timestamp - Date.now()),
+        state: deferUntilState
+      };
+    } else {
+      pendingManualTaskbarSettle = null;
+      windowRoamDragFallbackSuppressedUntil = timestamp;
+    }
     if (surface && surface.type === "window") {
       windowRoamPreferredTargetId = parseWindowHwnd(surface.sourceWindowId);
     }
+  }
+
+  function completePendingManualTaskbarSettle(state) {
+    if (!pendingManualTaskbarSettle || state !== pendingManualTaskbarSettle.state) {
+      return;
+    }
+    windowRoamDragFallbackSuppressedUntil = Date.now() + pendingManualTaskbarSettle.durationMs;
+    pendingManualTaskbarSettle = null;
   }
 
   // 窗口表面轮询切换成功时记录目标并清空 miss 计数（对应 startWindowSurfacePolling 漫游切换成功分支）
@@ -345,6 +369,7 @@ function createWindowRoamController(context) {
     rememberDockedWindowRoamTarget,
     clearWindowRoamSuppression,
     markManualTaskbarSettleUntil,
+    completePendingManualTaskbarSettle,
     markWindowRoamAttached
   };
 }
