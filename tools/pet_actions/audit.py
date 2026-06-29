@@ -78,6 +78,29 @@ def _bounds_values(frames: list[dict[str, object]], key: str) -> list[float]:
     return values
 
 
+def _margin_delta_x(frame: dict[str, object]) -> float | None:
+    bounds = frame.get("bounds")
+    size = frame.get("size")
+    if not isinstance(bounds, dict) or not isinstance(size, list) or not size:
+        return None
+    width = float(size[0])
+    left_margin = float(bounds["left"])
+    right_margin = width - 1.0 - float(bounds["right"])
+    return left_margin - right_margin
+
+
+def _canvas_center_delta_x(frame: dict[str, object]) -> float | None:
+    size = frame.get("size")
+    center_x = frame.get("centerX")
+    if not isinstance(size, list) or not size or center_x is None:
+        return None
+    return float(center_x) - float(size[0]) / 2.0
+
+
+def _optional_values(values: list[float | None]) -> list[float]:
+    return [float(value) for value in values if value is not None]
+
+
 def _median(values: list[float]) -> float:
     return _round(median(values)) if values else 0.0
 
@@ -98,6 +121,8 @@ def summarize_action_frames(action_dir: Path, frame_folder: str = "transparent_f
     low_pixels = [int(info.get("lowPixels", 0)) for info in ground_infos]
     first = frames[0]
     last = frames[-1]
+    canvas_center_delta_x = _optional_values([_canvas_center_delta_x(frame) for frame in frames])
+    margin_delta_x = _optional_values([_margin_delta_x(frame) for frame in frames])
 
     return {
         "action": action_dir.name,
@@ -117,6 +142,14 @@ def summarize_action_frames(action_dir: Path, frame_folder: str = "transparent_f
             "centerY": _median(_values(frames, "centerY")),
             "gravityX": _median(_values(frames, "gravityX")),
             "gravityY": _median(_values(frames, "gravityY")),
+        },
+        "canvas": {
+            "firstCenterDeltaX": _round(_canvas_center_delta_x(first) or 0.0),
+            "medianCenterDeltaX": _median(canvas_center_delta_x),
+            "maxAbsCenterDeltaX": _round(max((abs(value) for value in canvas_center_delta_x), default=0.0)),
+            "firstMarginDeltaX": _round(_margin_delta_x(first) or 0.0),
+            "medianMarginDeltaX": _median(margin_delta_x),
+            "maxAbsMarginDeltaX": _round(max((abs(value) for value in margin_delta_x), default=0.0)),
         },
         "range": {
             "centerX": _range(_values(frames, "centerX")),
@@ -221,22 +254,29 @@ def rank_geometry_risks(report: dict[str, object]) -> list[dict[str, object]]:
                 continue
             range_info = action.get("range", {})
             ground_info = action.get("groundAlpha", {})
-            if not isinstance(range_info, dict) or not isinstance(ground_info, dict):
+            canvas_info = action.get("canvas", {})
+            if not isinstance(range_info, dict) or not isinstance(ground_info, dict) or not isinstance(canvas_info, dict):
                 continue
-            score = _risk_score(delta, range_info, ground_info)
+            score = _risk_score(delta, range_info, ground_info, canvas_info)
             risks.append({
                 "variant": variant,
                 "action": action.get("action"),
                 "score": _round(score),
                 "frameCount": action.get("frameCount"),
                 "referenceDelta": delta,
+                "canvas": canvas_info,
                 "range": range_info,
                 "groundAlpha": ground_info,
             })
     return sorted(risks, key=lambda item: float(item["score"]), reverse=True)
 
 
-def _risk_score(delta: dict[str, object], range_info: dict[str, object], ground_info: dict[str, object]) -> float:
+def _risk_score(
+    delta: dict[str, object],
+    range_info: dict[str, object],
+    ground_info: dict[str, object],
+    canvas_info: dict[str, object],
+) -> float:
     first_shift = abs(float(delta.get("firstCenterX", 0))) + 0.6 * abs(float(delta.get("firstCenterY", 0)))
     median_shift = abs(float(delta.get("medianCenterX", 0))) + 0.6 * abs(float(delta.get("medianCenterY", 0)))
     scale_delta = max(
@@ -245,7 +285,9 @@ def _risk_score(delta: dict[str, object], range_info: dict[str, object], ground_
     )
     drift = max(float(range_info.get("centerX", 0)), float(range_info.get("centerY", 0)))
     ground = float(ground_info.get("maxLowRows", 0))
-    return first_shift + median_shift + scale_delta * 80 + drift * 0.35 + ground * 0.4
+    canvas_shift = abs(float(canvas_info.get("medianCenterDeltaX", 0)))
+    margin_imbalance = abs(float(canvas_info.get("medianMarginDeltaX", 0)))
+    return first_shift + median_shift + scale_delta * 80 + drift * 0.35 + ground * 0.4 + canvas_shift * 0.5 + margin_imbalance * 0.2
 
 
 def write_audit_report(report: dict[str, object], output: Path) -> None:

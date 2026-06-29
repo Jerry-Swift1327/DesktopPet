@@ -84,6 +84,8 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
 | `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
 | `--visible-height` / `--visible-max-width` | 覆盖可见高度/宽度 |
+| `--center-visible-action-x` | 对整个动作的素材池帧应用同一个 X 平移，让中位可见中心位于画布中心，保留帧内运动 |
+| `--center-visible-target-x` / `--center-visible-max-shift` | 覆盖动作级 X 居中的目标位置和最大平移量 |
 | `--align-reference-action` | 使用指定动作首帧作为几何对齐参考 |
 | `--align-reference-center-x` / `--align-reference-bottom` | 将素材池帧的可见中心 X 或底线对齐到参考动作；未指定参考动作时默认使用同变体 `squat` |
 | `--keep-raw` | 保留 `raw_frames` 中间产物 |
@@ -144,7 +146,7 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 
 ### audit 子命令
 
-用途：只读审计当前动作帧几何，不修改资源目录。审计内容包括帧尺寸、可见包围盒、视觉中心、alpha 重心、底线、首尾 seam、底部低透明 alpha 残留，以及相对同变体 `squat` 的差异和风险排序。
+用途：只读审计当前动作帧几何，不修改资源目录。审计内容包括帧尺寸、可见包围盒、视觉中心、alpha 重心、底线、画布中心偏移、左右透明边距差、首尾 seam、底部低透明 alpha 残留，以及相对同变体 `squat` 的差异和风险排序。
 
 示例：
 
@@ -158,6 +160,11 @@ python tools\process_pet_actions.py audit --variants tabby van bshmitted
 - `processed_frames` 是本机处理时的最终素材池，可包含裁剪、贴地、底部 alpha 清理和参考动作对齐结果，但仍属于可再生成维护产物，不提交到 Git。
 - `transparent_frames` 是从素材池选取或采样出的最终运行帧，需要随 `loop.json` 和 manifest 提交，保证跨机器运行一致。
 - 修复动作资源时，先修生成素材池的参数和处理逻辑，再从素材池导出运行帧；不要只手动改 `transparent_frames`，否则后续重新导出会覆盖修复。
+
+### 新资源几何建议
+- 对新加入的变体和动作，先用 `--center-visible-action-x` 修正动作级画布 X 偏心；该参数只计算一次中位可见中心并对所有帧应用同一个平移，不会逐帧抵消动作本身的运动。
+- 对 `squat/lick/shake/yawn/hiss/look` 等近蹲坐动作，可在 squat 自身构图正确后，再叠加 `--align-reference-center-x --align-reference-bottom` 约束首帧和底线。
+- 对 `walk/ball/feed/sleep/lie/stretch` 等动作，不要默认强行匹配 squat 宽高；优先保证动作级构图、底线稳定和帧内漂移合理。
 
 ## build_quality_previews.py
 

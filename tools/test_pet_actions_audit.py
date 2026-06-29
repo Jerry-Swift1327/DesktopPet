@@ -50,6 +50,8 @@ class PetActionAuditTests(unittest.TestCase):
         # Runtime visible bounds use alpha > 12, so low-alpha ground residue can
         # inflate geometry until the safe trim pass removes it.
         self.assertAlmostEqual(summary["median"]["centerX"], 14.0)
+        self.assertAlmostEqual(summary["canvas"]["medianCenterDeltaX"], -2.0)
+        self.assertEqual(summary["canvas"]["medianMarginDeltaX"], -4.0)
         self.assertEqual(summary["range"]["centerX"], 4.0)
         self.assertEqual(summary["groundAlpha"]["maxLowRows"], 3)
         self.assertEqual(summary["groundAlpha"]["framesWithLowRows"], 1)
@@ -65,14 +67,15 @@ class PetActionAuditTests(unittest.TestCase):
             shifted.mkdir(parents=True)
             make_frame(squat / "frame_000.png", (8, 6, 15, 20))
             make_frame(squat / "frame_001.png", (8, 6, 15, 20))
-            make_frame(shifted / "frame_000.png", (16, 6, 23, 20))
-            make_frame(shifted / "frame_001.png", (18, 6, 25, 20))
+            make_frame(shifted / "frame_000.png", (20, 6, 27, 20))
+            make_frame(shifted / "frame_001.png", (22, 6, 29, 20))
 
             report = build_variant_audit(root, variants=["tabby"])
             risks = rank_geometry_risks(report)
 
         tabby_actions = {item["action"]: item for item in report["variants"]["tabby"]["actions"]}
-        self.assertEqual(tabby_actions["tabby_shake"]["referenceDelta"]["medianCenterX"], 9.0)
+        self.assertEqual(tabby_actions["tabby_shake"]["referenceDelta"]["medianCenterX"], 13.0)
+        self.assertEqual(risks[0]["canvas"]["maxAbsCenterDeltaX"], 10.0)
         self.assertEqual(risks[0]["action"], "tabby_shake")
         self.assertGreater(risks[0]["score"], risks[-1]["score"])
 

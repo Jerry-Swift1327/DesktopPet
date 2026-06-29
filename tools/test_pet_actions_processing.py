@@ -106,6 +106,34 @@ class PetActionProcessingTests(unittest.TestCase):
         self.assertAlmostEqual(shifted_first["centerX"], 18.0)
         self.assertAlmostEqual(shifted_second["centerX"], 22.0)
 
+    def test_center_frames_to_canvas_x_applies_one_action_level_delta(self) -> None:
+        from pet_actions.chroma import center_frames_to_canvas_x, get_frame_geometry
+
+        first = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        second = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        first_pixels = first.load()
+        second_pixels = second.load()
+        for y in range(20, 30):
+            for x in range(10, 20):
+                first_pixels[x, y] = (120, 80, 60, 255)
+        for y in range(20, 30):
+            for x in range(20, 30):
+                second_pixels[x, y] = (120, 80, 60, 255)
+
+        centered, info = center_frames_to_canvas_x(
+            [("frame_000.png", first), ("frame_001.png", second)],
+            enabled=True,
+            target_x=32.0,
+            max_shift=32,
+        )
+        first_geometry = get_frame_geometry(centered[0][1])
+        second_geometry = get_frame_geometry(centered[1][1])
+
+        self.assertEqual(info["applied"], True)
+        self.assertEqual(info["dx"], 12)
+        self.assertAlmostEqual(first_geometry["centerX"], 27.0)
+        self.assertAlmostEqual(second_geometry["centerX"], 37.0)
+
 
 if __name__ == "__main__":
     unittest.main()

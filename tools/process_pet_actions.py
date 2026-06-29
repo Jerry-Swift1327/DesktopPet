@@ -68,6 +68,9 @@ def process_action_core(
     trim_ground_alpha_auto: bool = False,
     visible_height: int | None = None,
     visible_max_width: int | None = None,
+    center_visible_action_x: bool = False,
+    center_visible_target_x: float | None = None,
+    center_visible_max_shift: int = 32,
     align_reference_action: str | None = None,
     align_reference_center_x: bool = False,
     align_reference_bottom: bool = False,
@@ -116,6 +119,9 @@ def process_action_core(
         trim_ground_alpha_auto=trim_ground_alpha_auto,
         trim_ground_alpha=processed_trim_ground_alpha,
         trim_ground_padding=trim_ground_padding,
+        center_visible_action_x=center_visible_action_x,
+        center_visible_target_x=center_visible_target_x,
+        center_visible_max_shift=center_visible_max_shift,
         align_reference=align_reference,
         align_center_x=align_reference_center_x,
         align_bottom=align_reference_bottom,
@@ -138,6 +144,12 @@ def process_action_core(
         metadata["trimGroundAlphaMode"] = "processed-auto"
         metadata["trimGroundAlpha"] = processed_trim_ground_alpha
         metadata["trimGroundPadding"] = max(0, trim_ground_padding)
+    if center_visible_action_x:
+        metadata["centerVisibleActionX"] = True
+        metadata["centerVisibleTargetX"] = (
+            float(center_visible_target_x) if center_visible_target_x is not None else float(ENHANCED_FRAME_SIZE / 2)
+        )
+        metadata["centerVisibleMaxShift"] = int(center_visible_max_shift)
     if align_reference_action:
         metadata["alignReferenceAction"] = align_reference_action
         metadata["alignReferenceCenterX"] = bool(align_reference_center_x)
@@ -347,6 +359,9 @@ def cmd_process(args: argparse.Namespace) -> None:
             trim_ground_alpha_auto=args.trim_ground_alpha_auto,
             visible_height=args.visible_height,
             visible_max_width=args.visible_max_width,
+            center_visible_action_x=args.center_visible_action_x,
+            center_visible_target_x=args.center_visible_target_x,
+            center_visible_max_shift=args.center_visible_max_shift,
             align_reference_action=align_reference_action,
             align_reference_center_x=args.align_reference_center_x,
             align_reference_bottom=args.align_reference_bottom,
@@ -389,6 +404,9 @@ def cmd_replace(args: argparse.Namespace) -> None:
         trim_ground_alpha_auto=args.trim_ground_alpha_auto,
         visible_height=args.visible_height,
         visible_max_width=args.visible_max_width,
+        center_visible_action_x=args.center_visible_action_x,
+        center_visible_target_x=args.center_visible_target_x,
+        center_visible_max_shift=args.center_visible_max_shift,
         align_reference_action=resolve_align_reference_action(
             args.align_reference_action,
             None,
@@ -430,6 +448,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--trim-ground-alpha-auto", action="store_true", help="Apply safe ground-alpha cleanup to processed_frames before runtime frames are selected.")
     parser.add_argument("--visible-height", type=int, default=None, help="Override sprite visible height for this action.")
     parser.add_argument("--visible-max-width", type=int, default=None, help="Override sprite visible max width for this action.")
+    parser.add_argument("--center-visible-action-x", action="store_true", help="Apply one action-level X shift so processed_frames median visible center is centered on the canvas.")
+    parser.add_argument("--center-visible-target-x", type=float, default=None, help="Canvas X target for --center-visible-action-x. Defaults to half of frameSize.")
+    parser.add_argument("--center-visible-max-shift", type=int, default=32, help="Maximum X shift for --center-visible-action-x.")
     parser.add_argument("--align-reference-action", default=None, help="Action folder whose first frame is used as geometry alignment reference.")
     parser.add_argument("--align-reference-center-x", action="store_true", help="Align processed_frames visible center X to --align-reference-action.")
     parser.add_argument("--align-reference-bottom", action="store_true", help="Align processed_frames visible bottom to --align-reference-action.")

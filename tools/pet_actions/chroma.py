@@ -126,6 +126,51 @@ def translate_frame(image: Image.Image, dx: int, dy: int) -> Image.Image:
     return output
 
 
+def center_frames_to_canvas_x(
+    frames: list[tuple[str, Image.Image]],
+    *,
+    enabled: bool = False,
+    target_x: float | None = None,
+    max_shift: int = 32,
+) -> tuple[list[tuple[str, Image.Image]], dict[str, float | int | bool]]:
+    """Apply one action-level X shift so median visible center reaches the canvas center."""
+    resolved_target_x = float(target_x) if target_x is not None else 0.0
+    empty_info: dict[str, float | int | bool] = {
+        "applied": False,
+        "dx": 0,
+        "targetX": resolved_target_x,
+        "medianCenterX": 0.0,
+    }
+    if not enabled or not frames:
+        return frames, empty_info
+
+    if target_x is None:
+        resolved_target_x = float(frames[0][1].width / 2.0)
+
+    centers: list[float] = []
+    for _name, frame in frames:
+        geometry = get_frame_geometry(frame)
+        if geometry is not None:
+            centers.append(float(geometry["centerX"]))
+
+    if not centers:
+        return frames, {**empty_info, "targetX": resolved_target_x}
+
+    median_center_x = float(np.median(centers))
+    dx = int(round(resolved_target_x - median_center_x))
+    dx = int(np.clip(dx, -max_shift, max_shift))
+    info: dict[str, float | int | bool] = {
+        "applied": dx != 0,
+        "dx": dx,
+        "targetX": resolved_target_x,
+        "medianCenterX": median_center_x,
+    }
+    if dx == 0:
+        return frames, info
+
+    return [(name, translate_frame(frame, dx, 0)) for name, frame in frames], info
+
+
 def get_global_bounds(raw_frames: list[Path]) -> tuple[int, int, int, int]:
     """计算所有帧的全局可见边界（含 6px padding）。"""
     lefts: list[int] = []
@@ -253,6 +298,9 @@ def process_frames_to_processed(
     trim_ground_alpha_auto: bool = False,
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
+    center_visible_action_x: bool = False,
+    center_visible_target_x: float | None = None,
+    center_visible_max_shift: int = 32,
     align_reference: dict[str, float | int] | None = None,
     align_center_x: bool = False,
     align_bottom: bool = False,
@@ -281,6 +329,13 @@ def process_frames_to_processed(
             row_padding=trim_ground_padding,
         )
         enhanced_frames.append((raw_frame.name, enhanced))
+
+    enhanced_frames, _center_info = center_frames_to_canvas_x(
+        enhanced_frames,
+        enabled=center_visible_action_x,
+        target_x=center_visible_target_x,
+        max_shift=center_visible_max_shift,
+    )
 
     align_delta = {"dx": 0, "dy": 0}
     if enhanced_frames and align_reference and (align_center_x or align_bottom):
