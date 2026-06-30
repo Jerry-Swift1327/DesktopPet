@@ -2705,7 +2705,8 @@ function shouldSuppressHoverPanel() {
     || getBubbleHoverSuppressionMs() > 0
     || getWindowDockHoverSuppressionMs() > 0
     || (petRuntimeConfig.features.wakeHiss && activeState === STATE_HISS)
-    || isCustomizationVisible();
+    || isCustomizationVisible()
+    || activeState === STATE_SHAKE;
 }
 
 function scheduleRandomGreeting(delayMs = null) {
