@@ -33,6 +33,7 @@ electron-app/node_modules/
 
 # Electron runtime/user data/caches
 electron-app/.tmp/
+electron-app/.variant-gallery/
 electron-app/.runtime-assets/
 electron-app/.user-data/
 electron-app/.electron-cache/
