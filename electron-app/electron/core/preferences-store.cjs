@@ -35,7 +35,7 @@ function createPreferencesStore({
   // 内部常量（与 main.cjs / app-constants.cjs 保持一致）
   const ENABLE_WINDOW_DOCKING = true;
   const PET_SCALE_MIN = 0.75;
-  const PET_SCALE_MAX = 1.6;
+  const PET_SCALE_MAX = 10.0;
   const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 
   // 偏好文件路径

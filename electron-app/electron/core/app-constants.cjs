@@ -22,7 +22,7 @@ const BASE_PET_SPRITE_SIZE = 128;
 
 // 缩放
 const PET_SCALE_MIN = 0.75;
-const PET_SCALE_MAX = 1.6;
+const PET_SCALE_MAX = 10.0;
 const PET_SCALE_STEP = 0.08;
 
 // 窗口贴靠
