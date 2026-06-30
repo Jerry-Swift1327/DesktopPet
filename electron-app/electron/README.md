@@ -8,7 +8,8 @@
 | --- | --- |
 | `main.cjs` | 主进程核心逻辑，负责菜单、拖拽、贴靠、行走、状态机薄包装、surface 缩放薄包装和自启动；宠物窗口对象已委托 `windows/pet-window-controller.cjs` |
 | `preload.cjs` | 安全暴露 IPC API 给渲染层 |
-| `pet-variants.cjs` | 宠物变体、动作 ID、渠道配置和打包 profile |
+| `pet-variant-metadata.json` | 精简宠物变体元数据 |
+| `pet-variants.cjs` | 将精简元数据展开为动作 ID、渠道配置、运行时配置和打包 profile |
 | `walk-clock.cjs` | 行走循环暂停/恢复计时 |
 | `window-surfaces.ps1` | Windows 窗口候选列表探测 |
 | `window-from-point.ps1` | 根据屏幕点查找窗口 |
@@ -111,17 +112,12 @@
 
 ## 变体修改流程
 
-新增或修改宠物变体时，优先修改 `pet-variants.cjs`：
-
-- `PET_VARIANT_PROFILES`
-- `PET_CHANNEL_PROFILES`
-- `getVariantAnimationFolders`
-- `getVariantManifestName`
-- `getWindowsBuildProfile`
+新增或修改宠物变体时，优先使用 `../scripts/variant-cli.cjs` 或修改 `pet-variant-metadata.json`。`pet-variants.cjs` 只维护派生规则、动作定义、渠道配置和打包 profile 展开逻辑。
 
 然后同步：
 
 - `../../assets/animations` 下的资源目录和 manifest。
+- `../scripts/variant-cli.cjs`，如果新增或改变变体维护流程。
 - `../prepare-runtime-assets.cjs`。
 - `../build-electron-win.ps1`。
 - `../build-installer-win.ps1`。

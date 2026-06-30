@@ -32,8 +32,8 @@
 | --- | --- |
 | `dog` | 默认狗狗资源 |
 | `cat` | 默认猫咪资源 |
-| `shorthair` | 英短资源 |
-| `tabby` | 虎斑猫资源，包含额外动作 |
+| `shorthair` | 英短资源，历史变体 ID |
+| `tabby` | 中华狸花猫资源，`tabby` 作为历史 ID 和花纹标签保留，包含额外动作 |
 | `ragdoll` | 布偶猫资源，包含转圈、舔爪、伸展、翻肚和闲置动作 |
 | `brit` | 英短双色资源 |
 | `bshmitted` | 英短蓝色手套资源 |
@@ -42,7 +42,8 @@
 
 ## 修改注意
 
-- 新增宠物变体时，目录命名应保持 `<variant>_<action>`。
+- 新增定制宠物变体时，先用 `npm.cmd run variant:new -- --breed <breed> --date YYYY-MM-DD` 生成 `<breed>-<shortCode>` ID，动作目录命名保持 `<id>_<action>`。
+- 从外部目录复制源视频时，使用 `npm.cmd run variant:rename-assets -- --id <id> --from <source-dir>` 统一重命名为 `<id>_<action>.mp4`。
 - 新增动作类型时，需要同步 Electron 变体配置、主进程状态、渲染层动作按钮和打包脚本。
 - 替换动作视频后，检查 `loop.json`、manifest 和正式 `transparent_frames` 是否一致。
 - 不要把 `raw_frames`、`processed_frames`、`_replacement_work` 或质量预览输出当作运行时必需资源。

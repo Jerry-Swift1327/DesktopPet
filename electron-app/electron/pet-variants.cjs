@@ -1,9 +1,17 @@
+const crypto = require("crypto");
+const path = require("path");
+
 const PET_VARIANT_CONFIG_FILE = "pet_variant.json";
 const PREFERRED_VARIANT_FILE = "preferred-variant.json";
 const DEFAULT_PET_VARIANT = "dog";
 const DEFAULT_PET_CHANNEL = "release";
+const DEFAULT_PET_PLATFORM = "win32";
+const DEFAULT_PET_SCOPE = "custom";
 const MAC_USER_DATA_PARENT = "Chongban 1.0";
 const SWITCHABLE_VARIANTS = Object.freeze(["dog", "cat"]);
+const PET_VARIANT_METADATA_FILE = path.join(__dirname, "pet-variant-metadata.json");
+const INSTALLER_GUID_NAMESPACE = "6d0c98fd-153d-40cf-9738-77c241c1e064";
+const PET_VARIANT_SHORT_CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 
 const PET_ACTIONS = Object.freeze({
   squat: Object.freeze({ id: "petSquat", asset: "squat" }),
@@ -22,205 +30,22 @@ const PET_ACTIONS = Object.freeze({
 });
 
 const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
-const TABBY_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
-const RAGDOLL_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "belly"]);
 
-const PET_VARIANT_PROFILES = Object.freeze({
-  dog: Object.freeze({
-    id: "dog",
-    species: "dog",
-    audience: "internal",
-    platforms: Object.freeze(["win32", "darwin"]),
-    deliveryPathSegments: Object.freeze(["internal", "dog"]),
-    deliveryVersion: "1.1",
-    animationPrefix: "dog",
-    actions: PET_ACTION_ORDER,
-    defaultScale: 1.1,
-    installerGuid: "9f5b91c8-e03a-58e9-a3bd-5ca74a95e2f1",
-    autoStartRegistryKey: "ChongbanDesktopPet-dog",
-    singleInstanceKey: "com.chongban.desktoppet.dog",
-    features: Object.freeze({
-      autoStart: true,
-      windowRoam: true,
-      customization: true,
-      switchPet: false
-    })
-  }),
-  cat: Object.freeze({
-    id: "cat",
-    species: "cat",
-    audience: "internal",
-    platforms: Object.freeze(["win32", "darwin"]),
-    deliveryPathSegments: Object.freeze(["internal", "cat"]),
-    deliveryVersion: "1.2",
-    animationPrefix: "cat",
-    actions: PET_ACTION_ORDER,
-    defaultScale: 1,
-    installerGuid: "0793c0d4-f31d-5e02-b7d8-23331f7f85b0",
-    autoStartRegistryKey: "ChongbanDesktopPet-cat",
-    singleInstanceKey: "com.chongban.desktoppet.cat",
-    features: Object.freeze({
-      autoStart: true,
-      windowRoam: true,
-      customization: true,
-      switchPet: false
-    })
-  }),
-  shorthair: Object.freeze({
-    id: "shorthair",
-    species: "cat",
-    audience: "custom",
-    baseVariant: "cat",
-    breedGroup: "bsh",
-    coatPattern: "blue-fold",
-    platforms: Object.freeze(["win32"]),
-    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "blue-fold"]),
-    deliveryVersion: "1.0",
-    animationPrefix: "shorthair",
-    actions: PET_ACTION_ORDER,
-    defaultScale: 1.1,
-    installerGuid: "497f37d9-3152-5d4e-a62f-b41d7f247b1e",
-    autoStartRegistryKey: "ChongbanDesktopPet-shorthair",
-    singleInstanceKey: "com.chongban.desktoppet.shorthair",
-    features: Object.freeze({
-      autoStart: false,
-      windowRoam: false
-    })
-  }),
-  tabby: Object.freeze({
-    id: "tabby",
-    species: "cat",
-    audience: "custom",
-    baseVariant: "cat",
-    breedGroup: "tabby",
-    platforms: Object.freeze(["win32"]),
-    deliveryPathSegments: Object.freeze(["custom", "cat", "tabby"]),
-    deliveryVersion: "1.0",
-    animationPrefix: "tabby",
-    actions: TABBY_ACTION_ORDER,
-    extraAnimationAssets: Object.freeze(["look", "shake", "yawn", "sleep", "hiss"]),
-    defaultScale: 1.1,
-    installerGuid: "521bbcee-864b-4f43-8854-25d0948a2b2c",
-    autoStartRegistryKey: "ChongbanDesktopPet-tabby",
-    singleInstanceKey: "com.chongban.desktoppet.tabby",
-    features: Object.freeze({
-      autoStart: true,
-      windowRoam: true,
-      eyeTracking: true,
-      idleYawn: true,
-      sleepPoseSwitch: true,
-      wakeHiss: true,
-      dockShake: true
-    })
-  }),
-  ragdoll: Object.freeze({
-    id: "ragdoll",
-    species: "cat",
-    audience: "internal",
-    baseVariant: "cat",
-    breedGroup: "ragdoll",
-    coatPattern: "blue-bicolor",
-    platforms: Object.freeze(["win32"]),
-    deliveryPathSegments: Object.freeze(["internal", "ragdoll"]),
-    deliveryVersion: "1.3",
-    animationPrefix: "ragdoll",
-    actions: RAGDOLL_ACTION_ORDER,
-    extraAnimationAssets: Object.freeze(["shake", "yawn", "hiss"]),
-    defaultScale: 1.1,
-    installerGuid: "7dd55ecf-0f7c-41f3-9e23-67ac126a0b83",
-    autoStartRegistryKey: "ChongbanDesktopPet-ragdoll",
-    singleInstanceKey: "com.chongban.desktoppet.ragdoll",
-    features: Object.freeze({
-      autoStart: true,
-      windowRoam: true,
-      idleYawn: true,
-      wakeHiss: true,
-      dockShake: true
-    })
-  }),
-  brit: Object.freeze({
-    id: "brit",
-    species: "cat",
-    audience: "custom",
-    baseVariant: "cat",
-    breedGroup: "bsh",
-    coatPattern: "blue-bicolor",
-    platforms: Object.freeze(["win32"]),
-    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "blue-bicolor"]),
-    deliveryVersion: "1.0",
-    animationPrefix: "brit",
-    actions: PET_ACTION_ORDER,
-    defaultScale: 1.1,
-    installerGuid: "c5230690-90c2-463f-992a-58f5f3cef2df",
-    autoStartRegistryKey: "ChongbanDesktopPet-brit",
-    singleInstanceKey: "com.chongban.desktoppet.brit",
-    features: Object.freeze({
-      autoStart: true,
-      windowRoam: true
-    })
-  }),
-  bshmitted: Object.freeze({
-    id: "bshmitted",
-    species: "cat",
-    audience: "custom",
-    baseVariant: "cat",
-    breedGroup: "bsh",
-    coatPattern: "blue-mitted",
-    platforms: Object.freeze(["win32"]),
-    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "blue-mitted"]),
-    deliveryVersion: "1.0",
-    animationPrefix: "bshmitted",
-    actions: PET_ACTION_ORDER,
-    defaultScale: 1.1,
-    installerGuid: "9ed7a479-a281-4d87-95fa-88e348789297",
-    autoStartRegistryKey: "ChongbanDesktopPet-bshmitted",
-    singleInstanceKey: "com.chongban.desktoppet.bshmitted",
-    features: Object.freeze({
-      autoStart: true,
-      windowRoam: true
-    })
-  }),
-  van: Object.freeze({
-    id: "van",
-    species: "cat",
-    audience: "custom",
-    baseVariant: "cat",
-    breedGroup: "bsh",
-    coatPattern: "red-van",
-    platforms: Object.freeze(["win32"]),
-    deliveryPathSegments: Object.freeze(["custom", "cat", "bsh", "red-van"]),
-    deliveryVersion: "1.0",
-    animationPrefix: "van",
-    actions: PET_ACTION_ORDER,
-    defaultScale: 1.1,
-    installerGuid: "a3d7e2f8-4b91-5c6a-9e0d-1f2a3b4c5d6e",
-    autoStartRegistryKey: "ChongbanDesktopPet-van",
-    singleInstanceKey: "com.chongban.desktoppet.van",
-    features: Object.freeze({
-      autoStart: true,
-      windowRoam: true
-    })
-  }),
-  pomeranian: Object.freeze({
-    id: "pomeranian",
-    species: "dog",
-    audience: "custom",
-    baseVariant: "dog",
-    breedGroup: "pomeranian",
-    platforms: Object.freeze(["darwin"]),
-    deliveryPathSegments: Object.freeze(["custom", "dog", "pomeranian"]),
-    deliveryVersion: "1.0",
-    animationPrefix: "pomeranian",
-    actions: PET_ACTION_ORDER,
-    defaultScale: 1.1,
-    autoStartRegistryKey: "ChongbanDesktopPet-pomeranian",
-    singleInstanceKey: "com.chongban.desktoppet.pomeranian",
-    features: Object.freeze({
-      autoStart: false,
-      windowRoam: false
-    })
-  })
+const PET_BREED_PROFILES = Object.freeze({
+  bsh: Object.freeze({ id: "bsh", species: "cat", baseVariant: "cat", label: "British Shorthair" }),
+  lihua: Object.freeze({ id: "lihua", species: "cat", baseVariant: "cat", label: "Chinese Li Hua" }),
+  ragdoll: Object.freeze({ id: "ragdoll", species: "cat", baseVariant: "cat", label: "Ragdoll" }),
+  pomeranian: Object.freeze({ id: "pomeranian", species: "dog", baseVariant: "dog", label: "Pomeranian" }),
+  dog: Object.freeze({ id: "dog", species: "dog", baseVariant: "dog", label: "Generic Dog" }),
+  cat: Object.freeze({ id: "cat", species: "cat", baseVariant: "cat", label: "Generic Cat" })
 });
+
+const DEFAULT_FEATURES = Object.freeze({
+  autoStart: true,
+  windowRoam: true
+});
+
+const RAW_PET_VARIANT_METADATA = require("./pet-variant-metadata.json");
 
 const PET_CHANNEL_PROFILES = Object.freeze({
   release: Object.freeze({
@@ -235,6 +60,138 @@ const PET_CHANNEL_PROFILES = Object.freeze({
   })
 });
 
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) {
+    return value;
+  }
+  Object.freeze(value);
+  for (const key of Object.keys(value)) {
+    deepFreeze(value[key]);
+  }
+  return value;
+}
+
+function normalizeVariantMetadata(metadata) {
+  return {
+    schemaVersion: metadata.schemaVersion || 1,
+    variants: metadata.variants || metadata
+  };
+}
+
+const PET_VARIANT_METADATA = deepFreeze(normalizeVariantMetadata(RAW_PET_VARIANT_METADATA));
+
+function clonePlainObject(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function parseUuid(uuid) {
+  return Buffer.from(uuid.replace(/-/g, ""), "hex");
+}
+
+function formatUuid(bytes) {
+  const hex = Buffer.from(bytes).toString("hex");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32)
+  ].join("-");
+}
+
+function createUuidV5(name, namespace = INSTALLER_GUID_NAMESPACE) {
+  const hash = crypto.createHash("sha1")
+    .update(parseUuid(namespace))
+    .update(String(name))
+    .digest();
+  const bytes = Buffer.from(hash.subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  return formatUuid(bytes);
+}
+
+function createVariantInstallerGuid(id) {
+  return createUuidV5(`installer:${id}`);
+}
+
+function normalizePlatforms(raw = {}) {
+  if (Array.isArray(raw.platforms) && raw.platforms.length > 0) {
+    return raw.platforms.slice();
+  }
+  if (raw.platform) {
+    return [raw.platform];
+  }
+  return [DEFAULT_PET_PLATFORM];
+}
+
+function assertKnownAction(action, variantId) {
+  if (!Object.prototype.hasOwnProperty.call(PET_ACTIONS, action)) {
+    throw new Error(`Unknown pet action ${action} in variant ${variantId}.`);
+  }
+}
+
+function resolvePetVariantProfile(rawProfile) {
+  const id = rawProfile.id;
+  const breed = rawProfile.breed;
+  const breedProfile = PET_BREED_PROFILES[breed];
+  if (!id) {
+    throw new Error("Pet variant metadata is missing id.");
+  }
+  if (!breedProfile) {
+    throw new Error(`Pet variant ${id} uses unknown breed: ${breed}`);
+  }
+
+  const scope = rawProfile.scope || DEFAULT_PET_SCOPE;
+  const extraActions = (rawProfile.extraActions || rawProfile.additionalActions || []).slice();
+  for (const action of extraActions) {
+    assertKnownAction(action, id);
+  }
+  const actions = PET_ACTION_ORDER.concat(extraActions);
+  const extraAssets = (rawProfile.extraAssets || rawProfile.extraAnimationAssets || []).slice();
+  const features = Object.assign({}, DEFAULT_FEATURES, rawProfile.features || {});
+  const version = rawProfile.version || rawProfile.deliveryVersion || "1.0";
+  const scale = Number(rawProfile.scale ?? rawProfile.defaultScale ?? 1.1);
+  const deliveryPathSegments = rawProfile.deliveryPathSegments || [scope, breed, id];
+
+  return deepFreeze({
+    id,
+    breed,
+    date: rawProfile.date || null,
+    scope,
+    species: rawProfile.species || breedProfile.species,
+    audience: scope,
+    baseVariant: rawProfile.baseVariant || breedProfile.baseVariant,
+    breedGroup: breed,
+    tags: (rawProfile.tags || []).slice(),
+    platforms: normalizePlatforms(rawProfile),
+    deliveryPathSegments: deliveryPathSegments.slice(),
+    version,
+    deliveryVersion: version,
+    animationPrefix: rawProfile.assetPrefix || rawProfile.animationPrefix || id,
+    actions,
+    extraActions,
+    extraAnimationAssets: extraAssets,
+    extraAssets,
+    defaultScale: scale,
+    scale,
+    installerGuid: rawProfile.installerGuid || createVariantInstallerGuid(id),
+    autoStartRegistryKey: rawProfile.autoStartRegistryKey || `ChongbanDesktopPet-${id}`,
+    singleInstanceKey: rawProfile.singleInstanceKey || `com.chongban.desktoppet.${id}`,
+    features
+  });
+}
+
+function buildPetVariantProfiles(metadata = PET_VARIANT_METADATA) {
+  const variants = normalizeVariantMetadata(metadata).variants;
+  const profiles = {};
+  for (const [id, rawProfile] of Object.entries(variants)) {
+    profiles[id] = resolvePetVariantProfile(Object.assign({ id }, rawProfile));
+  }
+  return deepFreeze(profiles);
+}
+
+const PET_VARIANT_PROFILES = buildPetVariantProfiles(PET_VARIANT_METADATA);
+
 function normalizePetVariant(value) {
   return Object.prototype.hasOwnProperty.call(PET_VARIANT_PROFILES, value)
     ? value
@@ -245,10 +202,6 @@ function normalizePetChannel(value) {
   return Object.prototype.hasOwnProperty.call(PET_CHANNEL_PROFILES, value)
     ? value
     : DEFAULT_PET_CHANNEL;
-}
-
-function clonePlainObject(value) {
-  return JSON.parse(JSON.stringify(value));
 }
 
 function getPetActions() {
@@ -265,6 +218,19 @@ function getPetActionIds() {
 function getPetActionOrder(value) {
   const order = getPetVariantProfile(value).actions || PET_ACTION_ORDER;
   return order.map((key) => PET_ACTIONS[key].id);
+}
+
+function getPetBreedProfiles() {
+  return clonePlainObject(PET_BREED_PROFILES);
+}
+
+function getPetVariantMetadata(value) {
+  const variant = normalizePetVariant(value);
+  return clonePlainObject(PET_VARIANT_METADATA.variants[variant]);
+}
+
+function getPetVariantMetadataList() {
+  return Object.keys(PET_VARIANT_METADATA.variants).map((id) => clonePlainObject(PET_VARIANT_METADATA.variants[id]));
 }
 
 function getPetVariantProfile(value) {
@@ -333,6 +299,9 @@ function getVariantManifestName(value) {
 }
 
 function getWindowsBuildProfile(value, channel) {
+  if (!Object.prototype.hasOwnProperty.call(PET_VARIANT_PROFILES, value)) {
+    throw new Error(`Invalid pet variant: ${value}`);
+  }
   const variant = normalizePetVariant(value);
   const channelId = normalizePetChannel(channel);
   const profile = getPetVariantProfile(variant);
@@ -353,14 +322,72 @@ function getWindowsBuildProfile(value, channel) {
   };
 }
 
+function isValidVariantDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) {
+    return false;
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+function generatePetVariantShortCode(length = 4) {
+  let code = "";
+  for (let i = 0; i < length; i += 1) {
+    code += PET_VARIANT_SHORT_CODE_ALPHABET[crypto.randomInt(PET_VARIANT_SHORT_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+function createPetVariantId(breed, shortCode) {
+  return `${breed}-${String(shortCode).toLowerCase()}`;
+}
+
+function createPetVariantMetadataDraft({
+  breed,
+  date,
+  code = generatePetVariantShortCode(),
+  scope = DEFAULT_PET_SCOPE,
+  version = "1.0",
+  scale = 1.1,
+  platform = DEFAULT_PET_PLATFORM
+}) {
+  if (!Object.prototype.hasOwnProperty.call(PET_BREED_PROFILES, breed)) {
+    throw new Error(`Unknown breed: ${breed}`);
+  }
+  if (!isValidVariantDate(date)) {
+    throw new Error(`Invalid variant date: ${date}. Use YYYY-MM-DD.`);
+  }
+  const id = createPetVariantId(breed, code);
+  return {
+    id,
+    breed,
+    date,
+    scope,
+    version,
+    scale: Number(scale),
+    platform,
+    extraActions: [],
+    extraAssets: [],
+    features: {}
+  };
+}
+
 module.exports = {
   PET_VARIANT_CONFIG_FILE,
   PREFERRED_VARIANT_FILE,
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
+  DEFAULT_PET_PLATFORM,
+  DEFAULT_PET_SCOPE,
   MAC_USER_DATA_PARENT,
   SWITCHABLE_VARIANTS,
+  PET_VARIANT_METADATA_FILE,
+  PET_VARIANT_SHORT_CODE_ALPHABET,
   PET_VARIANT_IDS: Object.freeze(Object.keys(PET_VARIANT_PROFILES)),
+  PET_BREED_IDS: Object.freeze(Object.keys(PET_BREED_PROFILES)),
   PET_CHANNEL_IDS: Object.freeze(Object.keys(PET_CHANNEL_PROFILES)),
   PET_ACTION_ORDER,
   normalizePetVariant,
@@ -368,12 +395,22 @@ module.exports = {
   getPetActions,
   getPetActionIds,
   getPetActionOrder,
+  getPetBreedProfiles,
+  getPetVariantMetadata,
+  getPetVariantMetadataList,
   getPetVariantProfile,
   getPetChannelProfile,
+  buildPetVariantProfiles,
+  resolvePetVariantProfile,
   buildPetRuntimeConfig,
   getPetUserDataFolder,
   getPetPlatformFeatures,
   getVariantAnimationFolders,
   getVariantManifestName,
-  getWindowsBuildProfile
+  getWindowsBuildProfile,
+  isValidVariantDate,
+  generatePetVariantShortCode,
+  createPetVariantId,
+  createPetVariantMetadataDraft,
+  createVariantInstallerGuid
 };

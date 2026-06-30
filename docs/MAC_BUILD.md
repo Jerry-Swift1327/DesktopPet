@@ -1,6 +1,7 @@
 # macOS 打包说明
 
 本项目的 macOS 安装包必须在 macOS 终端生成。Windows 本机只能做脚本语法和资源检查。
+打包脚本会校验 `--pet-variant` 是否存在且支持 macOS；当前 macOS 变体为 `pomeranian`。
 
 ## 同时生成 arm64 和 x64
 

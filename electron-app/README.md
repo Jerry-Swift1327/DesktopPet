@@ -59,18 +59,22 @@ powershell -ExecutionPolicy Bypass -File build-electron-win.ps1 -PetVariant tabb
 powershell -ExecutionPolicy Bypass -File build-installer-win.ps1 -PetVariant brit
 ```
 
-Windows 打包脚本只能在 Windows 上执行；`PET_VARIANT` 本地启动调试不受打包平台限制。
+Windows 打包脚本只能在 Windows 上执行；`PET_VARIANT` 本地启动调试不受打包平台限制。Windows 打包参数由变体元数据校验，不再在 PowerShell 脚本中硬编码变体列表。
 
-可选 Windows 变体：
+查询可用变体：
 
-- `dog`
-- `cat`
-- `shorthair`
-- `tabby`
-- `ragdoll`
-- `brit`
-- `bshmitted`
-- `van`
+```powershell
+npm.cmd run variant:list
+npm.cmd run variant:show -- --id tabby
+npm.cmd run variant:query -- --breed bsh
+```
+
+新增定制变体：
+
+```powershell
+npm.cmd run variant:new -- --breed lihua --date 2026-06-30
+npm.cmd run variant:rename-assets -- --id lihua-k7x9 --from C:\path\to\source-videos
+```
 
 macOS 打包脚本使用 Node 参数：
 
@@ -84,6 +88,7 @@ npm run installer:mac -- --pet-variant=pomeranian --arch=x64
 | 路径 | 作用 |
 | --- | --- |
 | `electron` | 主进程、预加载桥、变体配置、行走计时和 Windows 窗口探测脚本 |
+| `scripts` | 变体元数据查询、新建和资源重命名 CLI |
 | `static` | 宠物窗口、快捷菜单、悬停面板和气泡的渲染入口 |
 | `test` | Node 内置测试 |
 | `build` | 图标和 NSIS 自定义脚本 |
@@ -100,13 +105,14 @@ npm run installer:mac -- --pet-variant=pomeranian --arch=x64
 | `build-electron-win.ps1` | 组装 Windows 便携版目录包 |
 | `build-installer-win.ps1` | 构建 Windows NSIS 安装向导 |
 | `build-installer-mac.cjs` | 构建 macOS `.app` 和 `.dmg` |
+| `scripts/variant-cli.cjs` | 查询/新增变体并复制重命名动作源视频 |
 
 ## 输出目录
 
 | 类型 | 位置 |
 | --- | --- |
-| Windows 便携版 | `deliverables/<audience>/<variant>/release` |
-| Windows 安装向导 | `deliverables/<audience>/<variant>/installer` |
+| Windows 便携版 | `deliverables/<scope>/<breed>/<id>/release` |
+| Windows 安装向导 | `deliverables/<scope>/<breed>/<id>/installer` |
 | macOS DMG | `mac_installer/<variant>/<arch>` |
 
 这些目录是生成产物。除排查打包问题外，不应作为源码修改入口。
@@ -114,7 +120,7 @@ npm run installer:mac -- --pet-variant=pomeranian --arch=x64
 ## 修改注意
 
 - 新增 IPC 时同步修改 `electron/main.cjs`、`electron/preload.cjs` 和 `static/renderer.js`。
-- 新增宠物变体时同步修改 `electron/pet-variants.cjs`、资源目录、打包脚本和测试。
+- 新增宠物变体时优先使用 `npm.cmd run variant:new` 写入 `electron/pet-variant-metadata.json`，再补资源目录、测试和文档。
 - 修改打包输出、应用名、图标或安装行为时，同步检查根 `README.md`、`docs/PROJECT_MAP.md` 和本文件。
 - 修改后按影响范围运行 `npm.cmd test` 或手动启动应用验证。
 

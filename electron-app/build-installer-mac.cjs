@@ -1,7 +1,7 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { PET_VARIANT_IDS } = require("./electron/pet-variants.cjs");
+const { PET_VARIANT_IDS, getPetVariantProfile } = require("./electron/pet-variants.cjs");
 
 const appRoot = __dirname;
 const packageJsonPath = path.join(appRoot, "package.json");
@@ -45,6 +45,10 @@ if (process.platform !== "darwin") {
 if (!PET_VARIANT_IDS.includes(variant)) {
   throw new Error(`Invalid pet variant: ${variant}`);
 }
+const variantProfile = getPetVariantProfile(variant);
+if (!variantProfile.platforms.includes("darwin")) {
+  throw new Error(`Pet variant ${variant} does not support macOS packaging.`);
+}
 if (archs.some((arch) => !["x64", "arm64"].includes(arch))) {
   throw new Error(`Invalid mac arch: ${archOption}`);
 }
@@ -63,7 +67,7 @@ try {
 
   for (const arch of archs) {
     const packageJson = JSON.parse(originalPackageJson);
-    packageJson.build.appId = `com.chongban.desktoppet.${variant}`;
+    packageJson.build.appId = variantProfile.singleInstanceKey;
     packageJson.build.productName = displayName;
     packageJson.build.executableName = displayName;
     packageJson.build.directories.output = path.posix.join("mac_installer", variant, arch);

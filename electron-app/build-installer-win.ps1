@@ -1,5 +1,4 @@
 param(
-  [ValidateSet("dog", "cat", "shorthair", "tabby", "ragdoll", "brit", "bshmitted", "van", "pomeranian")]
   [string]$PetVariant = "dog"
 )
 

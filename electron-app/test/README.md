@@ -20,6 +20,7 @@ node --test "test/**/*.test.cjs"
 | 文件 | 覆盖内容 | 相关源码 |
 | --- | --- | --- |
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名 | `../electron/pet-variants.cjs` |
+| `variant-cli.test.cjs` | 变体 CLI 的新建、校验和动作源视频复制重命名 | `../scripts/variant-cli.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |
 | `walk-controller-accessor.test.cjs` | walk-controller 访问器与 main.cjs 接线结构断言 | `../electron/behavior/walk-controller.cjs`、`../electron/main.cjs` |
 | `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除与 main.cjs 薄包装接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |
@@ -60,7 +61,8 @@ node --test "test/**/*.test.cjs"
 
 ## 何时补测试
 
-- 修改 `pet-variants.cjs` 的变体、动作、渠道或默认配置。
+- 修改 `pet-variant-metadata.json` 或 `pet-variants.cjs` 的变体、动作、渠道或默认配置。
+- 修改 `scripts/variant-cli.cjs` 的新增变体、查询或资源重命名流程。
 - 修改 `walk-clock.cjs` 的计时逻辑。
 - 从 `main.cjs` 中抽出纯逻辑模块后。
 - 新增不依赖真实 Electron 窗口的核心规则。

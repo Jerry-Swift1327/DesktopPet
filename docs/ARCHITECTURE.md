@@ -74,19 +74,21 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 
 ## 宠物变体
 
-变体配置集中在 `electron-app/electron/pet-variants.cjs`：
+变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，`electron-app/electron/pet-variants.cjs` 负责把精简字段展开为运行时和打包 profile。新增 custom 变体使用 `<breed>-<shortCode>` ID，Windows 打包路径为 `deliverables/custom/<breed>/<id>/<channel>`。
 
-| 变体 | 动画前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
-| --- | --- | --- | --- | --- | --- |
-| `dog` | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
-| `cat` | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
-| `shorthair` | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
-| `tabby` | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `ragdoll` | `ragdoll` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `brit` | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `bshmitted` | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `van` | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `pomeranian` | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
+| 变体 | 品种 | 范围 | 动画前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `dog` | `dog` | internal | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `cat` | `cat` | internal | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `shorthair` | `bsh` | custom | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
+| `tabby` | `lihua` | custom | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `ragdoll` | `ragdoll` | internal | `ragdoll` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `brit` | `bsh` | custom | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `bshmitted` | `bsh` | custom | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `van` | `bsh` | custom | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pomeranian` | `pomeranian` | custom | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
+
+变体维护 CLI 位于 `electron-app/scripts/variant-cli.cjs`，可通过 `npm.cmd run variant:list`、`variant:new`、`variant:query` 和 `variant:rename-assets` 查询或新增定制变体。
 
 渠道配置：
 

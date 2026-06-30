@@ -12,7 +12,15 @@
     "installer:win": "powershell -ExecutionPolicy Bypass -File build-installer-win.ps1",
     "pack:win": "npm run prepare:runtime-assets && electron-builder --win dir --x64",
     "package:mac": "node build-installer-mac.cjs",
-    "installer:mac": "node build-installer-mac.cjs"
+    "installer:mac": "node build-installer-mac.cjs",
+    "variant": "node scripts/variant-cli.cjs",
+    "variant:list": "node scripts/variant-cli.cjs list",
+    "variant:show": "node scripts/variant-cli.cjs show",
+    "variant:query": "node scripts/variant-cli.cjs query",
+    "variant:new": "node scripts/variant-cli.cjs new",
+    "variant:check": "node scripts/variant-cli.cjs check",
+    "variant:rename-assets": "node scripts/variant-cli.cjs rename-assets",
+    "variant:breeds": "node scripts/variant-cli.cjs breeds"
   },
   "devDependencies": {
     "electron": "^37.0.0",

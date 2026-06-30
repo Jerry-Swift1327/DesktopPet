@@ -3,16 +3,23 @@ const assert = require("node:assert/strict");
 const {
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
+  PET_BREED_IDS,
   SWITCHABLE_VARIANTS,
   normalizePetVariant,
   normalizePetChannel,
+  createPetVariantMetadataDraft,
+  createVariantInstallerGuid,
   buildPetRuntimeConfig,
+  resolvePetVariantProfile,
+  getPetBreedProfiles,
+  getPetVariantMetadata,
   getPetVariantProfile,
   getPetUserDataFolder,
   getPetPlatformFeatures,
   getVariantAnimationFolders,
   getVariantManifestName,
-  getWindowsBuildProfile
+  getWindowsBuildProfile,
+  isValidVariantDate
 } = require("../electron/pet-variants.cjs");
 
 test("pet runtime config defaults to dog release", () => {
@@ -147,32 +154,67 @@ test("pomeranian variant uses release and installer channels", () => {
   assert.equal(installerConfig.channelConfig.hoverPanelHeight, 150);
 });
 
-test("variant metadata describes delivery and supported platforms", () => {
+test("variant metadata resolves simplified breed and delivery fields", () => {
+  assert.ok(PET_BREED_IDS.includes("bsh"));
+  assert.ok(PET_BREED_IDS.includes("lihua"));
+  assert.equal(getPetBreedProfiles().lihua.species, "cat");
+  assert.equal(getPetVariantMetadata("tabby").breed, "lihua");
   assert.deepEqual(getPetVariantProfile("cat").platforms, ["win32", "darwin"]);
-  assert.deepEqual(getPetVariantProfile("shorthair").deliveryPathSegments, ["custom", "cat", "bsh", "blue-fold"]);
-  assert.deepEqual(getPetVariantProfile("brit").deliveryPathSegments, ["custom", "cat", "bsh", "blue-bicolor"]);
-  assert.deepEqual(getPetVariantProfile("bshmitted").deliveryPathSegments, ["custom", "cat", "bsh", "blue-mitted"]);
-  assert.deepEqual(getPetVariantProfile("van").deliveryPathSegments, ["custom", "cat", "bsh", "red-van"]);
+  assert.deepEqual(getPetVariantProfile("shorthair").deliveryPathSegments, ["custom", "bsh", "shorthair"]);
+  assert.deepEqual(getPetVariantProfile("brit").deliveryPathSegments, ["custom", "bsh", "brit"]);
+  assert.deepEqual(getPetVariantProfile("bshmitted").deliveryPathSegments, ["custom", "bsh", "bshmitted"]);
+  assert.deepEqual(getPetVariantProfile("van").deliveryPathSegments, ["custom", "bsh", "van"]);
+  assert.deepEqual(getPetVariantProfile("tabby").deliveryPathSegments, ["custom", "lihua", "tabby"]);
   assert.deepEqual(getPetVariantProfile("tabby").actions, ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
-  assert.deepEqual(getPetVariantProfile("ragdoll").deliveryPathSegments, ["internal", "ragdoll"]);
+  assert.deepEqual(getPetVariantProfile("ragdoll").deliveryPathSegments, ["internal", "ragdoll", "ragdoll"]);
   assert.deepEqual(getPetVariantProfile("ragdoll").actions, ["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "belly"]);
   assert.deepEqual(getPetVariantProfile("pomeranian").platforms, ["darwin"]);
 });
 
 test("Windows build profile centralizes paths and package names", () => {
-  assert.equal(getWindowsBuildProfile("dog", "release").output, "deliverables/internal/dog/release");
+  assert.equal(getWindowsBuildProfile("dog", "release").output, "deliverables/internal/dog/dog/release");
   assert.equal(getWindowsBuildProfile("dog", "release").deliveryVersion, "1.1");
-  assert.equal(getWindowsBuildProfile("cat", "installer").output, "deliverables/internal/cat/installer");
+  assert.equal(getWindowsBuildProfile("cat", "installer").output, "deliverables/internal/cat/cat/installer");
   assert.equal(getWindowsBuildProfile("cat", "installer").deliveryVersion, "1.2");
-  assert.equal(getWindowsBuildProfile("brit", "installer").output, "deliverables/custom/cat/bsh/blue-bicolor/installer");
-  assert.equal(getWindowsBuildProfile("bshmitted", "release").output, "deliverables/custom/cat/bsh/blue-mitted/release");
-  assert.equal(getWindowsBuildProfile("shorthair", "release").output, "deliverables/custom/cat/bsh/blue-fold/release");
-  assert.equal(getWindowsBuildProfile("van", "release").output, "deliverables/custom/cat/bsh/red-van/release");
+  assert.equal(getWindowsBuildProfile("brit", "installer").output, "deliverables/custom/bsh/brit/installer");
+  assert.equal(getWindowsBuildProfile("bshmitted", "release").output, "deliverables/custom/bsh/bshmitted/release");
+  assert.equal(getWindowsBuildProfile("shorthair", "release").output, "deliverables/custom/bsh/shorthair/release");
+  assert.equal(getWindowsBuildProfile("van", "release").output, "deliverables/custom/bsh/van/release");
+  assert.equal(getWindowsBuildProfile("tabby", "release").output, "deliverables/custom/lihua/tabby/release");
   assert.equal(getWindowsBuildProfile("van", "release").deliveryVersion, "1.0");
   assert.equal(getWindowsBuildProfile("tabby", "release").deliveryVersion, "1.0");
-  assert.equal(getWindowsBuildProfile("ragdoll", "installer").output, "deliverables/internal/ragdoll/installer");
+  assert.equal(getWindowsBuildProfile("ragdoll", "installer").output, "deliverables/internal/ragdoll/ragdoll/installer");
   assert.equal(getWindowsBuildProfile("ragdoll", "installer").deliveryVersion, "1.3");
+  assert.throws(() => getWindowsBuildProfile("unknown", "release"), /Invalid pet variant/);
   assert.throws(() => getWindowsBuildProfile("pomeranian", "installer"), /does not support Windows packaging/);
+});
+
+test("new custom variant drafts derive stable runtime and delivery defaults", () => {
+  const draft = createPetVariantMetadataDraft({
+    breed: "lihua",
+    date: "2026-06-30",
+    code: "k7x9"
+  });
+  const profile = resolvePetVariantProfile(draft);
+
+  assert.equal(draft.id, "lihua-k7x9");
+  assert.equal(profile.scope, "custom");
+  assert.deepEqual(profile.platforms, ["win32"]);
+  assert.deepEqual(profile.actions, ["squat", "walk", "feed", "ball"]);
+  assert.deepEqual(profile.deliveryPathSegments, ["custom", "lihua", "lihua-k7x9"]);
+  assert.equal(profile.animationPrefix, "lihua-k7x9");
+  assert.equal(profile.autoStartRegistryKey, "ChongbanDesktopPet-lihua-k7x9");
+  assert.equal(profile.singleInstanceKey, "com.chongban.desktoppet.lihua-k7x9");
+  assert.equal(profile.features.autoStart, true);
+  assert.equal(profile.features.windowRoam, true);
+  assert.match(profile.installerGuid, /^[0-9a-f-]{36}$/);
+  assert.equal(createVariantInstallerGuid("lihua-k7x9"), createVariantInstallerGuid("lihua-k7x9"));
+});
+
+test("variant date validation accepts only concrete ISO dates", () => {
+  assert.equal(isValidVariantDate("2026-06-30"), true);
+  assert.equal(isValidVariantDate("2026-02-30"), false);
+  assert.equal(isValidVariantDate("06/30/2026"), false);
 });
 
 test("invalid variant and channel fall back to defaults", () => {

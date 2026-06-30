@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "variants": {
+    "dog": {
+      "id": "dog",
+      "breed": "dog",
+      "date": null,
+      "scope": "internal",
+      "version": "1.1",
+      "scale": 1.1,
+      "platforms": [
+        "win32",
+        "darwin"
+      ],
+      "features": {
+        "customization": true,
+        "switchPet": false
+      },
+      "installerGuid": "9f5b91c8-e03a-58e9-a3bd-5ca74a95e2f1",
+      "autoStartRegistryKey": "ChongbanDesktopPet-dog",
+      "singleInstanceKey": "com.chongban.desktoppet.dog"
+    },
+    "cat": {
+      "id": "cat",
+      "breed": "cat",
+      "date": null,
+      "scope": "internal",
+      "version": "1.2",
+      "scale": 1,
+      "platforms": [
+        "win32",
+        "darwin"
+      ],
+      "features": {
+        "customization": true,
+        "switchPet": false
+      },
+      "installerGuid": "0793c0d4-f31d-5e02-b7d8-23331f7f85b0",
+      "autoStartRegistryKey": "ChongbanDesktopPet-cat",
+      "singleInstanceKey": "com.chongban.desktoppet.cat"
+    },
+    "shorthair": {
+      "id": "shorthair",
+      "breed": "bsh",
+      "date": null,
+      "scope": "custom",
+      "version": "1.0",
+      "scale": 1.1,
+      "features": {
+        "autoStart": false,
+        "windowRoam": false
+      },
+      "tags": [
+        "blue-fold"
+      ],
+      "installerGuid": "497f37d9-3152-5d4e-a62f-b41d7f247b1e",
+      "autoStartRegistryKey": "ChongbanDesktopPet-shorthair",
+      "singleInstanceKey": "com.chongban.desktoppet.shorthair"
+    },
+    "tabby": {
+      "id": "tabby",
+      "breed": "lihua",
+      "date": null,
+      "scope": "custom",
+      "version": "1.0",
+      "scale": 1.1,
+      "extraActions": [
+        "lie",
+        "lick",
+        "belly",
+        "stretch"
+      ],
+      "extraAssets": [
+        "look",
+        "shake",
+        "yawn",
+        "sleep",
+        "hiss"
+      ],
+      "features": {
+        "eyeTracking": true,
+        "idleYawn": true,
+        "sleepPoseSwitch": true,
+        "wakeHiss": true,
+        "dockShake": true
+      },
+      "tags": [
+        "tabby"
+      ],
+      "installerGuid": "521bbcee-864b-4f43-8854-25d0948a2b2c",
+      "autoStartRegistryKey": "ChongbanDesktopPet-tabby",
+      "singleInstanceKey": "com.chongban.desktoppet.tabby"
+    },
+    "ragdoll": {
+      "id": "ragdoll",
+      "breed": "ragdoll",
+      "date": null,
+      "scope": "internal",
+      "version": "1.3",
+      "scale": 1.1,
+      "extraActions": [
+        "spin",
+        "lick",
+        "stretch",
+        "belly"
+      ],
+      "extraAssets": [
+        "shake",
+        "yawn",
+        "hiss"
+      ],
+      "features": {
+        "idleYawn": true,
+        "wakeHiss": true,
+        "dockShake": true
+      },
+      "installerGuid": "7dd55ecf-0f7c-41f3-9e23-67ac126a0b83",
+      "autoStartRegistryKey": "ChongbanDesktopPet-ragdoll",
+      "singleInstanceKey": "com.chongban.desktoppet.ragdoll"
+    },
+    "brit": {
+      "id": "brit",
+      "breed": "bsh",
+      "date": null,
+      "scope": "custom",
+      "version": "1.0",
+      "scale": 1.1,
+      "tags": [
+        "blue-bicolor"
+      ],
+      "installerGuid": "c5230690-90c2-463f-992a-58f5f3cef2df",
+      "autoStartRegistryKey": "ChongbanDesktopPet-brit",
+      "singleInstanceKey": "com.chongban.desktoppet.brit"
+    },
+    "bshmitted": {
+      "id": "bshmitted",
+      "breed": "bsh",
+      "date": null,
+      "scope": "custom",
+      "version": "1.0",
+      "scale": 1.1,
+      "tags": [
+        "blue-mitted"
+      ],
+      "installerGuid": "9ed7a479-a281-4d87-95fa-88e348789297",
+      "autoStartRegistryKey": "ChongbanDesktopPet-bshmitted",
+      "singleInstanceKey": "com.chongban.desktoppet.bshmitted"
+    },
+    "van": {
+      "id": "van",
+      "breed": "bsh",
+      "date": null,
+      "scope": "custom",
+      "version": "1.0",
+      "scale": 1.1,
+      "tags": [
+        "red-van"
+      ],
+      "installerGuid": "a3d7e2f8-4b91-5c6a-9e0d-1f2a3b4c5d6e",
+      "autoStartRegistryKey": "ChongbanDesktopPet-van",
+      "singleInstanceKey": "com.chongban.desktoppet.van"
+    },
+    "pomeranian": {
+      "id": "pomeranian",
+      "breed": "pomeranian",
+      "date": null,
+      "scope": "custom",
+      "version": "1.0",
+      "scale": 1.1,
+      "platform": "darwin",
+      "features": {
+        "autoStart": false,
+        "windowRoam": false
+      },
+      "autoStartRegistryKey": "ChongbanDesktopPet-pomeranian",
+      "singleInstanceKey": "com.chongban.desktoppet.pomeranian"
+    }
+  }
+}
