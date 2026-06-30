@@ -1,7 +1,7 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { PET_VARIANT_IDS, getPetVariantProfile } = require("./electron/pet-variants.cjs");
+const { requirePetVariantId, getPetVariantProfile } = require("./electron/pet-variants.cjs");
 
 const appRoot = __dirname;
 const packageJsonPath = path.join(appRoot, "package.json");
@@ -36,14 +36,11 @@ function removeInsideAppRoot(target) {
   fs.rmSync(resolvedTarget, { recursive: true, force: true });
 }
 
-const variant = readOption("pet-variant", "pomeranian");
+const variant = requirePetVariantId(readOption("pet-variant", "pomeranian"));
 const archOption = readOption("arch", "all");
 const archs = archOption === "all" ? ["arm64", "x64"] : [archOption];
 if (process.platform !== "darwin") {
   throw new Error("Mac installer must be built on macOS.");
-}
-if (!PET_VARIANT_IDS.includes(variant)) {
-  throw new Error(`Invalid pet variant: ${variant}`);
 }
 const variantProfile = getPetVariantProfile(variant);
 if (!variantProfile.platforms.includes("darwin")) {

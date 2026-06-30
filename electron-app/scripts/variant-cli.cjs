@@ -6,12 +6,11 @@ const {
   PET_VARIANT_IDS,
   PET_VARIANT_METADATA_FILE,
   createPetVariantMetadataDraft,
-  generatePetVariantShortCode,
   getPetBreedProfiles,
-  getPetVariantMetadataList,
   getPetVariantProfile,
   getVariantManifestName,
-  getWindowsBuildProfile
+  getWindowsBuildProfile,
+  requirePetVariantId
 } = require("../electron/pet-variants.cjs");
 
 const appRoot = path.dirname(__dirname);
@@ -58,10 +57,8 @@ function getMetadataVariants(metadata) {
   return metadata.variants;
 }
 
-function assertKnownVariant(id) {
-  if (!PET_VARIANT_IDS.includes(id)) {
-    throw new Error(`Unknown pet variant: ${id}`);
-  }
+function resolveVariantInput(input) {
+  return requirePetVariantId(input);
 }
 
 function assertKnownBreed(breed) {
@@ -70,17 +67,20 @@ function assertKnownBreed(breed) {
   }
 }
 
-function getVariantActionAssets(id) {
+function getVariantActionAssets(input) {
+  const id = resolveVariantInput(input);
   const profile = getPetVariantProfile(id);
   return (profile.actions || PET_ACTION_ORDER)
     .concat(profile.extraAnimationAssets || [])
     .map((action) => `${profile.animationPrefix}_${action}`);
 }
 
-function getVariantSummary(id) {
+function getVariantSummary(input) {
+  const id = resolveVariantInput(input);
   const profile = getPetVariantProfile(id);
   return {
     id: profile.id,
+    aliases: profile.aliases,
     breed: profile.breed,
     date: profile.date,
     scope: profile.scope,
@@ -96,42 +96,63 @@ function getVariantSummary(id) {
   };
 }
 
+function padRight(value, width) {
+  const text = String(value ?? "");
+  return text + " ".repeat(Math.max(0, width - text.length));
+}
+
+function formatTable(rows, columns) {
+  const widths = columns.map((column) => Math.max(
+    column.title.length,
+    ...rows.map((row) => String(column.value(row) ?? "").length)
+  ));
+  const formatRow = (row) => columns
+    .map((column, index) => padRight(column.value(row), widths[index]))
+    .join("  ")
+    .trimEnd();
+  return [
+    columns.map((column, index) => padRight(column.title, widths[index])).join("  ").trimEnd(),
+    columns.map((_, index) => "-".repeat(widths[index])).join("  "),
+    ...rows.map(formatRow)
+  ].join("\n");
+}
+
 function formatList(rows) {
-  return rows.map((row) => [
-    row.id,
-    row.breed,
-    row.date || "-",
-    row.scope,
-    row.platforms.join(","),
-    row.version
-  ].join("\t")).join("\n");
+  return formatTable(rows, [
+    { title: "id", value: (row) => row.id },
+    { title: "aliases", value: (row) => row.aliases.length > 0 ? row.aliases.join(",") : "-" },
+    { title: "breed", value: (row) => row.breed },
+    { title: "date", value: (row) => row.date || "-" },
+    { title: "scope", value: (row) => row.scope },
+    { title: "platforms", value: (row) => row.platforms.join(",") },
+    { title: "version", value: (row) => row.version }
+  ]);
 }
 
 function listVariants() {
   const rows = PET_VARIANT_IDS.map(getVariantSummary);
-  console.log("id\tbreed\tdate\tscope\tplatforms\tversion");
   console.log(formatList(rows));
 }
 
 function showVariant(args) {
-  const id = args.id;
-  assertKnownVariant(id);
+  const id = resolveVariantInput(args.id);
   console.log(JSON.stringify(getVariantSummary(id), null, 2));
 }
 
 function queryVariants(args) {
+  const queryId = args.id ? resolveVariantInput(args.id) : null;
   const rows = PET_VARIANT_IDS
     .map(getVariantSummary)
+    .filter((row) => !queryId || row.id === queryId)
     .filter((row) => !args.breed || row.breed === args.breed)
     .filter((row) => !args.date || row.date === args.date)
     .filter((row) => !args.scope || row.scope === args.scope);
-  console.log("id\tbreed\tdate\tscope\tplatforms\tversion");
   console.log(formatList(rows));
 }
 
-function pathExistsForVariant(id, options = {}) {
+function pathExistsForVariant(input, options = {}) {
+  const id = resolveVariantInput(input);
   const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
-  const profile = getPetVariantProfile(id);
   return getVariantActionAssets(id)
     .map((folder) => path.join(animationsRoot, folder))
     .filter((folder) => fs.existsSync(folder))
@@ -139,8 +160,7 @@ function pathExistsForVariant(id, options = {}) {
 }
 
 function checkVariant(args, options = {}) {
-  const id = args.id;
-  assertKnownVariant(id);
+  const id = resolveVariantInput(args.id);
   const profile = getPetVariantProfile(id);
   const existingPaths = pathExistsForVariant(id, options);
   const result = {
@@ -180,30 +200,17 @@ function createVariant(args, options = {}) {
   const metadata = readMetadataFile(metadataFile);
   const variants = getMetadataVariants(metadata);
 
-  let draft = null;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    draft = createPetVariantMetadataDraft({
-      breed,
-      date,
-      code: args.code || generatePetVariantShortCode(),
-      scope: args.scope || "custom",
-      version: args.version || "1.0",
-      scale: args.scale || 1.1,
-      platform: args.platform || "win32"
-    });
-    try {
-      assertDraftDoesNotConflict(metadata, draft, options);
-      break;
-    } catch (error) {
-      if (args.code || attempt === 19 || !/already exists/.test(error.message)) {
-        throw error;
-      }
-      draft = null;
-    }
-  }
-  if (!draft) {
-    throw new Error("Could not generate a unique variant id.");
-  }
+  const draft = createPetVariantMetadataDraft({
+    breed,
+    date,
+    id: args.id,
+    metadata,
+    scope: args.scope || "custom",
+    version: args.version || "1.0",
+    scale: args.scale || 1.1,
+    platform: args.platform || "win32"
+  });
+  assertDraftDoesNotConflict(metadata, draft, options);
 
   variants[draft.id] = draft;
   writeMetadataFile(metadata, metadataFile);
@@ -230,10 +237,9 @@ function findSourceVideo(sourceDir, action) {
 }
 
 function renameAssets(args, options = {}) {
-  const id = args.id;
+  const id = resolveVariantInput(args.id);
   const sourceDir = path.resolve(args.from || "");
   const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
-  assertKnownVariant(id);
   if (!args.from) {
     throw new Error("Missing --from source directory.");
   }
@@ -266,7 +272,7 @@ function printHelp() {
   console.log(`Usage:
   node scripts/variant-cli.cjs list
   node scripts/variant-cli.cjs show --id <variant>
-  node scripts/variant-cli.cjs query [--breed <breed>] [--date YYYY-MM-DD] [--scope custom]
+  node scripts/variant-cli.cjs query [--id <variant>] [--breed <breed>] [--date YYYY-MM-DD] [--scope custom]
   node scripts/variant-cli.cjs new --breed <breed> --date YYYY-MM-DD
   node scripts/variant-cli.cjs check --id <variant>
   node scripts/variant-cli.cjs rename-assets --id <variant> --from <source-dir>
@@ -314,5 +320,8 @@ module.exports = {
   renameAssets,
   findSourceVideo,
   getVariantSummary,
+  formatList,
+  formatTable,
+  resolveVariantInput,
   run
 };

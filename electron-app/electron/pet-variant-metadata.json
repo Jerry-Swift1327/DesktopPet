@@ -4,7 +4,10 @@
     "dog": {
       "id": "dog",
       "breed": "dog",
-      "date": null,
+      "date": "2026-05-08",
+      "aliases": [
+        "dog-2601"
+      ],
       "scope": "internal",
       "version": "1.1",
       "scale": 1.1,
@@ -23,7 +26,10 @@
     "cat": {
       "id": "cat",
       "breed": "cat",
-      "date": null,
+      "date": "2026-05-27",
+      "aliases": [
+        "cat-2601"
+      ],
       "scope": "internal",
       "version": "1.2",
       "scale": 1,
@@ -42,7 +48,10 @@
     "shorthair": {
       "id": "shorthair",
       "breed": "bsh",
-      "date": null,
+      "date": "2026-05-28",
+      "aliases": [
+        "bsh-2601"
+      ],
       "scope": "custom",
       "version": "1.0",
       "scale": 1.1,
@@ -60,7 +69,10 @@
     "tabby": {
       "id": "tabby",
       "breed": "lihua",
-      "date": null,
+      "date": "2026-06-09",
+      "aliases": [
+        "lihua-2601"
+      ],
       "scope": "custom",
       "version": "1.0",
       "scale": 1.1,
@@ -94,7 +106,10 @@
     "ragdoll": {
       "id": "ragdoll",
       "breed": "ragdoll",
-      "date": null,
+      "date": "2026-06-19",
+      "aliases": [
+        "ragdoll-2601"
+      ],
       "scope": "internal",
       "version": "1.3",
       "scale": 1.1,
@@ -121,7 +136,10 @@
     "brit": {
       "id": "brit",
       "breed": "bsh",
-      "date": null,
+      "date": "2026-06-09",
+      "aliases": [
+        "bsh-2602"
+      ],
       "scope": "custom",
       "version": "1.0",
       "scale": 1.1,
@@ -135,7 +153,10 @@
     "bshmitted": {
       "id": "bshmitted",
       "breed": "bsh",
-      "date": null,
+      "date": "2026-06-15",
+      "aliases": [
+        "bsh-2604"
+      ],
       "scope": "custom",
       "version": "1.0",
       "scale": 1.1,
@@ -149,7 +170,10 @@
     "van": {
       "id": "van",
       "breed": "bsh",
-      "date": null,
+      "date": "2026-06-12",
+      "aliases": [
+        "bsh-2603"
+      ],
       "scope": "custom",
       "version": "1.0",
       "scale": 1.1,
@@ -162,8 +186,11 @@
     },
     "pomeranian": {
       "id": "pomeranian",
-      "breed": "pomeranian",
-      "date": null,
+      "breed": "pom",
+      "date": "2026-06-06",
+      "aliases": [
+        "pom-2601"
+      ],
       "scope": "custom",
       "version": "1.0",
       "scale": 1.1,

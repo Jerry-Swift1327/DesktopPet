@@ -11,7 +11,7 @@ const MAC_USER_DATA_PARENT = "Chongban 1.0";
 const SWITCHABLE_VARIANTS = Object.freeze(["dog", "cat"]);
 const PET_VARIANT_METADATA_FILE = path.join(__dirname, "pet-variant-metadata.json");
 const INSTALLER_GUID_NAMESPACE = "6d0c98fd-153d-40cf-9738-77c241c1e064";
-const PET_VARIANT_SHORT_CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+const PET_VARIANT_NAMESPACE_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 const PET_ACTIONS = Object.freeze({
   squat: Object.freeze({ id: "petSquat", asset: "squat" }),
@@ -32,12 +32,12 @@ const PET_ACTIONS = Object.freeze({
 const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
 
 const PET_BREED_PROFILES = Object.freeze({
-  bsh: Object.freeze({ id: "bsh", species: "cat", baseVariant: "cat", label: "British Shorthair" }),
-  lihua: Object.freeze({ id: "lihua", species: "cat", baseVariant: "cat", label: "Chinese Li Hua" }),
-  ragdoll: Object.freeze({ id: "ragdoll", species: "cat", baseVariant: "cat", label: "Ragdoll" }),
-  pomeranian: Object.freeze({ id: "pomeranian", species: "dog", baseVariant: "dog", label: "Pomeranian" }),
-  dog: Object.freeze({ id: "dog", species: "dog", baseVariant: "dog", label: "Generic Dog" }),
-  cat: Object.freeze({ id: "cat", species: "cat", baseVariant: "cat", label: "Generic Cat" })
+  bsh: Object.freeze({ id: "bsh", species: "cat", baseVariant: "cat" }),
+  lihua: Object.freeze({ id: "lihua", species: "cat", baseVariant: "cat" }),
+  ragdoll: Object.freeze({ id: "ragdoll", species: "cat", baseVariant: "cat" }),
+  pom: Object.freeze({ id: "pom", species: "dog", baseVariant: "dog" }),
+  dog: Object.freeze({ id: "dog", species: "dog", baseVariant: "dog" }),
+  cat: Object.freeze({ id: "cat", species: "cat", baseVariant: "cat" })
 });
 
 const DEFAULT_FEATURES = Object.freeze({
@@ -130,6 +130,51 @@ function assertKnownAction(action, variantId) {
   }
 }
 
+function getVariantAliases(rawProfile = {}) {
+  if (rawProfile.aliases === undefined) {
+    return [];
+  }
+  if (!Array.isArray(rawProfile.aliases)) {
+    throw new Error(`Pet variant ${rawProfile.id || "<unknown>"} aliases must be an array.`);
+  }
+  return rawProfile.aliases.slice();
+}
+
+function assertVariantNamespaceToken(token, kind, variantId) {
+  if (!PET_VARIANT_NAMESPACE_PATTERN.test(String(token || ""))) {
+    throw new Error(`Invalid pet variant ${kind} ${token} in ${variantId}. Use lowercase letters, numbers and hyphens.`);
+  }
+}
+
+function buildPetVariantNamespace(metadata = PET_VARIANT_METADATA) {
+  const variants = normalizeVariantMetadata(metadata).variants;
+  const namespace = {};
+
+  function register(token, variantId, kind) {
+    assertVariantNamespaceToken(token, kind, variantId);
+    if (Object.prototype.hasOwnProperty.call(namespace, token)) {
+      const existing = namespace[token];
+      throw new Error(
+        `Duplicate pet variant namespace token: ${token} (${existing.kind} of ${existing.variantId}, ${kind} of ${variantId}).`
+      );
+    }
+    namespace[token] = Object.freeze({ variantId, kind });
+  }
+
+  for (const [metadataKey, rawProfile] of Object.entries(variants)) {
+    const id = rawProfile.id || metadataKey;
+    if (id !== metadataKey) {
+      throw new Error(`Pet variant metadata key ${metadataKey} does not match id ${id}.`);
+    }
+    register(id, id, "id");
+    for (const alias of getVariantAliases({ ...rawProfile, id })) {
+      register(alias, id, "alias");
+    }
+  }
+
+  return deepFreeze(namespace);
+}
+
 function resolvePetVariantProfile(rawProfile) {
   const id = rawProfile.id;
   const breed = rawProfile.breed;
@@ -146,6 +191,7 @@ function resolvePetVariantProfile(rawProfile) {
   for (const action of extraActions) {
     assertKnownAction(action, id);
   }
+  const aliases = getVariantAliases(rawProfile);
   const actions = PET_ACTION_ORDER.concat(extraActions);
   const extraAssets = (rawProfile.extraAssets || rawProfile.extraAnimationAssets || []).slice();
   const features = Object.assign({}, DEFAULT_FEATURES, rawProfile.features || {});
@@ -157,6 +203,7 @@ function resolvePetVariantProfile(rawProfile) {
     id,
     breed,
     date: rawProfile.date || null,
+    aliases,
     scope,
     species: rawProfile.species || breedProfile.species,
     audience: scope,
@@ -182,6 +229,7 @@ function resolvePetVariantProfile(rawProfile) {
 }
 
 function buildPetVariantProfiles(metadata = PET_VARIANT_METADATA) {
+  buildPetVariantNamespace(metadata);
   const variants = normalizeVariantMetadata(metadata).variants;
   const profiles = {};
   for (const [id, rawProfile] of Object.entries(variants)) {
@@ -190,12 +238,24 @@ function buildPetVariantProfiles(metadata = PET_VARIANT_METADATA) {
   return deepFreeze(profiles);
 }
 
+const PET_VARIANT_NAMESPACE = buildPetVariantNamespace(PET_VARIANT_METADATA);
 const PET_VARIANT_PROFILES = buildPetVariantProfiles(PET_VARIANT_METADATA);
 
+function resolvePetVariantId(value) {
+  const token = String(value || "");
+  return PET_VARIANT_NAMESPACE[token]?.variantId || null;
+}
+
+function requirePetVariantId(value) {
+  const variant = resolvePetVariantId(value);
+  if (!variant) {
+    throw new Error(`Invalid pet variant: ${value}`);
+  }
+  return variant;
+}
+
 function normalizePetVariant(value) {
-  return Object.prototype.hasOwnProperty.call(PET_VARIANT_PROFILES, value)
-    ? value
-    : DEFAULT_PET_VARIANT;
+  return resolvePetVariantId(value) || DEFAULT_PET_VARIANT;
 }
 
 function normalizePetChannel(value) {
@@ -299,10 +359,7 @@ function getVariantManifestName(value) {
 }
 
 function getWindowsBuildProfile(value, channel) {
-  if (!Object.prototype.hasOwnProperty.call(PET_VARIANT_PROFILES, value)) {
-    throw new Error(`Invalid pet variant: ${value}`);
-  }
-  const variant = normalizePetVariant(value);
+  const variant = requirePetVariantId(value);
   const channelId = normalizePetChannel(channel);
   const profile = getPetVariantProfile(variant);
   if (!profile.platforms.includes("win32")) {
@@ -333,22 +390,50 @@ function isValidVariantDate(value) {
     && date.getUTCDate() === day;
 }
 
-function generatePetVariantShortCode(length = 4) {
-  let code = "";
-  for (let i = 0; i < length; i += 1) {
-    code += PET_VARIANT_SHORT_CODE_ALPHABET[crypto.randomInt(PET_VARIANT_SHORT_CODE_ALPHABET.length)];
-  }
-  return code;
+function getVariantIdYear(date) {
+  return String(date).slice(2, 4);
 }
 
-function createPetVariantId(breed, shortCode) {
-  return `${breed}-${String(shortCode).toLowerCase()}`;
+function getVariantIdSequencePattern(breed, date) {
+  return new RegExp(`^${breed}-${getVariantIdYear(date)}(\\d{2})$`);
+}
+
+function createPetVariantId(breed, date, sequence) {
+  const seq = Number(sequence);
+  if (!Number.isInteger(seq) || seq < 1 || seq > 99) {
+    throw new Error(`Invalid variant sequence: ${sequence}. Use 1-99.`);
+  }
+  return `${breed}-${getVariantIdYear(date)}${String(seq).padStart(2, "0")}`;
+}
+
+function getVariantNamespaceTokens(metadata = PET_VARIANT_METADATA) {
+  return Object.keys(buildPetVariantNamespace(metadata));
+}
+
+function getNextPetVariantSequence({ breed, date, metadata = PET_VARIANT_METADATA }) {
+  const pattern = getVariantIdSequencePattern(breed, date);
+  let maxSequence = 0;
+  for (const token of getVariantNamespaceTokens(metadata)) {
+    const match = token.match(pattern);
+    if (match) {
+      maxSequence = Math.max(maxSequence, Number(match[1]));
+    }
+  }
+  if (maxSequence >= 99) {
+    throw new Error(`No available variant sequence for ${breed}-${getVariantIdYear(date)}.`);
+  }
+  return maxSequence + 1;
+}
+
+function createNextPetVariantId({ breed, date, metadata = PET_VARIANT_METADATA }) {
+  return createPetVariantId(breed, date, getNextPetVariantSequence({ breed, date, metadata }));
 }
 
 function createPetVariantMetadataDraft({
   breed,
   date,
-  code = generatePetVariantShortCode(),
+  id,
+  metadata = PET_VARIANT_METADATA,
   scope = DEFAULT_PET_SCOPE,
   version = "1.0",
   scale = 1.1,
@@ -360,11 +445,17 @@ function createPetVariantMetadataDraft({
   if (!isValidVariantDate(date)) {
     throw new Error(`Invalid variant date: ${date}. Use YYYY-MM-DD.`);
   }
-  const id = createPetVariantId(breed, code);
+  const variantId = id || createNextPetVariantId({ breed, date, metadata });
+  assertVariantNamespaceToken(variantId, "id", variantId);
+  const namespace = buildPetVariantNamespace(metadata);
+  if (Object.prototype.hasOwnProperty.call(namespace, variantId)) {
+    throw new Error(`Variant namespace token already exists: ${variantId}`);
+  }
   return {
-    id,
+    id: variantId,
     breed,
     date,
+    aliases: [],
     scope,
     version,
     scale: Number(scale),
@@ -385,11 +476,14 @@ module.exports = {
   MAC_USER_DATA_PARENT,
   SWITCHABLE_VARIANTS,
   PET_VARIANT_METADATA_FILE,
-  PET_VARIANT_SHORT_CODE_ALPHABET,
+  PET_VARIANT_NAMESPACE_PATTERN,
   PET_VARIANT_IDS: Object.freeze(Object.keys(PET_VARIANT_PROFILES)),
+  PET_VARIANT_ALIASES: Object.freeze(Object.keys(PET_VARIANT_NAMESPACE).filter((token) => PET_VARIANT_NAMESPACE[token].kind === "alias")),
   PET_BREED_IDS: Object.freeze(Object.keys(PET_BREED_PROFILES)),
   PET_CHANNEL_IDS: Object.freeze(Object.keys(PET_CHANNEL_PROFILES)),
   PET_ACTION_ORDER,
+  resolvePetVariantId,
+  requirePetVariantId,
   normalizePetVariant,
   normalizePetChannel,
   getPetActions,
@@ -400,6 +494,7 @@ module.exports = {
   getPetVariantMetadataList,
   getPetVariantProfile,
   getPetChannelProfile,
+  buildPetVariantNamespace,
   buildPetVariantProfiles,
   resolvePetVariantProfile,
   buildPetRuntimeConfig,
@@ -409,7 +504,8 @@ module.exports = {
   getVariantManifestName,
   getWindowsBuildProfile,
   isValidVariantDate,
-  generatePetVariantShortCode,
+  getNextPetVariantSequence,
+  createNextPetVariantId,
   createPetVariantId,
   createPetVariantMetadataDraft,
   createVariantInstallerGuid

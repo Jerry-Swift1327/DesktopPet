@@ -20,6 +20,7 @@ if ($LASTEXITCODE -ne 0) {
   throw "Could not read Windows build profile for $PetVariant."
 }
 $buildProfile = $buildProfileJson | ConvertFrom-Json
+$resolvedPetVariant = $buildProfile.variant
 $releaseOutput = $buildProfile.output
 $releaseRoot = Join-Path $appRoot ($releaseOutput -replace '/', '\')
 $outDir = Join-Path $releaseRoot "Chongban-win32-x64"
@@ -115,7 +116,7 @@ if (Test-Path $releasedElectronExe) {
 
 New-Item -ItemType Directory -Force -Path $resourcesDir | Out-Null
 $variantConfigPath = Join-Path $resourcesDir "pet_variant.json"
-$variantConfigJson = @{ variant = $PetVariant; channel = "release" } | ConvertTo-Json -Compress
+$variantConfigJson = @{ variant = $resolvedPetVariant; channel = "release" } | ConvertTo-Json -Compress
 [System.IO.File]::WriteAllText($variantConfigPath, $variantConfigJson, [System.Text.UTF8Encoding]::new($false))
 
 if (Test-Path $rceditExe) {
@@ -179,8 +180,8 @@ if (Test-Path $manifest) {
 }
 
 $switchableVariants = @("dog", "cat")
-if ($switchableVariants -contains $PetVariant) {
-  $otherVariants = $switchableVariants | Where-Object { $_ -ne $PetVariant }
+if ($switchableVariants -contains $resolvedPetVariant) {
+  $otherVariants = $switchableVariants | Where-Object { $_ -ne $resolvedPetVariant }
   foreach ($otherVariant in $otherVariants) {
     $otherProfileJson = & node -e "const { getWindowsBuildProfile } = require(process.argv[1]); process.stdout.write(JSON.stringify(getWindowsBuildProfile(process.argv[2], 'release')));" $petVariantsModule $otherVariant
     if ($LASTEXITCODE -ne 0) {
@@ -213,10 +214,10 @@ if ($switchableVariants -contains $PetVariant) {
   }
 }
 
-$variantSounds = Join-Path $assetsRoot "sounds\$PetVariant"
+$variantSounds = Join-Path $assetsRoot "sounds\$resolvedPetVariant"
 if (Test-Path $variantSounds) {
   New-Item -ItemType Directory -Force -Path $soundsOut | Out-Null
-  Copy-Item -LiteralPath $variantSounds -Destination (Join-Path $soundsOut $PetVariant) -Recurse -Force
+  Copy-Item -LiteralPath $variantSounds -Destination (Join-Path $soundsOut $resolvedPetVariant) -Recurse -Force
 }
 
 Write-Host "Built Electron portable app:"

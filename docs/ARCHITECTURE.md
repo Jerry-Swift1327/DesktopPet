@@ -74,7 +74,7 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 
 ## 宠物变体
 
-变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，`electron-app/electron/pet-variants.cjs` 负责把精简字段展开为运行时和打包 profile。新增 custom 变体使用 `<breed>-<shortCode>` ID，Windows 打包路径为 `deliverables/custom/<breed>/<id>/<channel>`。
+变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，`electron-app/electron/pet-variants.cjs` 负责把精简字段展开为运行时和打包 profile。真实 `id` 是资源目录、manifest、打包路径、注册表 key、singleInstanceKey 和用户数据目录的技术主键；`aliases` 只用于人工查询、CLI 输入兼容和历史名称兼容。新增 custom 变体使用 `<breed>-<yy><seq>` ID，Windows 打包路径为 `deliverables/custom/<breed>/<id>/<channel>`。
 
 | 变体 | 品种 | 范围 | 动画前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -86,7 +86,7 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 | `brit` | `bsh` | custom | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 | `bshmitted` | `bsh` | custom | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 | `van` | `bsh` | custom | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `pomeranian` | `pomeranian` | custom | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
+| `pomeranian` | `pom` | custom | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
 
 变体维护 CLI 位于 `electron-app/scripts/variant-cli.cjs`，可通过 `npm.cmd run variant:list`、`variant:new`、`variant:query` 和 `variant:rename-assets` 查询或新增定制变体。
 

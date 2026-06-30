@@ -19,6 +19,7 @@ if ($LASTEXITCODE -ne 0) {
   throw "Could not read Windows build profile for $PetVariant."
 }
 $buildProfile = $buildProfileJson | ConvertFrom-Json
+$resolvedPetVariant = $buildProfile.variant
 $installerOutput = $buildProfile.output
 $installerRoot = Join-Path $appRoot ($installerOutput -replace '/', '\')
 $packagedOutputRelative = ".tmp/installer-prepackaged-$([guid]::NewGuid().ToString('N'))"
@@ -131,14 +132,14 @@ $env:APPDATA = $tmpRoot
 $originalPackageJson = [System.IO.File]::ReadAllText($packageJsonPath, [System.Text.Encoding]::UTF8)
 
 try {
-  Write-InstallerVariantInclude -Variant $PetVariant -InstallDirName $installDirName
+  Write-InstallerVariantInclude -Variant $resolvedPetVariant -InstallDirName $installDirName
 
   $installerPackageJson = Get-InstallerPackageJson -PackageJsonContent $originalPackageJson -Output $packagedOutputRelative
   [System.IO.File]::WriteAllText($packageJsonPath, $installerPackageJson, [System.Text.UTF8Encoding]::new($false))
 
   Push-Location $appRoot
   try {
-    & powershell -ExecutionPolicy Bypass -File prepare-runtime-assets.ps1 -PetVariant $PetVariant -PetChannel installer
+    & powershell -ExecutionPolicy Bypass -File prepare-runtime-assets.ps1 -PetVariant $resolvedPetVariant -PetChannel installer
     if ($LASTEXITCODE -ne 0) {
       throw "prepare:runtime-assets failed with exit code $LASTEXITCODE"
     }

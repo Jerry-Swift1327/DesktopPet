@@ -4,11 +4,14 @@ const {
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
   PET_BREED_IDS,
+  PET_VARIANT_ALIASES,
   SWITCHABLE_VARIANTS,
+  resolvePetVariantId,
   normalizePetVariant,
   normalizePetChannel,
   createPetVariantMetadataDraft,
   createVariantInstallerGuid,
+  buildPetVariantNamespace,
   buildPetRuntimeConfig,
   resolvePetVariantProfile,
   getPetBreedProfiles,
@@ -19,7 +22,8 @@ const {
   getVariantAnimationFolders,
   getVariantManifestName,
   getWindowsBuildProfile,
-  isValidVariantDate
+  isValidVariantDate,
+  createNextPetVariantId
 } = require("../electron/pet-variants.cjs");
 
 test("pet runtime config defaults to dog release", () => {
@@ -157,8 +161,10 @@ test("pomeranian variant uses release and installer channels", () => {
 test("variant metadata resolves simplified breed and delivery fields", () => {
   assert.ok(PET_BREED_IDS.includes("bsh"));
   assert.ok(PET_BREED_IDS.includes("lihua"));
+  assert.ok(PET_BREED_IDS.includes("pom"));
   assert.equal(getPetBreedProfiles().lihua.species, "cat");
   assert.equal(getPetVariantMetadata("tabby").breed, "lihua");
+  assert.equal(getPetVariantMetadata("pom-2601").breed, "pom");
   assert.deepEqual(getPetVariantProfile("cat").platforms, ["win32", "darwin"]);
   assert.deepEqual(getPetVariantProfile("shorthair").deliveryPathSegments, ["custom", "bsh", "shorthair"]);
   assert.deepEqual(getPetVariantProfile("brit").deliveryPathSegments, ["custom", "bsh", "brit"]);
@@ -169,6 +175,8 @@ test("variant metadata resolves simplified breed and delivery fields", () => {
   assert.deepEqual(getPetVariantProfile("ragdoll").deliveryPathSegments, ["internal", "ragdoll", "ragdoll"]);
   assert.deepEqual(getPetVariantProfile("ragdoll").actions, ["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "belly"]);
   assert.deepEqual(getPetVariantProfile("pomeranian").platforms, ["darwin"]);
+  assert.deepEqual(getPetVariantProfile("pom-2601").platforms, ["darwin"]);
+  assert.deepEqual(getPetVariantProfile("pom-2601").aliases, ["pom-2601"]);
 });
 
 test("Windows build profile centralizes paths and package names", () => {
@@ -185,30 +193,89 @@ test("Windows build profile centralizes paths and package names", () => {
   assert.equal(getWindowsBuildProfile("tabby", "release").deliveryVersion, "1.0");
   assert.equal(getWindowsBuildProfile("ragdoll", "installer").output, "deliverables/internal/ragdoll/ragdoll/installer");
   assert.equal(getWindowsBuildProfile("ragdoll", "installer").deliveryVersion, "1.3");
+  assert.equal(getWindowsBuildProfile("bsh-2602", "installer").variant, "brit");
+  assert.equal(getWindowsBuildProfile("bsh-2602", "installer").output, "deliverables/custom/bsh/brit/installer");
+  assert.equal(getWindowsBuildProfile("lihua-2601", "release").variant, "tabby");
   assert.throws(() => getWindowsBuildProfile("unknown", "release"), /Invalid pet variant/);
-  assert.throws(() => getWindowsBuildProfile("pomeranian", "installer"), /does not support Windows packaging/);
+  assert.throws(() => getWindowsBuildProfile("pom-2601", "installer"), /does not support Windows packaging/);
 });
 
 test("new custom variant drafts derive stable runtime and delivery defaults", () => {
   const draft = createPetVariantMetadataDraft({
     breed: "lihua",
-    date: "2026-06-30",
-    code: "k7x9"
+    date: "2026-06-30"
   });
   const profile = resolvePetVariantProfile(draft);
 
-  assert.equal(draft.id, "lihua-k7x9");
+  assert.equal(draft.id, "lihua-2602");
+  assert.deepEqual(draft.aliases, []);
   assert.equal(profile.scope, "custom");
   assert.deepEqual(profile.platforms, ["win32"]);
   assert.deepEqual(profile.actions, ["squat", "walk", "feed", "ball"]);
-  assert.deepEqual(profile.deliveryPathSegments, ["custom", "lihua", "lihua-k7x9"]);
-  assert.equal(profile.animationPrefix, "lihua-k7x9");
-  assert.equal(profile.autoStartRegistryKey, "ChongbanDesktopPet-lihua-k7x9");
-  assert.equal(profile.singleInstanceKey, "com.chongban.desktoppet.lihua-k7x9");
+  assert.deepEqual(profile.deliveryPathSegments, ["custom", "lihua", "lihua-2602"]);
+  assert.equal(profile.animationPrefix, "lihua-2602");
+  assert.equal(profile.autoStartRegistryKey, "ChongbanDesktopPet-lihua-2602");
+  assert.equal(profile.singleInstanceKey, "com.chongban.desktoppet.lihua-2602");
   assert.equal(profile.features.autoStart, true);
   assert.equal(profile.features.windowRoam, true);
   assert.match(profile.installerGuid, /^[0-9a-f-]{36}$/);
-  assert.equal(createVariantInstallerGuid("lihua-k7x9"), createVariantInstallerGuid("lihua-k7x9"));
+  assert.equal(createVariantInstallerGuid("lihua-2602"), createVariantInstallerGuid("lihua-2602"));
+});
+
+test("variant aliases resolve to canonical ids and share one namespace", () => {
+  assert.equal(resolvePetVariantId("dog-2601"), "dog");
+  assert.equal(resolvePetVariantId("cat-2601"), "cat");
+  assert.equal(resolvePetVariantId("bsh-2601"), "shorthair");
+  assert.equal(resolvePetVariantId("lihua-2601"), "tabby");
+  assert.equal(resolvePetVariantId("bsh-2602"), "brit");
+  assert.equal(resolvePetVariantId("bsh-2603"), "van");
+  assert.equal(resolvePetVariantId("bsh-2604"), "bshmitted");
+  assert.equal(resolvePetVariantId("ragdoll-2601"), "ragdoll");
+  assert.equal(resolvePetVariantId("pom-2601"), "pomeranian");
+  assert.ok(PET_VARIANT_ALIASES.includes("pom-2601"));
+  assert.equal(normalizePetVariant("bsh-2603"), "van");
+  assert.equal(buildPetRuntimeConfig({ variant: "bsh-2603" }).variant, "van");
+});
+
+test("variant namespace rejects id and alias conflicts", () => {
+  assert.throws(
+    () => buildPetVariantNamespace({
+      schemaVersion: 1,
+      variants: {
+        dog: { id: "dog", breed: "dog", aliases: ["cat"] },
+        cat: { id: "cat", breed: "cat", aliases: [] }
+      }
+    }),
+    /Duplicate pet variant namespace token: cat/
+  );
+  assert.throws(
+    () => buildPetVariantNamespace({
+      schemaVersion: 1,
+      variants: {
+        dog: { id: "dog", breed: "dog", aliases: ["pet_2601"] }
+      }
+    }),
+    /Invalid pet variant alias/
+  );
+});
+
+test("custom variant ids use breed-year sequence across ids and aliases", () => {
+  assert.equal(createNextPetVariantId({ breed: "bsh", date: "2026-06-30" }), "bsh-2605");
+  assert.equal(createNextPetVariantId({ breed: "pom", date: "2026-06-30" }), "pom-2602");
+  assert.equal(createNextPetVariantId({ breed: "bsh", date: "2027-01-01" }), "bsh-2701");
+});
+
+test("historical variants include maintenance dates", () => {
+  assert.equal(getPetVariantProfile("dog").date, "2026-05-08");
+  assert.equal(getPetVariantProfile("cat").date, "2026-05-27");
+  assert.equal(getPetVariantProfile("shorthair").date, "2026-05-28");
+  assert.equal(getPetVariantProfile("tabby").date, "2026-06-09");
+  assert.equal(getPetVariantProfile("brit").date, "2026-06-09");
+  assert.equal(getPetVariantProfile("van").date, "2026-06-12");
+  assert.equal(getPetVariantProfile("bshmitted").date, "2026-06-15");
+  assert.equal(getPetVariantProfile("ragdoll").date, "2026-06-19");
+  assert.equal(getPetVariantProfile("pomeranian").date, "2026-06-06");
+  assert.equal(getPetVariantProfile("pomeranian").breed, "pom");
 });
 
 test("variant date validation accepts only concrete ISO dates", () => {
@@ -219,6 +286,7 @@ test("variant date validation accepts only concrete ISO dates", () => {
 
 test("invalid variant and channel fall back to defaults", () => {
   assert.equal(normalizePetVariant("unknown"), DEFAULT_PET_VARIANT);
+  assert.equal(normalizePetVariant("pom-2601"), "pomeranian");
   assert.equal(normalizePetChannel("unknown"), DEFAULT_PET_CHANNEL);
 });
 

@@ -21,7 +21,7 @@
 | `electron-app/package.json` | npm 脚本、Electron 入口和 electron-builder 配置 | 新增脚本、调整依赖或打包配置 |
 | `electron-app/electron/main.cjs` | 主进程核心逻辑 | 窗口、菜单、悬停面板、状态值、拖拽、吸附、行走、自启动 |
 | `electron-app/electron/preload.cjs` | 暴露安全 IPC API 给渲染层 | 新增渲染层调用主进程能力 |
-| `electron-app/electron/pet-variant-metadata.json` | 精简宠物变体元数据（id、breed、date、scope、动作增量和功能覆盖） | 新增定制变体、调整品种或定制日期 |
+| `electron-app/electron/pet-variant-metadata.json` | 精简宠物变体元数据（id、aliases、breed、date、scope、动作增量和功能覆盖） | 新增定制变体、调整品种、别名或定制日期 |
 | `electron-app/electron/pet-variants.cjs` | 将精简元数据展开为运行时配置、动作 ID、渠道配置和打包 profile | 调整派生规则、动作顺序、打包输出 |
 | `electron-app/scripts/variant-cli.cjs` | 查询/新增变体，按品种和日期筛选，复制并重命名动作源视频 | 新增变体流程或 CLI 能力 |
 | `electron-app/electron/walk-clock.cjs` | 行走循环暂停/恢复计时 | 修改行走倒计时或暂停恢复规则 |
@@ -75,7 +75,7 @@ npm.cmd run variant:new -- --breed lihua --date 2026-06-30
 | `brit` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
 | `bshmitted` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
 | `van` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `pomeranian` | `pomeranian` | custom | macOS | `squat`、`walk`、`feed`、`ball` |
+| `pomeranian` | `pom` | custom | macOS | `squat`、`walk`、`feed`、`ball` |
 
 资源目录命名为 `assets/animations/<variant>_<action>`，运行时主要使用：
 
@@ -83,7 +83,7 @@ npm.cmd run variant:new -- --breed lihua --date 2026-06-30
 - `loop.json`
 - `<variant>_actions_manifest.json`
 
-新增 custom 变体通过 `variant:new` 生成 `<breed>-<shortCode>` ID，Windows 产物路径派生为 `deliverables/custom/<breed>/<id>/<channel>`。
+新增 custom 变体通过 `variant:new` 生成 `<breed>-<yy><seq>` ID，Windows 产物路径派生为 `deliverables/custom/<breed>/<id>/<channel>`。历史编号放在 `aliases` 中，仅用于查询和输入兼容，内部会解析为真实 id。
 
 ## 工具脚本
 

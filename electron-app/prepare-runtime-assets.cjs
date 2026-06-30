@@ -2,9 +2,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const {
-  PET_VARIANT_IDS,
   PET_CHANNEL_IDS,
   SWITCHABLE_VARIANTS,
+  requirePetVariantId,
   getVariantAnimationFolders,
   getVariantManifestName
 } = require("./electron/pet-variants.cjs");
@@ -50,7 +50,7 @@ function copyDirectory(source, target) {
   }
 }
 
-const variant = requireAllowed(readOption("pet-variant", "dog"), PET_VARIANT_IDS, "pet variant");
+const variant = requirePetVariantId(readOption("pet-variant", "dog"));
 const channel = requireAllowed(readOption("pet-channel", "release"), PET_CHANNEL_IDS, "pet channel");
 
 removeInsideAppRoot(runtimeRoot);
