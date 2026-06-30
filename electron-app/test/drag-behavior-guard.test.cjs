@@ -344,6 +344,14 @@ test("main.cjs applyDockSurfaceAfterDrag 委托 dockController.applyDockSurfaceA
   assert.match(body, /dockController\.applyDockSurfaceAfterDrag/);
 });
 
+test("main.cjs fallbackToTaskbarAfterDrag 直接回任务栏并恢复行走跑道", () => {
+  const body = extractFunctionBody(mainSource, "fallbackToTaskbarAfterDrag");
+  assert.ok(body, "fallbackToTaskbarAfterDrag 函数体应能被提取");
+  assert.match(body, /restoreTaskbarRunwayFromPoint\(/);
+  assert.match(body, /groundPetToSurface\(/);
+  assert.doesNotMatch(body, /animatePetWindowTransition\(/);
+});
+
 test("dock-controller 导出 dockPetAfterDrag", () => {
   assert.match(dockSource, /dockPetAfterDrag/);
 });

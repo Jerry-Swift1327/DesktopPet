@@ -134,16 +134,12 @@ const {
   WINDOW_SURFACE_ASYNC_REFRESH_MIN_MS,
   WINDOW_SURFACE_DRAG_REFRESH_MIN_MS,
   WINDOW_SURFACE_BACKGROUND_REFRESH_MS,
-  WINDOW_SURFACE_FALLBACK_BLEND_MS,
   WINDOW_DOCK_DRAG_RETRY_DELAY_MS,
   WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS,
   WINDOW_ROAM_POLL_INTERVAL_MS,
   WINDOW_ROAM_MAX_MISSING_TICKS,
-  WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
   WINDOW_ROAM_START_ATTACH_DELAY_MS,
-  WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
   WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS,
-  WINDOW_ROAM_ATTACH_BLEND_MS,
   EYE_TRACKING_POLL_INTERVAL_MS,
   EYE_TRACKING_FRAME_NAME_PATTERN,
   DARWIN_DISPLAY_METRICS_SETTLE_MS,
@@ -1101,7 +1097,6 @@ const windowRoamController = createWindowRoamController({
   getSurfaceVisibleTop,
   clampPetWindowPositionToSurface,
   setPetWindowPosition,
-  animatePetWindowTo,
   syncWalkTrackX,
   isWalkingState,
   refreshWalkLoopAfterSurfaceChange,
@@ -1113,8 +1108,7 @@ const windowRoamController = createWindowRoamController({
   // 常量
   WINDOW_ROAM_MAX_MISSING_TICKS,
   WINDOW_ROAM_POLL_INTERVAL_MS,
-  WINDOW_ROAM_START_ATTACH_DELAY_MS,
-  WINDOW_ROAM_ATTACH_BLEND_MS
+  WINDOW_ROAM_START_ATTACH_DELAY_MS
 });
 const {
   getTopWindowRoamSurface,
@@ -1129,8 +1123,7 @@ const {
   rememberDockedWindowRoamTarget,
   clearWindowRoamSuppression,
   markWindowRoamAttached,
-  markManualTaskbarSettleUntil,
-  completePendingManualTaskbarSettle,
+  markManualTaskbarHold,
   markWindowInvalidTaskbarSettleUntil
 } = windowRoamController;
 
@@ -1251,7 +1244,6 @@ const dockController = createDockController({
   getPetSpriteSize,
   getPetWindowPositionForVisibleRect,
   getSurfaceVisibleTop,
-  animatePetWindowTo,
   maybeRefreshWindowSurfaceCandidatesBackground,
   refreshCurrentWindowSurfaceBoundsFromCache,
   logWalkDiagnostic,
@@ -1262,7 +1254,7 @@ const dockController = createDockController({
   attachPetToWindowRoamSurface,
   rememberDockedWindowRoamTarget,
   clearWindowRoamSuppression,
-  markManualTaskbarSettleUntil,
+  markManualTaskbarHold,
   markWindowInvalidTaskbarSettleUntil,
   markWindowRoamAttached,
   // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag
@@ -1294,10 +1286,8 @@ const dockController = createDockController({
   WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS,
   WINDOW_DOCK_DRAG_RETRY_DELAY_MS,
   WINDOW_DOCK_COARSE_CORRECTION_LIMIT,
-  WINDOW_SURFACE_FALLBACK_BLEND_MS,
   WINDOW_SURFACE_HEAVY_RECHECK_MS,
   WINDOW_SURFACE_POLL_INTERVAL_MS,
-  WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
   WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS
 });
 
@@ -1368,8 +1358,7 @@ const stateController = createStateController({
   clampPetWindowPositionToSurface,
   setPetWindowPosition,
   syncWalkTrackX,
-  markManualTaskbarSettleUntil,
-  completePendingManualTaskbarSettle,
+  markManualTaskbarHold,
   preserveBottomAnchorForState,
   // walk 回调
   resetWalkRuntime,
@@ -1418,7 +1407,6 @@ const stateController = createStateController({
   STATE_SLEEP,
   STATE_YAWN,
   STATE_HISS,
-  WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
   TABBY_IDLE_STATES,
   ONE_SHOT_STATES,
   states
@@ -1451,8 +1439,7 @@ const petWindowController = createPetWindowController({
   // 常量
   VISIBLE_SIDE_GAP,
   VISIBLE_TOP_GAP,
-  VISIBLE_BOTTOM_GAP,
-  WINDOW_SURFACE_FALLBACK_BLEND_MS
+  VISIBLE_BOTTOM_GAP
 });
 
 const autoStartController = createAutoStartController({
@@ -3429,10 +3416,6 @@ function setTaskbarWalkWindowPositionForCenter(centerX, y, direction = walkDirec
     reason: "center"
   });
   return runway?.windowX ?? getPetWindow().getBounds().x;
-}
-
-function animatePetWindowTo(targetX, targetY, durationMs = WINDOW_SURFACE_FALLBACK_BLEND_MS) {
-  return petWindowController.animatePetWindowTo(targetX, targetY, durationMs);
 }
 
 function buildWalkStepResult({ moved = false } = {}) {

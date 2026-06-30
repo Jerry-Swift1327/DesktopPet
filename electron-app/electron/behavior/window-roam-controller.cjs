@@ -1,10 +1,7 @@
-// 窗口漫游控制器，管理宠物在窗口表面上的漫游目标选取、附着、回退与轮询。
-// 从 main.cjs 提取，依赖通过 createWindowRoamController(context) 注入；
-// 运行时可变状态通过访问器读取，避免创建瞬间固化快照；私有变量保存轮询状态。
+// Window roam controller: selects, attaches, falls back, and polls window surfaces.
 
 function createWindowRoamController(context) {
   const {
-    // 窗口与状态访问器（实时读取，避免快照）
     getPetWindow,
     getActiveState,
     getWalkDirection,
@@ -12,7 +9,6 @@ function createWindowRoamController(context) {
     getWindowDockInProgress,
     getWindowRoamEnabled,
     canToggleWindowRoam,
-    // 依赖函数
     refreshWindowSurfaceCandidatesAsync,
     parseWindowHwnd,
     getCachedWindowSurfaceCandidates,
@@ -27,7 +23,6 @@ function createWindowRoamController(context) {
     getSurfaceVisibleTop,
     clampPetWindowPositionToSurface,
     setPetWindowPosition,
-    animatePetWindowTo,
     syncWalkTrackX,
     isWalkingState,
     refreshWalkLoopAfterSurfaceChange,
@@ -36,25 +31,21 @@ function createWindowRoamController(context) {
     getCurrentSurface,
     fallbackCurrentSurfaceToTaskbar,
     getWindowRoamSurfaceById,
-    // 常量
     WINDOW_ROAM_MAX_MISSING_TICKS,
     WINDOW_ROAM_POLL_INTERVAL_MS,
-    WINDOW_ROAM_START_ATTACH_DELAY_MS,
-    WINDOW_ROAM_ATTACH_BLEND_MS
+    WINDOW_ROAM_START_ATTACH_DELAY_MS
   } = context;
 
-  // 控制器私有状态：轮询定时器与漫游目标记录
   let windowRoamPollTimer = null;
   let windowRoamLastTargetId = "";
   let windowRoamPreferredTargetId = "";
   let windowRoamSuppressedWindowId = "";
-  let windowRoamDragFallbackSuppressedUntil = 0;
-  let pendingManualTaskbarSettle = null;
+  let windowRoamStartSuppressedUntil = 0;
+  let manualTaskbarHold = false;
   let windowRoamInvalidFallbackSuppressedUntil = 0;
   let windowRoamMissingTicks = 0;
   let lastWindowSurfaceHeavyCheckAt = 0;
 
-  // 选取首个可附着的窗口表面，可排除指定窗口与当前抑制的窗口
   function collectWindowRoamSurfaceEntries(excludedWindowId = "") {
     const excludedId = parseWindowHwnd(excludedWindowId);
     const candidates = getCachedWindowSurfaceCandidates();
@@ -163,7 +154,6 @@ function createWindowRoamController(context) {
     return collectWindowRoamSurfaceEntries(excludedWindowId)[0]?.surface || null;
   }
 
-  // 将宠物附着到指定窗口表面，更新缩放、位置与行走轨道
   function attachPetToWindowRoamSurface(surface) {
     const petWindow = getPetWindow();
     if (!petWindow || petWindow.isDestroyed()) {
@@ -188,12 +178,11 @@ function createWindowRoamController(context) {
     const next = clampPetWindowPositionToSurface(target.x, target.y, nextSurface, activeState, walkDirection);
     if (isWalkingState()) {
       groundPetToSurface(activeState, walkDirection, nextSurface);
-      setPetWindowPosition(next.x, next.y);
-    } else {
-      animatePetWindowTo(next.x, next.y, WINDOW_ROAM_ATTACH_BLEND_MS);
     }
+    setPetWindowPosition(next.x, next.y);
     syncWalkTrackX(next.x);
     lastWindowSurfaceHeavyCheckAt = Date.now();
+    manualTaskbarHold = false;
     if (isWalkingState()) {
       refreshWalkLoopAfterSurfaceChange();
     } else {
@@ -202,7 +191,6 @@ function createWindowRoamController(context) {
     return true;
   }
 
-  // 当前无可用窗口表面时，回退到任务栏
   function fallbackWindowRoamToTaskbar(reason = "window-roam-no-target") {
     const petWindow = getPetWindow();
     if (!petWindow || petWindow.isDestroyed()) {
@@ -213,19 +201,18 @@ function createWindowRoamController(context) {
     }
   }
 
-  // 单次轮询：选取优先或首个窗口表面并附着，缺失超过阈值则回退
   function tickWindowRoam() {
     const petWindow = getPetWindow();
     if (!getWindowRoamEnabled() || getDragState() || getWindowDockInProgress() || !petWindow || petWindow.isDestroyed()) {
       return;
     }
-    if (Date.now() < windowRoamDragFallbackSuppressedUntil) {
+    if (Date.now() < windowRoamStartSuppressedUntil) {
       return;
     }
     if (Date.now() < windowRoamInvalidFallbackSuppressedUntil) {
       return;
     }
-    if (pendingManualTaskbarSettle) {
+    if (manualTaskbarHold && getCurrentSurface().type !== "window") {
       return;
     }
 
@@ -255,20 +242,19 @@ function createWindowRoamController(context) {
     }
   }
 
-  // 启动轮询定时器，仅在可切换且未启动时生效
   function startWindowRoamPolling() {
     if (windowRoamPollTimer || !canToggleWindowRoam()) {
       return;
     }
     refreshWindowSurfaceCandidatesAsync({ force: true });
-    windowRoamDragFallbackSuppressedUntil = Math.max(
-      windowRoamDragFallbackSuppressedUntil,
+    manualTaskbarHold = false;
+    windowRoamStartSuppressedUntil = Math.max(
+      windowRoamStartSuppressedUntil,
       Date.now() + WINDOW_ROAM_START_ATTACH_DELAY_MS
     );
     windowRoamPollTimer = setInterval(tickWindowRoam, WINDOW_ROAM_POLL_INTERVAL_MS);
   }
 
-  // 停止轮询定时器并清空目标记录
   function stopWindowRoamPolling() {
     if (!windowRoamPollTimer) {
       return;
@@ -277,12 +263,11 @@ function createWindowRoamController(context) {
     windowRoamPollTimer = null;
     windowRoamLastTargetId = "";
     windowRoamPreferredTargetId = "";
-    windowRoamDragFallbackSuppressedUntil = 0;
+    windowRoamStartSuppressedUntil = 0;
     windowRoamInvalidFallbackSuppressedUntil = 0;
-    pendingManualTaskbarSettle = null;
+    manualTaskbarHold = false;
   }
 
-  // 根据启用状态切换轮询
   function updateWindowRoamPolling() {
     if (getWindowRoamEnabled()) {
       startWindowRoamPolling();
@@ -291,7 +276,6 @@ function createWindowRoamController(context) {
     }
   }
 
-  // 启用漫游时，如当前在窗口表面，记录当前窗口为优先目标（对应 setWindowRoamPreference）
   function prepareWindowRoamAfterPreferenceEnabled(currentSurface) {
     windowRoamPreferredTargetId = "";
     if (currentSurface?.type === "window") {
@@ -300,65 +284,41 @@ function createWindowRoamController(context) {
     }
   }
 
-  // 清空优先目标、抑制目标、miss 计数与回退抑制（对应 setWindowRoamPreference 前半段）
   function resetWindowRoamState() {
     windowRoamPreferredTargetId = "";
     windowRoamSuppressedWindowId = "";
-    windowRoamDragFallbackSuppressedUntil = 0;
+    windowRoamStartSuppressedUntil = 0;
     windowRoamInvalidFallbackSuppressedUntil = 0;
-    pendingManualTaskbarSettle = null;
+    manualTaskbarHold = false;
     windowRoamMissingTicks = 0;
   }
 
-  // 贴靠成功后记录窗口目标并清空回退抑制（对应 dockPetAfterDrag 成功分支）
   function rememberDockedWindowRoamTarget(surface) {
     if (!getWindowRoamEnabled() || !surface || surface.type !== "window") {
       return;
     }
     windowRoamLastTargetId = parseWindowHwnd(surface.sourceWindowId);
     windowRoamPreferredTargetId = windowRoamLastTargetId;
-    windowRoamDragFallbackSuppressedUntil = 0;
+    windowRoamStartSuppressedUntil = 0;
     windowRoamInvalidFallbackSuppressedUntil = 0;
-    pendingManualTaskbarSettle = null;
+    manualTaskbarHold = false;
   }
 
-  // 清理抑制窗口（对应 dockPetAfterDrag 成功分支末尾）
   function clearWindowRoamSuppression() {
     windowRoamSuppressedWindowId = "";
   }
 
-  // 手动回任务栏冷却：设置冷却时间戳并把当前窗口记为下一次优先恢复目标，
-  // 保留 sticky target（不清空 lastTargetId、不写入 suppressedWindowId）
-  function markManualTaskbarSettleUntil(timestamp, surface, options = {}) {
-    const deferUntilState = typeof options.deferUntilState === "string" ? options.deferUntilState : "";
-    if (deferUntilState) {
-      pendingManualTaskbarSettle = {
-        durationMs: Math.max(0, timestamp - Date.now()),
-        state: deferUntilState
-      };
-    } else {
-      pendingManualTaskbarSettle = null;
-      windowRoamDragFallbackSuppressedUntil = timestamp;
-    }
+  function markManualTaskbarHold(surface) {
+    manualTaskbarHold = true;
     if (surface && surface.type === "window") {
       windowRoamPreferredTargetId = parseWindowHwnd(surface.sourceWindowId);
     }
   }
 
-  function completePendingManualTaskbarSettle(state) {
-    if (!pendingManualTaskbarSettle || state !== pendingManualTaskbarSettle.state) {
-      return;
-    }
-    windowRoamDragFallbackSuppressedUntil = Date.now() + pendingManualTaskbarSettle.durationMs;
-    pendingManualTaskbarSettle = null;
-  }
-
   function markWindowInvalidTaskbarSettleUntil(timestamp) {
-    pendingManualTaskbarSettle = null;
     windowRoamInvalidFallbackSuppressedUntil = timestamp;
   }
 
-  // 窗口表面轮询切换成功时记录目标并清空 miss 计数（对应 startWindowSurfacePolling 漫游切换成功分支）
   function markWindowRoamAttached(surface) {
     if (!surface) {
       return;
@@ -366,6 +326,7 @@ function createWindowRoamController(context) {
     windowRoamLastTargetId = parseWindowHwnd(surface.sourceWindowId);
     windowRoamSuppressedWindowId = "";
     windowRoamInvalidFallbackSuppressedUntil = 0;
+    manualTaskbarHold = false;
     windowRoamMissingTicks = 0;
   }
 
@@ -381,8 +342,7 @@ function createWindowRoamController(context) {
     resetWindowRoamState,
     rememberDockedWindowRoamTarget,
     clearWindowRoamSuppression,
-    markManualTaskbarSettleUntil,
-    completePendingManualTaskbarSettle,
+    markManualTaskbarHold,
     markWindowInvalidTaskbarSettleUntil,
     markWindowRoamAttached
   };

@@ -30,9 +30,7 @@ function createStateController(context) {
     clampPetWindowPositionToSurface,
     setPetWindowPosition,
     syncWalkTrackX,
-    markManualTaskbarSettleUntil,
-    completePendingManualTaskbarSettle,
-    WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS,
+    markManualTaskbarHold,
     preserveBottomAnchorForState,
     // walk 回调
     resetWalkRuntime,
@@ -142,9 +140,6 @@ function createStateController(context) {
     setActiveState(state);
     if (previousState !== state) {
       clearTabbySleepPoseTimer();
-      if (ONE_SHOT_STATES.has(previousState)) {
-        completePendingManualTaskbarSettle(previousState);
-      }
     }
     if (previousState === STATE_WALK && getActiveState() !== DEFAULT_STATE) {
       clearPendingWalkBubbleMessage();
@@ -190,6 +185,7 @@ function createStateController(context) {
       ? options.shouldRecordOperation !== false
       : options;
     const forceTaskbar = hasOptionsObject ? Boolean(options.forceTaskbar) : false;
+    const notifyState = hasOptionsObject ? options.notifyState !== false : true;
     const win = getPetWindow();
     if (!win || win.isDestroyed()) {
       return;
@@ -225,7 +221,11 @@ function createStateController(context) {
     if (shouldRecordOperation) {
       recordUserOperation();
     }
-    sendPetState();
+    if (notifyState) {
+      sendPetState();
+    } else {
+      sendWalkDirection();
+    }
   }
 
   function settlePetQuietly() {
@@ -241,14 +241,19 @@ function createStateController(context) {
     hideHoverPanel();
     const surface = getCurrentSurface();
     if (surface.type === "window") {
-      markManualTaskbarSettleUntil(Date.now() + WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS, surface);
+      markManualTaskbarHold(surface);
       resetToTaskbarSurface(win.getBounds());
+    } else {
+      markManualTaskbarHold(null);
     }
+    const wasDefaultState = getActiveState() === DEFAULT_STATE;
     resetWalkRuntime();
-    setSelectedState(DEFAULT_STATE);
-    setActiveState(DEFAULT_STATE);
+    if (!wasDefaultState) {
+      setSelectedState(DEFAULT_STATE);
+      setActiveState(DEFAULT_STATE);
+    }
     setWalkDirectionValue(-1);
-    moveToStartPosition({ shouldRecordOperation: true, forceTaskbar: true });
+    moveToStartPosition({ shouldRecordOperation: true, forceTaskbar: true, notifyState: !wasDefaultState });
   }
 
   return {

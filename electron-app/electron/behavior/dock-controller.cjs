@@ -39,7 +39,6 @@ function createDockController(context) {
     getPetSpriteSize,
     getPetWindowPositionForVisibleRect,
     getSurfaceVisibleTop,
-    animatePetWindowTo,
     maybeRefreshWindowSurfaceCandidatesBackground,
     refreshCurrentWindowSurfaceBoundsFromCache,
     getTopWindowRoamSurface,
@@ -51,7 +50,7 @@ function createDockController(context) {
     // window-roam-controller 协作方法（状态由 window-roam-controller 统一维护）
     rememberDockedWindowRoamTarget,
     clearWindowRoamSuppression,
-    markManualTaskbarSettleUntil,
+    markManualTaskbarHold,
     markWindowInvalidTaskbarSettleUntil,
     markWindowRoamAttached,
     // retry 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag，避免闭包绕过 main.cjs 函数名
@@ -83,10 +82,8 @@ function createDockController(context) {
     WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS,
     WINDOW_DOCK_DRAG_RETRY_DELAY_MS,
     WINDOW_DOCK_COARSE_CORRECTION_LIMIT,
-    WINDOW_SURFACE_FALLBACK_BLEND_MS,
     WINDOW_SURFACE_HEAVY_RECHECK_MS,
     WINDOW_SURFACE_POLL_INTERVAL_MS,
-    WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS,
     WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS
   } = context;
 
@@ -95,13 +92,17 @@ function createDockController(context) {
   }
 
   function applyDockSurfaceAfterDrag(surface, draggedX) {
+    const activeState = getActiveState();
+    const walkDirection = getWalkDirection();
     const nextSurface = setCurrentSurface(surface);
-    applySurfaceScale(nextSurface, getActiveState(), getWalkDirection());
-    groundPetToSurface(getActiveState(), getWalkDirection(), nextSurface);
+    if (!applySurfaceScale(nextSurface, activeState, walkDirection)) {
+      return null;
+    }
+    groundPetToSurface(activeState, walkDirection, nextSurface);
     if (nextSurface.type === "window") {
       setWindowDockHoverSuppressedUntil(Date.now() + WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS);
       const snappedBounds = getPetWindow().getBounds();
-      const target = clampPetWindowPositionToSurface(draggedX, snappedBounds.y, nextSurface, getActiveState(), getWalkDirection());
+      const target = clampPetWindowPositionToSurface(draggedX, snappedBounds.y, nextSurface, activeState, walkDirection);
       setPetWindowPosition(target.x, target.y);
       syncWalkTrackX(target.x);
       setLastWindowSurfaceHeavyCheckAt(Date.now());
@@ -149,21 +150,22 @@ function createDockController(context) {
         return;
       }
 
-      if (surface && applySurfaceScale(surface, getActiveState(), getWalkDirection())) {
+      if (surface) {
         const nextSurface = applyDockSurfaceAfterDrag(surface, draggedX);
-        if (getWindowRoamEnabled() && nextSurface.type === "window") {
-          rememberDockedWindowRoamTarget(nextSurface);
+        if (nextSurface) {
+          if (getWindowRoamEnabled() && nextSurface.type === "window") {
+            rememberDockedWindowRoamTarget(nextSurface);
+          }
+          clearWindowRoamSuppression();
+        } else {
+          fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
         }
-        clearWindowRoamSuppression();
       } else {
         if (getWindowRoamEnabled()) {
           const previousSurface = previousWindowId
             ? { type: "window", sourceWindowId: previousWindowId }
             : null;
-          const manualTaskbarSettleOptions = getPetRuntimeConfig().features.dockShake
-            ? { deferUntilState: STATE_SHAKE }
-            : {};
-          markManualTaskbarSettleUntil(Date.now() + WINDOW_ROAM_DRAG_FALLBACK_SUPPRESS_MS, previousSurface, manualTaskbarSettleOptions);
+          markManualTaskbarHold(previousSurface);
         }
         fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
       }
@@ -232,11 +234,7 @@ function createDockController(context) {
     const nextVisibleLeft = previousCenterX - Math.round(nextVisibleWidth / 2);
     const target = getPetWindowPositionForVisibleRect(nextVisibleLeft, getSurfaceVisibleTop(fallback, getActiveState(), getWalkDirection()), getActiveState(), getWalkDirection());
     const next = clampPetWindowPositionToSurface(target.x, groundedY, fallback, getActiveState(), getWalkDirection());
-    if (isWalkingState() || (Math.abs(next.x - nextBounds.x) <= 2 && Math.abs(next.y - nextBounds.y) <= 2)) {
-      setPetWindowPosition(next.x, next.y);
-    } else {
-      animatePetWindowTo(next.x, next.y, WINDOW_SURFACE_FALLBACK_BLEND_MS);
-    }
+    setPetWindowPosition(next.x, next.y);
     syncWalkTrackX(next.x);
     if (isWalkingState()) {
       refreshWalkLoopAfterSurfaceChange();

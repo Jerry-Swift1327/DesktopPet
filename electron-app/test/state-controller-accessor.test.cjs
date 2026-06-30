@@ -76,6 +76,12 @@ test("main.cjs 构造 stateController", () => {
   assert.match(mainStripped, /const stateController = createStateController\(\{/);
 });
 
+test("main.cjs createStateController context 注入手动任务栏保持而非窗口动画", () => {
+  const contextBlock = mainStripped.match(/const stateController = createStateController\(\{([\s\S]*?)\}\);/)?.[1] || "";
+  assert.match(contextBlock, /markManualTaskbarHold,/);
+  assert.doesNotMatch(contextBlock, /animatePetWindowTransition,/);
+});
+
 test("main.cjs 不再声明 pendingActionStatsState", () => {
   assert.doesNotMatch(mainStripped, /let pendingActionStatsState/);
 });

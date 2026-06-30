@@ -219,6 +219,7 @@ test("moveToStartPosition keeps the same visual home anchor across scales", () =
     getSurfaceWorkArea: (surface) => surface.workArea,
     getTaskbarHomeVisibleRight: () => homeVisibleRight,
     getSurfaceVisibleTop: (surface) => surface.groundY - visibleHeight(),
+    getVisiblePetRectFromBounds: () => visibleRect(),
     getVisibleSpriteInsets: () => ({
       left: 0,
       right: Math.max(0, spriteSize() - visibleWidth())
@@ -233,9 +234,7 @@ test("moveToStartPosition keeps the same visual home anchor across scales", () =
       bounds = { x: Math.round(x), y: Math.round(y), width: windowWidth(), height: windowHeight() };
     },
     syncWalkTrackX: () => {},
-    markManualTaskbarSettleUntil: () => {},
-    completePendingManualTaskbarSettle: () => {},
-    WINDOW_ROAM_MANUAL_TASKBAR_SUPPRESS_MS: 2000,
+    markManualTaskbarHold: () => {},
     preserveBottomAnchorForState: () => {},
     resetWalkRuntime: () => {},
     startWalkLoop: () => {},

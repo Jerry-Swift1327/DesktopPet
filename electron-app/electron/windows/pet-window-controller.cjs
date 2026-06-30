@@ -29,8 +29,7 @@ function createPetWindowController(context) {
     clamp,
     VISIBLE_SIDE_GAP,
     VISIBLE_TOP_GAP,
-    VISIBLE_BOTTOM_GAP,
-    WINDOW_SURFACE_FALLBACK_BLEND_MS
+    VISIBLE_BOTTOM_GAP
   } = context;
 
   let petWindow = null;
@@ -113,45 +112,13 @@ function createPetWindowController(context) {
     };
   }
 
-  function animatePetWindowTo(targetX, targetY, durationMs = WINDOW_SURFACE_FALLBACK_BLEND_MS) {
-    if (!petWindow || petWindow.isDestroyed()) {
-      return;
-    }
-    const start = petWindow.getBounds();
-    const fromX = start.x;
-    const fromY = start.y;
-    const toX = Math.round(targetX);
-    const toY = Math.round(targetY);
-    const duration = Math.max(0, Math.round(Number(durationMs) || 0));
-    if (duration <= 0 || (fromX === toX && fromY === toY)) {
-      setPetWindowPosition(toX, toY);
-      return;
-    }
-    const startedAt = Date.now();
-    const step = () => {
-      if (!petWindow || petWindow.isDestroyed()) {
-        return;
-      }
-      const progress = Math.min(1, (Date.now() - startedAt) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const nextX = Math.round(fromX + (toX - fromX) * eased);
-      const nextY = Math.round(fromY + (toY - fromY) * eased);
-      setPetWindowPosition(nextX, nextY);
-      if (progress < 1) {
-        setTimeout(step, 16);
-      }
-    };
-    step();
-  }
-
   return {
     getPetWindow,
     createPetWindow,
     ensurePetWindow,
     handleHidePet,
     setPetWindowPosition,
-    clampPetWindowPosition,
-    animatePetWindowTo
+    clampPetWindowPosition
   };
 }
 
