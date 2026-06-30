@@ -1,5 +1,5 @@
 param(
-  [string]$PetVariant = "dog"
+  [string]$PetVariant = "pet2601"
 )
 
 $ErrorActionPreference = "Stop"
@@ -179,7 +179,7 @@ if (Test-Path $manifest) {
   Copy-Item -LiteralPath $manifest -Destination (Join-Path $assetsOut "animations\$manifestName") -Force
 }
 
-$switchableVariants = @("dog", "cat")
+$switchableVariants = @($buildProfile.switchableVariants)
 if ($switchableVariants -contains $resolvedPetVariant) {
   $otherVariants = $switchableVariants | Where-Object { $_ -ne $resolvedPetVariant }
   foreach ($otherVariant in $otherVariants) {
@@ -214,10 +214,13 @@ if ($switchableVariants -contains $resolvedPetVariant) {
   }
 }
 
-$variantSounds = Join-Path $assetsRoot "sounds\$resolvedPetVariant"
-if (Test-Path $variantSounds) {
+$soundPrefix = $buildProfile.soundPrefix
+if ($soundPrefix) {
+  $variantSounds = Join-Path $assetsRoot "sounds\$soundPrefix"
+}
+if ($soundPrefix -and (Test-Path $variantSounds)) {
   New-Item -ItemType Directory -Force -Path $soundsOut | Out-Null
-  Copy-Item -LiteralPath $variantSounds -Destination (Join-Path $soundsOut $resolvedPetVariant) -Recurse -Force
+  Copy-Item -LiteralPath $variantSounds -Destination (Join-Path $soundsOut $soundPrefix) -Recurse -Force
 }
 
 Write-Host "Built Electron portable app:"

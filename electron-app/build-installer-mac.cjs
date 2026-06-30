@@ -36,7 +36,7 @@ function removeInsideAppRoot(target) {
   fs.rmSync(resolvedTarget, { recursive: true, force: true });
 }
 
-const variant = requirePetVariantId(readOption("pet-variant", "pomeranian"));
+const variant = requirePetVariantId(readOption("pet-variant", "pet2604"));
 const archOption = readOption("arch", "all");
 const archs = archOption === "all" ? ["arm64", "x64"] : [archOption];
 if (process.platform !== "darwin") {

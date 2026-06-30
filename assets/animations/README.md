@@ -1,6 +1,6 @@
 # Animations
 
-本目录存放桌宠动作资源。每个动作目录使用 `<variant>_<action>` 命名，manifest 使用 `<variant>_actions_manifest.json` 命名。新增定制变体的 `<variant>` 使用 `<breed>-<yy><seq>`，例如 `lihua-2602`。
+本目录存放桌宠动作资源。每个动作目录使用 `<variant>_<action>` 命名，manifest 使用 `<variant>_actions_manifest.json` 命名。现有变体保留旧动画前缀；新增定制变体的 `<variant>` 使用 `pet<yy><seq>`，例如 `pet2610`。
 
 ## 变体和动作
 
@@ -71,7 +71,7 @@ python tools\process_pet_actions.py process --variant dog --actions squat walk f
 ```powershell
 cd electron-app
 npm.cmd run variant:new -- --breed lihua --date 2026-06-30
-npm.cmd run variant:rename-assets -- --id lihua-2602 --from C:\path\to\source-videos
+npm.cmd run variant:rename-assets -- --id pet2610 --from C:\path\to\source-videos
 ```
 
 处理方向采样动作（如 tabby_look）：

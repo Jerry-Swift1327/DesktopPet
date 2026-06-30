@@ -1,5 +1,5 @@
 param(
-  [string]$PetVariant = "dog"
+  [string]$PetVariant = "pet2601"
 )
 
 $ErrorActionPreference = "Stop"

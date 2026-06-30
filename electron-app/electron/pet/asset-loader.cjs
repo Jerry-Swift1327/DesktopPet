@@ -116,11 +116,11 @@ function createAssetLoader({
   }
 
   function listTabbySounds(pattern) {
-    if (petRuntimeConfig.variant !== "tabby") {
+    if (!petRuntimeConfig.soundPrefix) {
       return [];
     }
 
-    const folder = path.join(getAssetsRoot(), "sounds", "tabby");
+    const folder = path.join(getAssetsRoot(), "sounds", petRuntimeConfig.soundPrefix);
     if (!fs.existsSync(folder)) {
       return [];
     }

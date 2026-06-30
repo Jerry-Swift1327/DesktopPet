@@ -67,15 +67,15 @@ npm.cmd run variant:new -- --breed lihua --date 2026-06-30
 
 | 变体 | 品种 | 范围 | 平台 | 动作 |
 | --- | --- | --- | --- | --- |
-| `dog` | `dog` | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
-| `cat` | `cat` | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
-| `shorthair` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `tabby` | `lihua` | custom | Windows | `squat`、`walk`、`feed`、`ball`、`lie`、`lick`、`belly`、`stretch`，额外资源 `look`、`shake`、`yawn`、`sleep`、`hiss` |
-| `ragdoll` | `ragdoll` | internal | Windows | `squat`、`walk`、`feed`、`ball`、`spin`、`lick`、`stretch`、`belly`，额外资源 `shake`、`yawn`、`hiss` |
-| `brit` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `bshmitted` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `van` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `pomeranian` | `pom` | custom | macOS | `squat`、`walk`、`feed`、`ball` |
+| `pet2601` | `gr` | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
+| `pet2602` | `ash` | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
+| `pet2603` | `sf` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2604` | `pom` | custom | macOS | `squat`、`walk`、`feed`、`ball` |
+| `pet2605` | `lihua` | custom | Windows | `squat`、`walk`、`feed`、`ball`、`lie`、`lick`、`belly`、`stretch`，额外资源 `look`、`shake`、`yawn`、`sleep`、`hiss` |
+| `pet2606` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2607` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2608` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2609` | `ragdoll` | internal | Windows | `squat`、`walk`、`feed`、`ball`、`spin`、`lick`、`stretch`、`belly`，额外资源 `shake`、`yawn`、`hiss` |
 
 资源目录命名为 `assets/animations/<variant>_<action>`，运行时主要使用：
 
@@ -83,7 +83,7 @@ npm.cmd run variant:new -- --breed lihua --date 2026-06-30
 - `loop.json`
 - `<variant>_actions_manifest.json`
 
-新增 custom 变体通过 `variant:new` 生成 `<breed>-<yy><seq>` ID，Windows 产物路径派生为 `deliverables/custom/<breed>/<id>/<channel>`。历史编号放在 `aliases` 中，仅用于查询和输入兼容，内部会解析为真实 id。
+新增 custom 变体通过 `variant:new` 生成 `pet<yy><seq>` ID，Windows 产物路径派生为 `deliverables/<scope>/<id>/<channel>`。`aliases` 是可选字符串字段，空值在 CLI 中显示为 `-`。
 
 ## 工具脚本
 

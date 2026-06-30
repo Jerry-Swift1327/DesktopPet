@@ -4,9 +4,11 @@ const path = require("path");
 const {
   PET_CHANNEL_IDS,
   SWITCHABLE_VARIANTS,
+  DEFAULT_PET_VARIANT,
   requirePetVariantId,
   getVariantAnimationFolders,
-  getVariantManifestName
+  getVariantManifestName,
+  getPetVariantProfile
 } = require("./electron/pet-variants.cjs");
 
 const appRoot = __dirname;
@@ -50,8 +52,9 @@ function copyDirectory(source, target) {
   }
 }
 
-const variant = requirePetVariantId(readOption("pet-variant", "dog"));
+const variant = requirePetVariantId(readOption("pet-variant", DEFAULT_PET_VARIANT));
 const channel = requireAllowed(readOption("pet-channel", "release"), PET_CHANNEL_IDS, "pet channel");
+const variantProfile = getPetVariantProfile(variant);
 
 removeInsideAppRoot(runtimeRoot);
 fs.mkdirSync(runtimeAnimations, { recursive: true });
@@ -79,9 +82,11 @@ if (fs.existsSync(manifest)) {
   fs.copyFileSync(manifest, path.join(runtimeAnimations, manifestName));
 }
 
-const variantSounds = path.join(projectRoot, "assets", "sounds", variant);
-if (fs.existsSync(variantSounds)) {
-  copyDirectory(variantSounds, path.join(runtimeRoot, "sounds", variant));
+if (variantProfile.soundPrefix) {
+  const variantSounds = path.join(projectRoot, "assets", "sounds", variantProfile.soundPrefix);
+  if (fs.existsSync(variantSounds)) {
+    copyDirectory(variantSounds, path.join(runtimeRoot, "sounds", variantProfile.soundPrefix));
+  }
 }
 
 if (SWITCHABLE_VARIANTS.includes(variant)) {

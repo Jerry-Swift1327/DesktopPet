@@ -16,7 +16,7 @@ function createTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "desktop-pet-variant-"));
 }
 
-test("variant CLI creates metadata with generated breed-year sequence id fields", () => {
+test("variant CLI creates metadata with generated pet-year sequence id fields", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");
@@ -29,17 +29,17 @@ test("variant CLI creates metadata with generated breed-year sequence id fields"
   );
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
 
-  assert.equal(draft.id, "lihua-2601");
-  assert.deepEqual(draft.aliases, []);
-  assert.equal(metadata.variants["lihua-2601"].breed, "lihua");
-  assert.equal(metadata.variants["lihua-2601"].date, "2026-06-30");
+  assert.equal(draft.id, "pet2601");
+  assert.equal(draft.aliases, "");
+  assert.equal(metadata.variants.pet2601.breed, "lihua");
+  assert.equal(metadata.variants.pet2601.date, "2026-06-30");
   assert.throws(
-    () => createVariant({ breed: "lihua", date: "2026-06-30", id: "lihua-2601" }, { metadataFile, animationsRoot }),
+    () => createVariant({ breed: "lihua", date: "2026-06-30", id: "pet2601" }, { metadataFile, animationsRoot }),
     /already exists/
   );
 });
 
-test("variant CLI sequence generation scans existing aliases", () => {
+test("variant CLI sequence generation scans existing same-year dates", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");
@@ -47,10 +47,10 @@ test("variant CLI sequence generation scans existing aliases", () => {
   fs.writeFileSync(metadataFile, JSON.stringify({
     schemaVersion: 1,
     variants: {
-      shorthair: { id: "shorthair", breed: "bsh", date: "2026-05-28", aliases: ["bsh-2601"] },
-      brit: { id: "brit", breed: "bsh", date: "2026-06-09", aliases: ["bsh-2602"] },
-      van: { id: "van", breed: "bsh", date: "2026-06-12", aliases: ["bsh-2603"] },
-      bshmitted: { id: "bshmitted", breed: "bsh", date: "2026-06-15", aliases: ["bsh-2604"] }
+      pet2601: { id: "pet2601", breed: "gr", date: "2026-05-08", aliases: "" },
+      pet2602: { id: "pet2602", breed: "ash", date: "2026-05-27", aliases: "" },
+      pet2603: { id: "pet2603", breed: "sf", date: "2026-05-28", aliases: "" },
+      pet2604: { id: "pet2604", breed: "pom", date: "2026-06-06", aliases: "" }
     }
   }, null, 2), "utf8");
 
@@ -59,7 +59,7 @@ test("variant CLI sequence generation scans existing aliases", () => {
     { metadataFile, animationsRoot }
   );
 
-  assert.equal(draft.id, "bsh-2605");
+  assert.equal(draft.id, "pet2605");
 });
 
 test("variant CLI rejects unknown breeds and invalid dates", () => {
@@ -77,7 +77,7 @@ test("variant CLI rejects unknown breeds and invalid dates", () => {
   );
 });
 
-test("variant CLI copies and renames source videos into action directories", () => {
+test("variant CLI copies existing variant videos into preserved action directories", () => {
   const tempDir = createTempDir();
   const sourceDir = path.join(tempDir, "downloads");
   const animationsRoot = path.join(tempDir, "animations");
@@ -86,7 +86,7 @@ test("variant CLI copies and renames source videos into action directories", () 
     fs.writeFileSync(path.join(sourceDir, `tabby_${action}.mp4`), action, "utf8");
   }
 
-  renameAssets({ id: "dog-2601", from: sourceDir }, { animationsRoot });
+  renameAssets({ id: "pet2601", from: sourceDir }, { animationsRoot });
 
   for (const action of ["squat", "walk", "feed", "ball"]) {
     assert.equal(
@@ -98,21 +98,22 @@ test("variant CLI copies and renames source videos into action directories", () 
 
 test("variant CLI list output is aligned without tabs", () => {
   const output = formatList([
-    getVariantSummary("dog"),
-    getVariantSummary("pomeranian")
+    getVariantSummary("pet2601"),
+    getVariantSummary("pet2604")
   ]);
   const lines = output.split(/\r?\n/);
 
   assert.equal(output.includes("\t"), false);
   assert.match(lines[0], /^id +aliases +breed +date +scope +platforms +version$/);
   assert.match(lines[1], /^-+ +-+ +-+ +-+ +-+ +-+ +-+$/);
-  assert.match(output, /dog +dog-2601 +dog +2026-05-08 +internal +win32,darwin +1\.1/);
-  assert.match(output, /pomeranian +pom-2601 +pom +2026-06-06 +custom +darwin +1\.0/);
+  assert.match(output, /pet2601 +- +gr +2026-05-08 +internal +win32,darwin +1\.1/);
+  assert.match(output, /pet2604 +- +pom +2026-06-06 +custom +darwin +1\.0/);
 });
 
-test("variant CLI resolves aliases for command inputs", () => {
-  assert.equal(resolveVariantInput("bsh-2602"), "brit");
-  assert.equal(resolveVariantInput("pom-2601"), "pomeranian");
+test("variant CLI resolves canonical pet ids only", () => {
+  assert.equal(resolveVariantInput("pet2606"), "pet2606");
+  assert.equal(resolveVariantInput("pet2604"), "pet2604");
+  assert.throws(() => resolveVariantInput("bsh-2602"), /Invalid pet variant/);
 });
 
 test("variant CLI refuses ambiguous source videos", () => {

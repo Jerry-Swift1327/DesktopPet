@@ -26,7 +26,7 @@ test("tabby sounds keep squat meows separate from sleep purrs", () => {
 test("tabby installer runtime assets include sounds", () => {
   const result = childProcess.spawnSync("node", [
     "prepare-runtime-assets.cjs",
-    "--pet-variant=tabby",
+    "--pet-variant=pet2605",
     "--pet-channel=installer"
   ], { cwd: appRoot, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr || result.stdout);

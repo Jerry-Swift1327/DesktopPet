@@ -74,19 +74,19 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 
 ## 宠物变体
 
-变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，`electron-app/electron/pet-variants.cjs` 负责把精简字段展开为运行时和打包 profile。真实 `id` 是资源目录、manifest、打包路径、注册表 key、singleInstanceKey 和用户数据目录的技术主键；`aliases` 只用于人工查询、CLI 输入兼容和历史名称兼容。新增 custom 变体使用 `<breed>-<yy><seq>` ID，Windows 打包路径为 `deliverables/custom/<breed>/<id>/<channel>`。
+变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，`electron-app/electron/pet-variants.cjs` 负责把精简字段展开为运行时和打包 profile。真实 `id` 使用 `pet<yy><seq>`，是打包路径、注册表 key、singleInstanceKey 和用户数据目录的技术主键；现有变体通过 `animationPrefix` 继续读取旧资源目录和 manifest。`aliases` 是可选字符串字段，空值在 CLI 中显示为 `-`。新增 custom 变体使用 `pet<yy><seq>` ID，Windows 打包路径为 `deliverables/<scope>/<id>/<channel>`。
 
 | 变体 | 品种 | 范围 | 动画前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `dog` | `dog` | internal | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
-| `cat` | `cat` | internal | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
-| `shorthair` | `bsh` | custom | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
-| `tabby` | `lihua` | custom | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `ragdoll` | `ragdoll` | internal | `ragdoll` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `brit` | `bsh` | custom | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `bshmitted` | `bsh` | custom | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `van` | `bsh` | custom | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `pomeranian` | `pom` | custom | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
+| `pet2601` | `gr` | internal | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `pet2602` | `ash` | internal | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `pet2603` | `sf` | custom | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
+| `pet2604` | `pom` | custom | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
+| `pet2605` | `lihua` | custom | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2606` | `bsh` | custom | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2607` | `bsh` | custom | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2608` | `bsh` | custom | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2609` | `ragdoll` | internal | `ragdoll` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 
 变体维护 CLI 位于 `electron-app/scripts/variant-cli.cjs`，可通过 `npm.cmd run variant:list`、`variant:new`、`variant:query` 和 `variant:rename-assets` 查询或新增定制变体。
 
