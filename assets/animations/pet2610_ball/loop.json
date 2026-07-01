@@ -9,12 +9,13 @@
   "centerVisibleActionX": true,
   "centerVisibleTargetX": 128.0,
   "centerVisibleMaxShift": 32,
-  "frameCount": 100,
+  "frameCount": 108,
   "loopStart": 0,
-  "loopEnd": 99,
-  "sourceLoopStart": 48,
-  "sourceLoopEnd": 147,
-  "score": 0.016912,
-  "trimGroundAlpha": 128,
-  "trimGroundPadding": 1
+  "loopEnd": 107,
+  "sourceLoopStart": 44,
+  "sourceLoopEnd": 151,
+  "score": 0.0,
+  "loopSelection": "manual",
+  "trimGroundAlpha": 220,
+  "trimGroundPadding": 0
 }

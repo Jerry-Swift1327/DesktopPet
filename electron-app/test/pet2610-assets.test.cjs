@@ -40,21 +40,51 @@ test("pet2610 assets cover configured actions without sleep or hiss", () => {
   }
 });
 
-test("pet2610 manual runtime frame ranges match selected action moments", () => {
+test("pet2610 runtime frame ranges match selected action moments", () => {
   const expectedRanges = {
-    pet2610_feed: { frameCount: 73, sourceLoopStart: 94, sourceLoopEnd: 166 },
-    pet2610_shake: { frameCount: 101, sourceLoopStart: 56, sourceLoopEnd: 156 }
+    pet2610_squat: {
+      loopSelection: "full",
+      frameCount: 167,
+      sourceLoopStart: 0,
+      sourceLoopEnd: 166,
+      trimGroundAlpha: 220,
+      trimGroundPadding: 0
+    },
+    pet2610_feed: {
+      loopSelection: "manual",
+      frameCount: 73,
+      sourceLoopStart: 94,
+      sourceLoopEnd: 166,
+      trimGroundAlpha: 128,
+      trimGroundPadding: 1
+    },
+    pet2610_ball: {
+      loopSelection: "manual",
+      frameCount: 108,
+      sourceLoopStart: 44,
+      sourceLoopEnd: 151,
+      trimGroundAlpha: 220,
+      trimGroundPadding: 0
+    },
+    pet2610_shake: {
+      loopSelection: "manual",
+      frameCount: 101,
+      sourceLoopStart: 56,
+      sourceLoopEnd: 156,
+      trimGroundAlpha: 220,
+      trimGroundPadding: 0
+    }
   };
 
   for (const [action, expected] of Object.entries(expectedRanges)) {
     const loop = readLoop(action);
-    assert.equal(loop.loopSelection, "manual");
+    assert.equal(loop.loopSelection, expected.loopSelection);
     assert.equal(loop.frameCount, expected.frameCount);
     assert.equal(loop.loopEnd, expected.frameCount - 1);
     assert.equal(loop.sourceLoopStart, expected.sourceLoopStart);
     assert.equal(loop.sourceLoopEnd, expected.sourceLoopEnd);
-    assert.equal(loop.trimGroundAlpha, 128);
-    assert.equal(loop.trimGroundPadding, 1);
+    assert.equal(loop.trimGroundAlpha, expected.trimGroundAlpha);
+    assert.equal(loop.trimGroundPadding, expected.trimGroundPadding);
   }
 });
 
@@ -69,6 +99,6 @@ test("pet2610 yawn keeps the full transition and stable sleeping tail loop", () 
   assert.equal(loop.sourceLoopStart, 0);
   assert.equal(loop.sourceLoopEnd, 333);
   assert.equal(loop.tailLoopStart, 284);
-  assert.equal(loop.trimGroundAlpha, 128);
-  assert.equal(loop.trimGroundPadding, 1);
+  assert.equal(loop.trimGroundAlpha, 220);
+  assert.equal(loop.trimGroundPadding, 0);
 });

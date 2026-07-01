@@ -13,7 +13,7 @@
   "sourceLoopEnd": 333,
   "score": 0.0,
   "loopSelection": "full",
-  "trimGroundAlpha": 128,
-  "trimGroundPadding": 1,
+  "trimGroundAlpha": 220,
+  "trimGroundPadding": 0,
   "tailLoopStart": 284
 }
