@@ -21,6 +21,298 @@ from . import (
 from .files import clear_frame_dir
 
 
+def _flood_connected_to_border(mask: np.ndarray) -> np.ndarray:
+    """Return mask pixels connected to the image border."""
+    height, width = mask.shape
+    connected = np.zeros(mask.shape, dtype=bool)
+    stack: list[tuple[int, int]] = []
+
+    for x in range(width):
+        if mask[0, x]:
+            stack.append((0, x))
+        if height > 1 and mask[height - 1, x]:
+            stack.append((height - 1, x))
+    for y in range(1, max(1, height - 1)):
+        if mask[y, 0]:
+            stack.append((y, 0))
+        if width > 1 and mask[y, width - 1]:
+            stack.append((y, width - 1))
+
+    while stack:
+        y, x = stack.pop()
+        if connected[y, x] or not mask[y, x]:
+            continue
+        connected[y, x] = True
+        if y > 0:
+            stack.append((y - 1, x))
+        if y + 1 < height:
+            stack.append((y + 1, x))
+        if x > 0:
+            stack.append((y, x - 1))
+        if x + 1 < width:
+            stack.append((y, x + 1))
+
+    return connected
+
+
+def _iter_components(mask: np.ndarray):
+    """Yield connected components from a boolean mask."""
+    height, width = mask.shape
+    visited = np.zeros(mask.shape, dtype=bool)
+    starts_y, starts_x = np.nonzero(mask)
+
+    for start_y, start_x in zip(starts_y, starts_x):
+        sy = int(start_y)
+        sx = int(start_x)
+        if visited[sy, sx]:
+            continue
+
+        stack = [(sy, sx)]
+        ys: list[int] = []
+        xs: list[int] = []
+        visited[sy, sx] = True
+
+        while stack:
+            y, x = stack.pop()
+            ys.append(y)
+            xs.append(x)
+
+            if y > 0 and mask[y - 1, x] and not visited[y - 1, x]:
+                visited[y - 1, x] = True
+                stack.append((y - 1, x))
+            if y + 1 < height and mask[y + 1, x] and not visited[y + 1, x]:
+                visited[y + 1, x] = True
+                stack.append((y + 1, x))
+            if x > 0 and mask[y, x - 1] and not visited[y, x - 1]:
+                visited[y, x - 1] = True
+                stack.append((y, x - 1))
+            if x + 1 < width and mask[y, x + 1] and not visited[y, x + 1]:
+                visited[y, x + 1] = True
+                stack.append((y, x + 1))
+
+        yield np.array(ys, dtype=np.intp), np.array(xs, dtype=np.intp)
+
+
+def _fill_component_rgb_from_neighbors(
+    pixels: np.ndarray,
+    ys: np.ndarray,
+    xs: np.ndarray,
+    *,
+    visible_threshold: int,
+) -> None:
+    alpha = pixels[:, :, 3]
+    component_mask = np.zeros(alpha.shape, dtype=bool)
+    component_mask[ys, xs] = True
+    neighbor_values: list[np.ndarray] = []
+    height, width = alpha.shape
+
+    for y, x in zip(ys, xs):
+        for ny, nx in ((int(y) - 1, int(x)), (int(y) + 1, int(x)), (int(y), int(x) - 1), (int(y), int(x) + 1)):
+            if 0 <= ny < height and 0 <= nx < width and not component_mask[ny, nx] and alpha[ny, nx] > visible_threshold:
+                neighbor_values.append(pixels[ny, nx, :3])
+
+    if not neighbor_values:
+        return
+
+    current_rgb = pixels[ys, xs, :3]
+    if float(current_rgb.mean()) <= 3.0:
+        pixels[ys, xs, :3] = np.mean(neighbor_values, axis=0)
+
+
+def stabilize_alpha_mask_pixels(
+    pixels: np.ndarray,
+    *,
+    visible_threshold: int = ALPHA_CROP_THRESHOLD,
+    fill_alpha: int = 255,
+) -> tuple[np.ndarray, dict[str, int]]:
+    """Repair small enclosed alpha holes without expanding the outer contour."""
+    alpha = pixels[:, :, 3]
+    transparent = alpha <= visible_threshold
+    outside = _flood_connected_to_border(transparent)
+    interior = transparent & ~outside
+    if not np.any(interior):
+        return pixels, {"components": 0, "pixels": 0, "maxArea": 0}
+
+    height, width = transparent.shape
+    area_limit = max(96, int(height * width * 0.006))
+    span_limit = max(10, int(min(height, width) * 0.12))
+    repaired_components = 0
+    repaired_pixels = 0
+    max_area = 0
+
+    for ys, xs in _iter_components(interior):
+        area = int(len(ys))
+        box_height = int(ys.max() - ys.min() + 1)
+        box_width = int(xs.max() - xs.min() + 1)
+        if area > area_limit or box_height > span_limit or box_width > span_limit:
+            continue
+
+        _fill_component_rgb_from_neighbors(pixels, ys, xs, visible_threshold=visible_threshold)
+        alpha[ys, xs] = np.maximum(alpha[ys, xs], float(fill_alpha))
+        repaired_components += 1
+        repaired_pixels += area
+        max_area = max(max_area, area)
+
+    pixels[:, :, 3] = alpha
+    return pixels, {"components": repaired_components, "pixels": repaired_pixels, "maxArea": max_area}
+
+
+def _dense_low_alpha_mask(
+    alpha: np.ndarray,
+    *,
+    visible_threshold: int = ALPHA_CROP_THRESHOLD,
+    low_alpha_threshold: int = 48,
+    radius: int = 2,
+    min_density: int = 176,
+) -> np.ndarray:
+    visible = np.where(alpha > visible_threshold, 255, 0).astype(np.uint8)
+    density = np.array(Image.fromarray(visible, "L").filter(ImageFilter.BoxBlur(radius))).astype(np.float32)
+    return (alpha <= low_alpha_threshold) & (density >= float(min_density))
+
+
+def _visible_slice(
+    alpha: np.ndarray,
+    *,
+    visible_threshold: int = ALPHA_CROP_THRESHOLD,
+    padding: int = 3,
+):
+    visible_pixels = np.argwhere(alpha > visible_threshold)
+    if visible_pixels.size == 0:
+        return None
+    top, left = visible_pixels.min(axis=0)
+    bottom, right = visible_pixels.max(axis=0) + 1
+    return (
+        slice(max(0, int(top) - padding), min(alpha.shape[0], int(bottom) + padding)),
+        slice(max(0, int(left) - padding), min(alpha.shape[1], int(right) + padding)),
+    )
+
+
+def _fill_mask_from_local_neighbors(
+    pixels: np.ndarray,
+    repair_mask: np.ndarray,
+    *,
+    visible_threshold: int = ALPHA_CROP_THRESHOLD,
+    radius: int = 2,
+) -> None:
+    alpha = pixels[:, :, 3]
+    height, width = alpha.shape
+    ys, xs = np.nonzero(repair_mask)
+    for y_value, x_value in zip(ys, xs):
+        y = int(y_value)
+        x = int(x_value)
+        top = max(0, y - radius)
+        bottom = min(height, y + radius + 1)
+        left = max(0, x - radius)
+        right = min(width, x + radius + 1)
+        region = pixels[top:bottom, left:right, :]
+        visible = region[:, :, 3] > visible_threshold
+        if not np.any(visible):
+            continue
+        pixels[y, x, :3] = np.mean(region[:, :, :3][visible], axis=0)
+        pixels[y, x, 3] = max(float(pixels[y, x, 3]), float(np.mean(region[:, :, 3][visible])))
+
+
+def repair_dense_low_alpha_cracks(
+    pixels: np.ndarray,
+    *,
+    visible_threshold: int = ALPHA_CROP_THRESHOLD,
+    low_alpha_threshold: int = 48,
+    iterations: int = 2,
+) -> tuple[np.ndarray, dict[str, int]]:
+    """Fill tiny low-alpha cracks whose local neighborhood is mostly foreground."""
+    visible_slice = _visible_slice(pixels[:, :, 3], visible_threshold=visible_threshold)
+    if visible_slice is None:
+        return pixels, {"passes": 0, "pixels": 0, "maxPixelsPerPass": 0}
+    y_slice, x_slice = visible_slice
+    work_pixels = pixels[y_slice, x_slice, :]
+    total_pixels = 0
+    max_pixels = 0
+    passes = 0
+    for _ in range(max(1, iterations)):
+        alpha = work_pixels[:, :, 3]
+        repair_mask = _dense_low_alpha_mask(
+            alpha,
+            visible_threshold=visible_threshold,
+            low_alpha_threshold=low_alpha_threshold,
+        )
+        count = int(repair_mask.sum())
+        if count == 0:
+            break
+        _fill_mask_from_local_neighbors(work_pixels, repair_mask, visible_threshold=visible_threshold)
+        total_pixels += count
+        max_pixels = max(max_pixels, count)
+        passes += 1
+
+    pixels[y_slice, x_slice, :] = work_pixels
+    return pixels, {"passes": passes, "pixels": total_pixels, "maxPixelsPerPass": max_pixels}
+
+
+def detect_dense_low_alpha_cracks(
+    image: Image.Image,
+    *,
+    visible_threshold: int = ALPHA_CROP_THRESHOLD,
+    low_alpha_threshold: int = 48,
+) -> dict[str, int]:
+    """Detect low-alpha pixels in locally dense foreground neighborhoods."""
+    alpha = np.array(image.convert("RGBA").getchannel("A")).astype(np.float32)
+    visible_slice = _visible_slice(alpha, visible_threshold=visible_threshold)
+    if visible_slice is None:
+        return {"components": 0, "pixels": 0, "maxArea": 0}
+    y_slice, x_slice = visible_slice
+    mask = _dense_low_alpha_mask(
+        alpha[y_slice, x_slice],
+        visible_threshold=visible_threshold,
+        low_alpha_threshold=low_alpha_threshold,
+    )
+    components = 0
+    max_area = 0
+    if np.any(mask):
+        for ys, _xs in _iter_components(mask):
+            area = int(len(ys))
+            components += 1
+            max_area = max(max_area, area)
+    return {"components": components, "pixels": int(mask.sum()), "maxArea": max_area}
+
+
+def detect_interior_alpha_holes(
+    image: Image.Image,
+    *,
+    visible_threshold: int = ALPHA_CROP_THRESHOLD,
+) -> dict[str, int]:
+    """Detect transparent pinholes in locally dense foreground neighborhoods."""
+    alpha = np.array(image.convert("RGBA").getchannel("A")).astype(np.float32)
+    visible_slice = _visible_slice(alpha, visible_threshold=visible_threshold)
+    if visible_slice is None:
+        return {"components": 0, "pixels": 0, "maxArea": 0}
+    y_slice, x_slice = visible_slice
+    interior = _dense_low_alpha_mask(
+        alpha[y_slice, x_slice],
+        visible_threshold=visible_threshold,
+        low_alpha_threshold=visible_threshold,
+    )
+    if not np.any(interior):
+        return {"components": 0, "pixels": 0, "maxArea": 0}
+
+    components = 0
+    pixels = 0
+    max_area = 0
+    for ys, _xs in _iter_components(interior):
+        area = int(len(ys))
+        components += 1
+        pixels += area
+        max_area = max(max_area, area)
+
+    return {"components": components, "pixels": pixels, "maxArea": max_area}
+
+
+def repair_interior_alpha_holes(image: Image.Image) -> Image.Image:
+    """Repair enclosed alpha pinholes after a frame has been normalized."""
+    pixels = np.array(image.convert("RGBA")).astype(np.float32)
+    pixels, _crack_info = repair_dense_low_alpha_cracks(pixels)
+    pixels[pixels[:, :, 3] < 8.0, :3] = 0.0
+    return Image.fromarray(np.clip(pixels, 0.0, 255.0).astype(np.uint8), "RGBA")
+
+
 def chroma_key_green_image(input_path: Path) -> Image.Image:
     """对绿幕帧进行抠像，生成 RGBA 图像。"""
     image = Image.open(input_path).convert("RGBA")
@@ -38,6 +330,11 @@ def chroma_key_green_image(input_path: Path) -> Image.Image:
     chroma_ratio = np.clip((green_ratio - 0.34) / 0.18, 0.0, 1.0)
     ratio_gate = (g > 45.0) & (g > r * 1.02) & (g > b * 1.02)
     confidence = np.where(ratio_gate, np.maximum(dominance, chroma_ratio) * green_brightness, 0.0)
+    min_rgb = np.minimum(np.minimum(r, g), b)
+    max_rgb = np.maximum(np.maximum(r, g), b)
+    low_saturation = (max_rgb - min_rgb) < 72.0
+    bright_neutral_foreground = (min_rgb > 145.0) & (max_rgb > 178.0) & low_saturation & (green_strength < 46.0)
+    confidence = np.where(bright_neutral_foreground, np.minimum(confidence, 0.04), confidence)
 
     alpha = np.full(g.shape, 255.0, dtype=np.float32)
     alpha = np.where(confidence > 0.05, 255.0 * (1.0 - confidence), alpha)
@@ -46,10 +343,10 @@ def chroma_key_green_image(input_path: Path) -> Image.Image:
 
     spill = (g > 45.0) & (green_strength > 3.0) & (green_ratio > 0.32)
     rgb[:, :, 1] = np.where(spill, np.minimum(g, max_rb * 0.96 + 4.0), g)
-    rgb[alpha < 8.0] = 0.0
 
     pixels[:, :, :3] = np.clip(rgb, 0.0, 255.0)
     pixels[:, :, 3] = np.clip(alpha, 0.0, 255.0)
+    pixels[pixels[:, :, 3] < 8.0, :3] = 0.0
     return Image.fromarray(pixels.astype(np.uint8), "RGBA")
 
 
@@ -214,7 +511,7 @@ def normalize_pet_frame(image: Image.Image, bounds: tuple[int, int, int, int]) -
     x = (MAX_PET_SIZE - target_width) // 2
     y = MAX_PET_SIZE - PET_GROUND_PADDING - target_height
     output.alpha_composite(resized, (x, y))
-    return despill_normalized_frame(output)
+    return repair_interior_alpha_holes(despill_normalized_frame(output))
 
 
 def despill_normalized_frame(image: Image.Image) -> Image.Image:
@@ -282,12 +579,13 @@ def normalize_candidate_frame(
     target_height = max(1, round(height * scale))
     resized = cropped.resize((target_width, target_height), Image.Resampling.LANCZOS)
     resized = enhance_rgba(resized)
+    resized = repair_interior_alpha_holes(resized)
 
     output = Image.new("RGBA", (ENHANCED_FRAME_SIZE, ENHANCED_FRAME_SIZE), (0, 0, 0, 0))
     x = (ENHANCED_FRAME_SIZE - target_width) // 2
     y = ENHANCED_FRAME_SIZE - CANDIDATE_GROUND_PADDING - target_height
     output.alpha_composite(resized, (x, y))
-    return hard_clean_alpha(output)
+    return repair_interior_alpha_holes(hard_clean_alpha(output))
 
 
 def process_frames_to_processed(

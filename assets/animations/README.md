@@ -40,6 +40,8 @@
 
 新加入变体或动作时，优先在素材池生成阶段检查动作级画布居中：如果主体整体偏左或偏右，可使用 `--center-visible-action-x` 对该动作全部素材池帧应用同一个 X 平移，使中位可见中心靠近 256px 画布中心。不要逐帧单独居中，否则会抵消走路、扑球、转身等动作本身的自然位移。近蹲坐动作可在 squat 自身构图正确后，再使用 `--align-reference-center-x --align-reference-bottom` 对齐到同变体 squat。
 
+对亮白或低饱和毛色的变体，处理脚本会自动执行 alpha 稳定化，减少主体内部透明针孔和低透明裂纹。新增或替换此类资源后，建议使用 `process_pet_actions.py audit` 检查 `interiorAlphaHoles` 和 `denseLowAlphaCracks` 指标，再抽查 `processed_frames` 与 `transparent_frames` 的关键帧。
+
 ## Manifest
 
 当前 manifest：

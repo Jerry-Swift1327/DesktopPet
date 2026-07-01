@@ -40,6 +40,12 @@ class PetActionAuditTests(unittest.TestCase):
                     pixels[x, y] = (20, 20, 20, 24)
             image.save(frame_dir / "frame_001.png")
 
+            image = Image.open(frame_dir / "frame_000.png").convert("RGBA")
+            pixels = image.load()
+            pixels[11, 12] = (0, 0, 0, 0)
+            pixels[12, 12] = (0, 0, 0, 0)
+            image.save(frame_dir / "frame_000.png")
+
             summary = summarize_action_frames(frame_dir.parent)
 
         self.assertEqual(summary["action"], "tabby_squat")
@@ -55,6 +61,9 @@ class PetActionAuditTests(unittest.TestCase):
         self.assertEqual(summary["range"]["centerX"], 4.0)
         self.assertEqual(summary["groundAlpha"]["maxLowRows"], 3)
         self.assertEqual(summary["groundAlpha"]["framesWithLowRows"], 1)
+        self.assertEqual(summary["interiorAlphaHoles"]["maxPixels"], 2)
+        self.assertEqual(summary["interiorAlphaHoles"]["framesWithHoles"], 1)
+        self.assertGreater(summary["denseLowAlphaCracks"]["maxPixels"], 0)
 
     def test_build_variant_audit_compares_actions_to_squat_and_ranks_risks(self) -> None:
         from pet_actions.audit import build_variant_audit, rank_geometry_risks

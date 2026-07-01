@@ -36,6 +36,8 @@
 ```
 视频 → 抽帧(raw_frames) → 抠像+归一化+256px增强(processed_frames/本机最终素材池)
                               ↓
+                     亮色毛发 alpha 稳定化（内部针孔/低透明裂纹修复）
+                              ↓
                      [默认] 亮度异常检测 → 确定 excludedFrames
                               ↓
                      [默认] 选取循环片段 → transparent_frames/ (跨机器同步的最终运行帧)
@@ -118,6 +120,10 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 3. 如果头部帧亮度显著高于稳定帧，自动加入 `excludedFrames`
 4. 可通过 `--skip-frames auto`（默认）、`--skip-frames 6` 或 `--skip-frames 0` 控制
 
+### alpha 稳定化
+
+抠像后的归一化帧会自动执行亮色毛发安全处理：对高亮、低饱和的近白前景采用更保守的绿幕判定，并在 256px/128px 帧内修复局部前景密度较高区域中的透明针孔和低透明裂纹。该步骤用于避免 ragdoll、van、pomeranian 等浅色毛发在播放时因 alpha 破洞产生闪烁，同时不会整体外扩外轮廓。
+
 ### 方向采样（眼球追踪动作）
 
 使用 `--direction-count 64` 启用方向帧采样：
@@ -146,7 +152,7 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 
 ### audit 子命令
 
-用途：只读审计当前动作帧几何，不修改资源目录。审计内容包括帧尺寸、可见包围盒、视觉中心、alpha 重心、底线、画布中心偏移、左右透明边距差、首尾 seam、底部低透明 alpha 残留，以及相对同变体 `squat` 的差异和风险排序。
+用途：只读审计当前动作帧几何，不修改资源目录。审计内容包括帧尺寸、可见包围盒、视觉中心、alpha 重心、底线、画布中心偏移、左右透明边距差、首尾 seam、底部低透明 alpha 残留、内部 alpha 针孔/低透明裂纹，以及相对同变体 `squat` 的差异和风险排序。
 
 示例：
 

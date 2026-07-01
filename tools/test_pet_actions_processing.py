@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 TOOLS_ROOT = Path(__file__).resolve().parent
@@ -56,6 +57,46 @@ class PetActionProcessingTests(unittest.TestCase):
 
         self.assertEqual(info["applied"], False)
         self.assertEqual(cleaned.getchannel("A").getpixel((12, 21)), 255)
+
+    def test_stabilize_alpha_mask_repairs_enclosed_pinhole_without_expanding_edge(self) -> None:
+        from pet_actions.chroma import detect_interior_alpha_holes, stabilize_alpha_mask_pixels
+
+        image = Image.new("RGBA", (24, 24), (0, 0, 0, 0))
+        pixels = image.load()
+        for y in range(6, 18):
+            for x in range(6, 18):
+                pixels[x, y] = (220, 216, 210, 255)
+        pixels[11, 11] = (0, 0, 0, 0)
+        pixels[12, 11] = (0, 0, 0, 0)
+
+        repaired_pixels, info = stabilize_alpha_mask_pixels(np.array(image).astype(np.float32))
+        repaired = Image.fromarray(np.clip(repaired_pixels, 0, 255).astype("uint8"), "RGBA")
+
+        self.assertEqual(info["components"], 1)
+        self.assertEqual(info["pixels"], 2)
+        self.assertEqual(repaired.getchannel("A").getpixel((11, 11)), 255)
+        self.assertEqual(repaired.getchannel("A").getpixel((0, 0)), 0)
+        self.assertEqual(detect_interior_alpha_holes(repaired)["pixels"], 0)
+
+    def test_repair_dense_low_alpha_cracks_keeps_open_background_transparent(self) -> None:
+        from pet_actions.chroma import detect_dense_low_alpha_cracks, repair_dense_low_alpha_cracks
+
+        image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+        pixels = image.load()
+        for y in range(8, 24):
+            for x in range(8, 24):
+                pixels[x, y] = (220, 216, 210, 255)
+        for y in range(10, 22):
+            pixels[15, y] = (0, 0, 0, 0)
+
+        self.assertGreater(detect_dense_low_alpha_cracks(image)["pixels"], 0)
+        repaired_pixels, info = repair_dense_low_alpha_cracks(np.array(image).astype(np.float32), iterations=3)
+        repaired = Image.fromarray(np.clip(repaired_pixels, 0, 255).astype("uint8"), "RGBA")
+
+        self.assertGreater(info["pixels"], 0)
+        self.assertEqual(detect_dense_low_alpha_cracks(repaired)["pixels"], 0)
+        self.assertEqual(repaired.getchannel("A").getpixel((15, 15)), 255)
+        self.assertEqual(repaired.getchannel("A").getpixel((0, 0)), 0)
 
     def test_align_frame_to_reference_translates_visible_center_and_ground(self) -> None:
         from pet_actions.chroma import align_frame_to_reference, get_frame_geometry
