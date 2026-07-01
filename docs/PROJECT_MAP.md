@@ -76,6 +76,7 @@ npm.cmd run variant:new -- --breed lihua --date 2026-06-30
 | `pet2607` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
 | `pet2608` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
 | `pet2609` | `ragdoll` | internal | Windows | `squat`、`walk`、`feed`、`ball`、`spin`、`lick`、`stretch`、`belly`，额外资源 `shake`、`yawn`、`hiss` |
+| `pet2610` | `lihua` | custom | Windows | `squat`、`walk`、`feed`、`ball`，额外资源 `shake`、`yawn` |
 
 资源目录命名为 `assets/animations/<variant>_<action>`，运行时主要使用：
 

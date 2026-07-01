@@ -167,6 +167,25 @@
         "wakeHiss": true,
         "dockShake": true
       }
+    },
+    "pet2610": {
+      "id": "pet2610",
+      "breed": "lihua",
+      "date": "2026-06-29",
+      "aliases": "",
+      "scope": "custom",
+      "version": "1.0",
+      "scale": 1.1,
+      "platform": "win32",
+      "extraActions": [],
+      "extraAssets": [
+        "shake",
+        "yawn"
+      ],
+      "features": {
+        "idleYawn": true,
+        "dockShake": true
+      }
     }
   }
 }

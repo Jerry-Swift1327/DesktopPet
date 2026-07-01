@@ -15,6 +15,7 @@
 | `bshmitted` | `bshmitted_squat`、`bshmitted_walk`、`bshmitted_feed`、`bshmitted_ball` |
 | `van` | `van_squat`、`van_walk`、`van_feed`、`van_ball` |
 | `pomeranian` | `pomeranian_squat`、`pomeranian_walk`、`pomeranian_feed`、`pomeranian_ball` |
+| `pet2610` | `pet2610_squat`、`pet2610_walk`、`pet2610_feed`、`pet2610_ball`、`pet2610_shake`、`pet2610_yawn` |
 
 ## 单个动作目录
 
@@ -55,6 +56,7 @@
 - `bshmitted_actions_manifest.json`
 - `van_actions_manifest.json`
 - `pomeranian_actions_manifest.json`
+- `pet2610_actions_manifest.json`
 
 manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新。
 
