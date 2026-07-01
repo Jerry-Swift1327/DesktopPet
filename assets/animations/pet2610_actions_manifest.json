@@ -99,7 +99,12 @@
     "score": 0.0,
     "loopSelection": "manual",
     "trimGroundAlpha": 220,
-    "trimGroundPadding": 0
+    "trimGroundPadding": 0,
+    "runtimeAlignReferenceAction": "pet2610_squat",
+    "runtimeAlignDx": -49,
+    "runtimeAlignDy": -17,
+    "runtimeAlignTargetBottom": 220,
+    "runtimeAlignTargetCenterX": 101.5
   },
   {
     "action": "pet2610_yawn",

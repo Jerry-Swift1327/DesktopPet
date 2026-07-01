@@ -72,7 +72,12 @@ test("pet2610 runtime frame ranges match selected action moments", () => {
       sourceLoopStart: 56,
       sourceLoopEnd: 156,
       trimGroundAlpha: 220,
-      trimGroundPadding: 0
+      trimGroundPadding: 0,
+      runtimeAlignReferenceAction: "pet2610_squat",
+      runtimeAlignDx: -49,
+      runtimeAlignDy: -17,
+      runtimeAlignTargetBottom: 220,
+      runtimeAlignTargetCenterX: 101.5
     }
   };
 
@@ -85,6 +90,13 @@ test("pet2610 runtime frame ranges match selected action moments", () => {
     assert.equal(loop.sourceLoopEnd, expected.sourceLoopEnd);
     assert.equal(loop.trimGroundAlpha, expected.trimGroundAlpha);
     assert.equal(loop.trimGroundPadding, expected.trimGroundPadding);
+    if (expected.runtimeAlignReferenceAction) {
+      assert.equal(loop.runtimeAlignReferenceAction, expected.runtimeAlignReferenceAction);
+      assert.equal(loop.runtimeAlignDx, expected.runtimeAlignDx);
+      assert.equal(loop.runtimeAlignDy, expected.runtimeAlignDy);
+      assert.equal(loop.runtimeAlignTargetBottom, expected.runtimeAlignTargetBottom);
+      assert.equal(loop.runtimeAlignTargetCenterX, expected.runtimeAlignTargetCenterX);
+    }
   }
 });
 
