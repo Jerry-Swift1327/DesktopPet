@@ -113,6 +113,9 @@ test("pet2610 yawn keeps the full transition and stable sleeping tail loop", () 
   assert.equal(loop.tailLoopStart, 320);
   assert.equal(loop.trimGroundAlpha, 220);
   assert.equal(loop.trimGroundPadding, 0);
-  assert.equal(loop.groundAlignBottom, 231);
-  assert.equal(loop.groundAlignMaxShift, 16);
+  assert.equal(loop.runtimeAlignReferenceAction, "pet2610_squat");
+  assert.equal(loop.runtimeAlignDx, -15);
+  assert.equal(loop.runtimeAlignDy, -11);
+  assert.equal(loop.runtimeAlignTargetBottom, 220);
+  assert.equal(loop.runtimeAlignTargetCenterX, 101.5);
 });

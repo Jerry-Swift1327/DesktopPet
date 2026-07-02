@@ -124,7 +124,10 @@
     "trimGroundAlpha": 220,
     "trimGroundPadding": 0,
     "tailLoopStart": 320,
-    "groundAlignBottom": 231,
-    "groundAlignMaxShift": 16
+    "runtimeAlignReferenceAction": "pet2610_squat",
+    "runtimeAlignDx": -15,
+    "runtimeAlignDy": -11,
+    "runtimeAlignTargetBottom": 220,
+    "runtimeAlignTargetCenterX": 101.5
   }
 ]
