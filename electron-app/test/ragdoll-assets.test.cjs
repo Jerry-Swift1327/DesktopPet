@@ -11,6 +11,30 @@ function listFrames(dir) {
   return fs.readdirSync(dir).filter((name) => /^frame_\d{3}\.png$/.test(name)).sort();
 }
 
+function measureFrameGeometry(file) {
+  const result = require("node:child_process").spawnSync("python", ["-c", `
+from PIL import Image
+import json, sys
+image = Image.open(sys.argv[1]).convert("RGBA")
+alpha = image.getchannel("A").point(lambda value: 255 if value > 12 else 0)
+box = alpha.getbbox()
+if box is None:
+    raise SystemExit("frame has no visible alpha")
+left, top, right, bottom = box[0], box[1], box[2] - 1, box[3] - 1
+print(json.dumps({
+    "size": [image.width, image.height],
+    "left": left,
+    "top": top,
+    "right": right,
+    "bottom": bottom,
+    "centerX": (left + right + 1) / 2,
+    "centerY": (top + bottom + 1) / 2
+}))
+`, file], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return JSON.parse(result.stdout);
+}
+
 test("ragdoll assets cover the configured actions", () => {
   const actions = [
     "ragdoll_squat",
@@ -71,4 +95,33 @@ test("ragdoll runtime frames trim ground alpha remnants", () => {
     assert.equal(entry.trimGroundAlpha, 128);
     assert.equal(entry.trimGroundPadding, 1);
   }
+});
+
+test("ragdoll runtime frames preserve source-canvas layout at 256px", () => {
+  const expectedSourceCanvasSizes = {
+    ragdoll_squat: [960, 960],
+    ragdoll_walk: [720, 720],
+    ragdoll_feed: [960, 960],
+    ragdoll_ball: [960, 960],
+    ragdoll_spin: [720, 720],
+    ragdoll_lick: [960, 960],
+    ragdoll_stretch: [720, 720],
+    ragdoll_belly: [960, 960],
+    ragdoll_shake: [960, 960],
+    ragdoll_yawn: [720, 720],
+    ragdoll_hiss: [720, 720]
+  };
+
+  for (const entry of manifest) {
+    assert.equal(entry.frameSize, 256);
+    assert.equal(entry.normalizationMode, "source-canvas");
+    assert.deepEqual(entry.sourceCanvasSize, expectedSourceCanvasSizes[entry.action]);
+  }
+
+  const firstSquat = measureFrameGeometry(path.join(animationsRoot, "ragdoll_squat", "transparent_frames", "frame_000.png"));
+  assert.deepEqual(firstSquat.size, [256, 256]);
+  assert.ok(
+    firstSquat.centerX >= 124 && firstSquat.centerX <= 142,
+    `expected first squat frame to stay near the source canvas center, got ${firstSquat.centerX}`
+  );
 });

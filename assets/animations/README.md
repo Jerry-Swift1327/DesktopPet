@@ -22,7 +22,7 @@
 | 路径 | 作用 | 运行时必需 |
 | --- | --- | --- |
 | `<action>.mp4` | 动作源视频 | 否 |
-| `processed_frames/frame_*.png` | 256px 增强素材池（全部帧） | 否 |
+| `processed_frames/frame_*.png` | 256px 增强素材池（全部帧，默认保留源画布构图） | 否 |
 | `transparent_frames/frame_*.png` | Electron 实际加载的透明 PNG 帧（从素材池选取的循环片段） | 是 |
 | `loop.json` | 帧数、帧间隔、循环段和质量元数据 | 是 |
 | `raw_frames` | 抽帧中间产物，处理后默认删除 | 否 |
@@ -30,7 +30,7 @@
 
 ### processed_frames 与 transparent_frames 的关系
 
-- `processed_frames`：本机处理时的最终素材池，存放从源视频生成并完成裁剪、贴地、底部 alpha 清理或参考动作对齐后的全部 256px 增强透明帧。
+- `processed_frames`：本机处理时的最终素材池，默认按源视频完整画布等比缩放到 256px 透明画布，保留 raw 帧里的主体位置和透明边距；使用 `--normalization-mode crop` 时才按可见区域裁剪、贴地并应用可见尺寸参数。
 - `transparent_frames`：跨机器同步的最终运行帧，从素材池中选取的最佳循环片段或方向采样帧。Electron 应用只加载此目录。
 
 对于使用完整帧范围的动作（`loopSelection: "full"`），`transparent_frames` 的内容与 `processed_frames` 一致。
@@ -39,7 +39,9 @@
 
 `processed_frames` 和源视频用于本机维护，不提交到 Git；`transparent_frames`、`loop.json` 和 manifest 需要提交以保证跨机器运行一致。修复资源时应先通过处理脚本修正素材池生成结果，再导出运行帧，避免只改运行帧导致下次重新导出时丢失修复。
 
-新加入变体或动作时，优先在素材池生成阶段检查动作级画布居中：如果主体整体偏左或偏右，可使用 `--center-visible-action-x` 对该动作全部素材池帧应用同一个 X 平移，使中位可见中心靠近 256px 画布中心。不要逐帧单独居中，否则会抵消走路、扑球、转身等动作本身的自然位移。近蹲坐动作可在 squat 自身构图正确后，再使用 `--align-reference-center-x --align-reference-bottom` 对齐到同变体 squat。
+`loop.json` 和 manifest 中的 `frameSize` 是运行 PNG 画布尺寸，当前仍为 256；Electron 默认基础精灵是 128 CSS 像素，因此 256px 运行帧属于 2x 素材。`sourceCanvasSize` 记录源视频抽帧尺寸，不要求所有动作相同。
+
+新加入变体或动作时，优先使用默认 `source-canvas` 保留源视频构图，并在素材池生成阶段检查动作级画布居中。如果源视频本身主体整体偏左或偏右，可使用 `--center-visible-action-x` 对该动作全部素材池帧应用同一个 X 平移，使中位可见中心靠近 256px 画布中心。不要逐帧单独居中，否则会抵消走路、扑球、转身等动作本身的自然位移。近蹲坐动作可在 squat 自身构图正确后，再使用 `--align-reference-center-x --align-reference-bottom` 对齐到同变体 squat。
 
 对亮白或低饱和毛色的变体，处理脚本会自动执行 alpha 稳定化，减少主体内部透明针孔和低透明裂纹。新增或替换此类资源后，建议使用 `process_pet_actions.py audit` 检查 `interiorAlphaHoles` 和 `denseLowAlphaCracks` 指标，再抽查 `processed_frames` 与 `transparent_frames` 的关键帧。
 
@@ -107,6 +109,6 @@ python tools\build_quality_previews.py --actions dog_feed --clean
 - `electron-app/electron/pet-variant-metadata.json` 维护精简变体元数据，`electron-app/electron/pet-variants.cjs` 展开动作顺序和打包资源列表。
 - 打包脚本只复制运行需要的 `transparent_frames`、`loop.json` 和 manifest。
 - `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库。
-- 底部低透明 alpha、动作级画布偏心、动作偏移或缩放突变应优先在素材池生成阶段处理，再重新导出 `transparent_frames`。
+- 底部低透明 alpha、动作级画布偏心、动作偏移或缩放突变应优先在素材池生成阶段处理，再重新导出 `transparent_frames`。只有需要旧版裁剪贴地效果时才使用 `--normalization-mode crop`。
 - 替换资源后，先检查 `loop.json` 和 manifest，再启动应用确认动作播放、落地点和循环是否正常。
 - 如果动作帧尺寸或命名规则变化，需要同步主进程资源加载、渲染层播放逻辑和测试。

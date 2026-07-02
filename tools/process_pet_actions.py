@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -24,12 +25,15 @@ if str(TOOLS_ROOT) not in sys.path:
 
 from pet_actions import (  # noqa: E402
     ANIMATIONS_ROOT,
+    CROP_NORMALIZATION,
     ENHANCED_FRAME_SIZE,
     FRAME_MS,
+    NORMALIZATION_MODES,
     QUALITY_PROFILE,
+    SOURCE_CANVAS_NORMALIZATION,
     SOURCE_FRAME_SIZE,
 )
-from pet_actions.chroma import process_frames_to_processed  # noqa: E402
+from pet_actions.chroma import process_frames_to_processed, validate_normalization_options  # noqa: E402
 from pet_actions.ffmpeg import extract_frames, find_ffmpeg  # noqa: E402
 from pet_actions.files import find_video, write_json  # noqa: E402
 from pet_actions.frames import (  # noqa: E402
@@ -68,6 +72,7 @@ def process_action_core(
     trim_ground_alpha_auto: bool = False,
     visible_height: int | None = None,
     visible_max_width: int | None = None,
+    normalization_mode: str = SOURCE_CANVAS_NORMALIZATION,
     center_visible_action_x: bool = False,
     center_visible_target_x: float | None = None,
     center_visible_max_shift: int = 32,
@@ -81,6 +86,7 @@ def process_action_core(
 ) -> dict[str, object]:
     """Core processing logic shared by process and replace subcommands."""
     action_dir = ANIMATIONS_ROOT / action
+    validate_normalization_options(normalization_mode, visible_height, visible_max_width)
 
     if is_replace:
         if not action_dir.exists():
@@ -111,11 +117,12 @@ def process_action_core(
     # Step 2: Generate processed_frames (256px enhanced asset pool)
     processed_trim_ground_alpha = trim_ground_alpha if trim_ground_alpha > 0 else 128
     align_reference = load_reference_geometry(align_reference_action) if align_reference_action else None
-    process_frames_to_processed(
+    _processed_frames, processing_info = process_frames_to_processed(
         raw_dir,
         processed_dir,
         visible_height,
         visible_max_width,
+        normalization_mode,
         trim_ground_alpha_auto=trim_ground_alpha_auto,
         trim_ground_alpha=processed_trim_ground_alpha,
         trim_ground_padding=trim_ground_padding,
@@ -140,6 +147,7 @@ def process_action_core(
         "qualityProfile": QUALITY_PROFILE,
         "sourceFrameCount": processed_frame_count,
     }
+    metadata.update(processing_info)
     if trim_ground_alpha_auto:
         metadata["trimGroundAlphaMode"] = "processed-auto"
         metadata["trimGroundAlpha"] = processed_trim_ground_alpha
@@ -252,6 +260,8 @@ def process_action_core(
     else:
         print(f"[{action}] skipping loop selection (--no-loop)")
 
+    preserve_existing_metadata(action_dir, metadata)
+
     # Step 4: Write loop.json
     write_json(action_dir / "loop.json", metadata)
 
@@ -292,6 +302,20 @@ def load_reference_geometry(action: str) -> dict[str, float | int] | None:
     if geometry is None:
         raise RuntimeError(f"Reference frame has no visible pixels: {reference_frame}")
     return geometry
+
+
+def preserve_existing_metadata(action_dir: Path, metadata: dict[str, object]) -> None:
+    """Keep hand-authored playback metadata when regenerating action frames."""
+    metadata_path = action_dir / "loop.json"
+    if not metadata_path.exists():
+        return
+    try:
+        existing = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    for key in ("tailLoopStart",):
+        if key in existing and key not in metadata:
+            metadata[key] = existing[key]
 
 
 def resolve_align_reference_action(
@@ -359,6 +383,7 @@ def cmd_process(args: argparse.Namespace) -> None:
             trim_ground_alpha_auto=args.trim_ground_alpha_auto,
             visible_height=args.visible_height,
             visible_max_width=args.visible_max_width,
+            normalization_mode=args.normalization_mode,
             center_visible_action_x=args.center_visible_action_x,
             center_visible_target_x=args.center_visible_target_x,
             center_visible_max_shift=args.center_visible_max_shift,
@@ -404,6 +429,7 @@ def cmd_replace(args: argparse.Namespace) -> None:
         trim_ground_alpha_auto=args.trim_ground_alpha_auto,
         visible_height=args.visible_height,
         visible_max_width=args.visible_max_width,
+        normalization_mode=args.normalization_mode,
         center_visible_action_x=args.center_visible_action_x,
         center_visible_target_x=args.center_visible_target_x,
         center_visible_max_shift=args.center_visible_max_shift,
@@ -448,6 +474,12 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--trim-ground-alpha-auto", action="store_true", help="Apply safe ground-alpha cleanup to processed_frames before runtime frames are selected.")
     parser.add_argument("--visible-height", type=int, default=None, help="Override sprite visible height for this action.")
     parser.add_argument("--visible-max-width", type=int, default=None, help="Override sprite visible max width for this action.")
+    parser.add_argument(
+        "--normalization-mode",
+        choices=NORMALIZATION_MODES,
+        default=SOURCE_CANVAS_NORMALIZATION,
+        help=f"Frame normalization mode. Default {SOURCE_CANVAS_NORMALIZATION}; use {CROP_NORMALIZATION} for the legacy crop-and-anchor layout.",
+    )
     parser.add_argument("--center-visible-action-x", action="store_true", help="Apply one action-level X shift so processed_frames median visible center is centered on the canvas.")
     parser.add_argument("--center-visible-target-x", type=float, default=None, help="Canvas X target for --center-visible-action-x. Defaults to half of frameSize.")
     parser.add_argument("--center-visible-max-shift", type=int, default=32, help="Maximum X shift for --center-visible-action-x.")

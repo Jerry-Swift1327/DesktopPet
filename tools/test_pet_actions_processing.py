@@ -23,6 +23,16 @@ def make_frame(path: Path, box: tuple[int, int, int, int], alpha: int = 255, siz
     image.save(path)
 
 
+def make_green_frame(path: Path, box: tuple[int, int, int, int], size: tuple[int, int] = (32, 32)) -> None:
+    image = Image.new("RGBA", size, (0, 255, 0, 255))
+    pixels = image.load()
+    left, top, right, bottom = box
+    for y in range(top, bottom + 1):
+        for x in range(left, right + 1):
+            pixels[x, y] = (160, 100, 80, 255)
+    image.save(path)
+
+
 class PetActionProcessingTests(unittest.TestCase):
     def test_trim_ground_alpha_remnants_auto_clears_only_low_alpha_tail(self) -> None:
         from pet_actions.chroma import trim_ground_alpha_remnants_auto
@@ -174,6 +184,50 @@ class PetActionProcessingTests(unittest.TestCase):
         self.assertEqual(info["dx"], 12)
         self.assertAlmostEqual(first_geometry["centerX"], 27.0)
         self.assertAlmostEqual(second_geometry["centerX"], 37.0)
+
+    def test_processed_frames_default_to_source_canvas_layout(self) -> None:
+        from pet_actions.chroma import get_frame_geometry, process_frames_to_processed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_dir = Path(tmp) / "raw_frames"
+            processed_dir = Path(tmp) / "processed_frames"
+            raw_dir.mkdir()
+            make_green_frame(raw_dir / "frame_000.png", (3, 8, 10, 23))
+
+            processed_frames, info = process_frames_to_processed(raw_dir, processed_dir)
+            geometry = get_frame_geometry(Image.open(processed_frames[0]).convert("RGBA"))
+
+        self.assertEqual(info["normalizationMode"], "source-canvas")
+        self.assertEqual(info["sourceCanvasSize"], [32, 32])
+        self.assertLess(geometry["centerX"], 90.0)
+
+    def test_processed_frames_keep_crop_mode_for_legacy_layout(self) -> None:
+        from pet_actions.chroma import get_frame_geometry, process_frames_to_processed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_dir = Path(tmp) / "raw_frames"
+            processed_dir = Path(tmp) / "processed_frames"
+            raw_dir.mkdir()
+            make_green_frame(raw_dir / "frame_000.png", (3, 8, 10, 23))
+
+            processed_frames, info = process_frames_to_processed(raw_dir, processed_dir, normalization_mode="crop")
+            geometry = get_frame_geometry(Image.open(processed_frames[0]).convert("RGBA"))
+
+        self.assertEqual(info["normalizationMode"], "crop")
+        self.assertNotIn("sourceCanvasSize", info)
+        self.assertGreater(geometry["centerX"], 108.0)
+
+    def test_source_canvas_mode_rejects_crop_visible_size_overrides(self) -> None:
+        from pet_actions.chroma import process_frames_to_processed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_dir = Path(tmp) / "raw_frames"
+            processed_dir = Path(tmp) / "processed_frames"
+            raw_dir.mkdir()
+            make_green_frame(raw_dir / "frame_000.png", (3, 8, 10, 23))
+
+            with self.assertRaisesRegex(ValueError, "visible-height"):
+                process_frames_to_processed(raw_dir, processed_dir, visible_height=100)
 
 
 if __name__ == "__main__":

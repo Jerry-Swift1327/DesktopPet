@@ -34,7 +34,7 @@
 ### 处理流程
 
 ```
-视频 → 抽帧(raw_frames) → 抠像+归一化+256px增强(processed_frames/本机最终素材池)
+视频 → 抽帧(raw_frames) → 抠像+保源画布构图归一化+256px增强(processed_frames/本机最终素材池)
                               ↓
                      亮色毛发 alpha 稳定化（内部针孔/低透明裂纹修复）
                               ↓
@@ -85,7 +85,8 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--use-full-range` | 使用完整抽帧范围 |
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
 | `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
-| `--visible-height` / `--visible-max-width` | 覆盖可见高度/宽度 |
+| `--normalization-mode` | 帧归一化模式，默认 `source-canvas` 保留源视频完整画布构图；`crop` 使用旧版裁剪贴地归一化 |
+| `--visible-height` / `--visible-max-width` | 覆盖可见高度/宽度，仅适用于 `--normalization-mode crop` |
 | `--center-visible-action-x` | 对整个动作的素材池帧应用同一个 X 平移，让中位可见中心位于画布中心，保留帧内运动 |
 | `--center-visible-target-x` / `--center-visible-max-shift` | 覆盖动作级 X 居中的目标位置和最大平移量 |
 | `--align-reference-action` | 使用指定动作首帧作为几何对齐参考 |
@@ -124,6 +125,12 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 
 抠像后的归一化帧会自动执行亮色毛发安全处理：对高亮、低饱和的近白前景采用更保守的绿幕判定，并在 256px/128px 帧内修复局部前景密度较高区域中的透明针孔和低透明裂纹。该步骤用于避免 ragdoll、van、pomeranian 等浅色毛发在播放时因 alpha 破洞产生闪烁，同时不会整体外扩外轮廓。
 
+### 画布归一化
+
+默认 `--normalization-mode source-canvas` 会保留源视频完整画布坐标，把抠像后的整张源帧等比缩放到 256px 透明画布中，避免因动作全局裁剪框或局部残留把主体推偏。`loop.json` 和 manifest 会记录 `normalizationMode` 与 `sourceCanvasSize`，用于审计不同动作的源分辨率。
+
+需要旧版“按可见区域裁剪、缩放、贴地”的素材时，使用 `--normalization-mode crop`。`--visible-height`、`--visible-max-width` 只在 `crop` 模式下生效。
+
 ### 方向采样（眼球追踪动作）
 
 使用 `--direction-count 64` 启用方向帧采样：
@@ -142,7 +149,7 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 | `__init__.py` | 全局常量（PROJECT_ROOT、ANIMATIONS_ROOT、帧尺寸、FRAME_MS 等） |
 | `ffmpeg.py` | ffmpeg 查找和视频抽帧（find_ffmpeg、extract_frames） |
 | `files.py` | 帧目录和文件操作（clear_frame_dir、find_video、write_json、copy_tree_frames） |
-| `chroma.py` | 绿幕抠像、帧归一化和增强（chroma_key_green_image、normalize_pet_frame、normalize_candidate_frame 等） |
+| `chroma.py` | 绿幕抠像、帧归一化和增强（chroma_key_green_image、normalize_source_canvas_frame、normalize_candidate_frame 等） |
 | `frames.py` | 帧签名、运动分析、方向采样和循环帧构建（frame_signature、detect_brightness_anomaly、sample_direction_frames 等） |
 | `loops.py` | 循环片段选取（find_best_loop、find_best_long_loop、resolve_source_range） |
 | `manifest.py` | manifest 文件更新（update_manifest） |
@@ -163,12 +170,12 @@ python tools\process_pet_actions.py audit --variants tabby van bshmitted
 
 ### 素材池和运行帧边界
 
-- `processed_frames` 是本机处理时的最终素材池，可包含裁剪、贴地、底部 alpha 清理和参考动作对齐结果，但仍属于可再生成维护产物，不提交到 Git。
+- `processed_frames` 是本机处理时的最终素材池，默认保留源画布构图并输出 256px 增强透明帧；使用 `crop` 模式时可包含裁剪、贴地、底部 alpha 清理和参考动作对齐结果，但仍属于可再生成维护产物，不提交到 Git。
 - `transparent_frames` 是从素材池选取或采样出的最终运行帧，需要随 `loop.json` 和 manifest 提交，保证跨机器运行一致。
 - 修复动作资源时，先修生成素材池的参数和处理逻辑，再从素材池导出运行帧；不要只手动改 `transparent_frames`，否则后续重新导出会覆盖修复。
 
 ### 新资源几何建议
-- 对新加入的变体和动作，先用 `--center-visible-action-x` 修正动作级画布 X 偏心；该参数只计算一次中位可见中心并对所有帧应用同一个平移，不会逐帧抵消动作本身的运动。
+- 对新加入的变体和动作，优先使用默认 `source-canvas` 保留源视频构图；如果源视频本身主体整体偏左或偏右，再用 `--center-visible-action-x` 修正动作级画布 X 偏心。该参数只计算一次中位可见中心并对所有帧应用同一个平移，不会逐帧抵消动作本身的运动。
 - 对 `squat/lick/shake/yawn/hiss/look` 等近蹲坐动作，可在 squat 自身构图正确后，再叠加 `--align-reference-center-x --align-reference-bottom` 约束首帧和底线。
 - 对 `walk/ball/feed/sleep/lie/stretch` 等动作，不要默认强行匹配 squat 宽高；优先保证动作级构图、底线稳定和帧内漂移合理。
 

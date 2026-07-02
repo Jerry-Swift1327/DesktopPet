@@ -12,9 +12,12 @@ from . import (
     CANDIDATE_GROUND_PADDING,
     CANDIDATE_VISIBLE_HEIGHT,
     CANDIDATE_VISIBLE_MAX_WIDTH,
+    CROP_NORMALIZATION,
     ENHANCED_FRAME_SIZE,
     MAX_PET_SIZE,
+    NORMALIZATION_MODES,
     PET_GROUND_PADDING,
+    SOURCE_CANVAS_NORMALIZATION,
     VISIBLE_PET_MAX_WIDTH,
     VISIBLE_PET_TARGET_HEIGHT,
 )
@@ -588,11 +591,46 @@ def normalize_candidate_frame(
     return repair_interior_alpha_holes(hard_clean_alpha(output))
 
 
+def normalize_source_canvas_frame(image: Image.Image) -> Image.Image:
+    """Scale the full source canvas into the enhanced runtime canvas."""
+    source = image.convert("RGBA")
+    width, height = source.size
+    if width <= 0 or height <= 0:
+        raise RuntimeError("Source frame has invalid dimensions.")
+
+    scale = min(ENHANCED_FRAME_SIZE / width, ENHANCED_FRAME_SIZE / height)
+    target_width = max(1, round(width * scale))
+    target_height = max(1, round(height * scale))
+    resized = source.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    resized = enhance_rgba(resized)
+    resized = repair_interior_alpha_holes(resized)
+
+    output = Image.new("RGBA", (ENHANCED_FRAME_SIZE, ENHANCED_FRAME_SIZE), (0, 0, 0, 0))
+    x = (ENHANCED_FRAME_SIZE - target_width) // 2
+    y = (ENHANCED_FRAME_SIZE - target_height) // 2
+    output.alpha_composite(resized, (x, y))
+    return repair_interior_alpha_holes(hard_clean_alpha(output))
+
+
+def validate_normalization_options(
+    normalization_mode: str,
+    visible_height: int | None = None,
+    visible_max_width: int | None = None,
+) -> None:
+    if normalization_mode not in NORMALIZATION_MODES:
+        raise ValueError(f"Invalid normalization mode: {normalization_mode}")
+    if normalization_mode == SOURCE_CANVAS_NORMALIZATION and (
+        visible_height is not None or visible_max_width is not None
+    ):
+        raise ValueError("--visible-height and --visible-max-width are only supported with --normalization-mode crop.")
+
+
 def process_frames_to_processed(
     raw_dir: Path,
     processed_dir: Path,
     visible_height: int | None = None,
     visible_max_width: int | None = None,
+    normalization_mode: str = SOURCE_CANVAS_NORMALIZATION,
     trim_ground_alpha_auto: bool = False,
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
@@ -603,23 +641,30 @@ def process_frames_to_processed(
     align_center_x: bool = False,
     align_bottom: bool = False,
     align_max_shift: int = 32,
-) -> list[Path]:
+) -> tuple[list[Path], dict[str, object]]:
     """生成 256px 增强帧到 processed_frames（素材池）。"""
+    validate_normalization_options(normalization_mode, visible_height, visible_max_width)
     clear_frame_dir(processed_dir)
     raw_frames = sorted(raw_dir.glob("frame_*.png"))
     if not raw_frames:
         raise RuntimeError(f"No PNG frames found in {raw_dir}")
 
-    global_bounds = get_global_bounds(raw_frames)
+    source_canvas_size: list[int] | None = None
+    global_bounds = get_global_bounds(raw_frames) if normalization_mode == CROP_NORMALIZATION else None
     enhanced_frames: list[tuple[str, Image.Image]] = []
     for raw_frame in raw_frames:
         keyed = chroma_key_green_image(raw_frame)
-        kwargs = {}
-        if visible_height is not None:
-            kwargs["visible_height"] = visible_height
-        if visible_max_width is not None:
-            kwargs["visible_max_width"] = visible_max_width
-        enhanced = normalize_candidate_frame(keyed, global_bounds, **kwargs)
+        if source_canvas_size is None:
+            source_canvas_size = [int(keyed.width), int(keyed.height)]
+        if normalization_mode == SOURCE_CANVAS_NORMALIZATION:
+            enhanced = normalize_source_canvas_frame(keyed)
+        else:
+            kwargs = {}
+            if visible_height is not None:
+                kwargs["visible_height"] = visible_height
+            if visible_max_width is not None:
+                kwargs["visible_max_width"] = visible_max_width
+            enhanced = normalize_candidate_frame(keyed, global_bounds, **kwargs)  # type: ignore[arg-type]
         enhanced, _trim_info = trim_ground_alpha_remnants_auto(
             enhanced,
             enabled=trim_ground_alpha_auto,
@@ -650,7 +695,10 @@ def process_frames_to_processed(
             enhanced = translate_frame(enhanced, int(align_delta["dx"]), int(align_delta["dy"]))
         enhanced.save(processed_dir / name)
 
-    return sorted(processed_dir.glob("frame_*.png"))
+    info: dict[str, object] = {"normalizationMode": normalization_mode}
+    if normalization_mode == SOURCE_CANVAS_NORMALIZATION and source_canvas_size is not None:
+        info["sourceCanvasSize"] = source_canvas_size
+    return sorted(processed_dir.glob("frame_*.png")), info
 
 
 def process_frames_legacy(raw_dir: Path, transparent_dir: Path) -> list[Path]:
