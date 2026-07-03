@@ -13,7 +13,7 @@
 ```text
 动作源视频
   -> tools/process_pet_actions.py (process 或 replace 子命令)
-  -> processed_frames (256px 增强素材池) + transparent_frames (运行帧) + loop.json + <variant>_actions_manifest.json
+  -> raw_frames (默认保留的抽帧中间产物) + processed_frames (256px 增强素材池) + transparent_frames (运行帧) + loop.json + <variant>_actions_manifest.json
   -> electron-app/prepare-runtime-assets.cjs 或打包脚本
   -> Electron 运行时加载
 ```
@@ -24,7 +24,7 @@
 - `animations/<variant>_<action>/loop.json`
 - `animations/<variant>_actions_manifest.json`
 
-源视频、`processed_frames` 和中间帧用于维护、替换和重新生成资源。
+源视频、`raw_frames`、`processed_frames` 和中间帧用于维护、替换和重新生成资源。`raw_frames` 默认保留，便于核对源帧分辨率和抠像前后差异；需要节省本地空间时可在处理命令中使用 `--clean-raw` 删除。
 
 ## 当前变体
 
@@ -47,7 +47,7 @@
 - 从外部目录复制源视频时，使用 `npm.cmd run variant:rename-assets -- --id <id> --from <source-dir>` 统一重命名为 `<id>_<action>.mp4`。
 - 新增动作类型时，需要同步 Electron 变体配置、主进程状态、渲染层动作按钮和打包脚本。
 - 替换动作视频后，检查 `loop.json`、manifest 和正式 `transparent_frames` 是否一致。
-- 不要把 `raw_frames`、`processed_frames`、`_replacement_work` 或质量预览输出当作运行时必需资源。
+- 不要把 `raw_frames`、`processed_frames`、`_replacement_work` 或质量预览输出当作运行时必需资源；`raw_frames` 默认保留但仍是本地中间产物。
 - `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库。
 
 相关说明见：

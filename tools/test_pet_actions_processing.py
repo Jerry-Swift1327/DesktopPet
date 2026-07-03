@@ -3,6 +3,9 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import argparse
+import contextlib
+import io
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +37,76 @@ def make_green_frame(path: Path, box: tuple[int, int, int, int], size: tuple[int
 
 
 class PetActionProcessingTests(unittest.TestCase):
+    def run_fake_action_processing(self, *, clean_raw: bool = False, keep_raw: bool = False) -> bool:
+        import process_pet_actions as cli
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            animations_root = tmp_path / "animations"
+            action_dir = animations_root / "test_squat"
+            action_dir.mkdir(parents=True)
+            video_path = tmp_path / "source.mp4"
+            video_path.write_bytes(b"fake video")
+
+            original_root = cli.ANIMATIONS_ROOT
+            original_extract = cli.extract_frames
+            original_process = cli.process_frames_to_processed
+            try:
+                cli.ANIMATIONS_ROOT = animations_root
+
+                def fake_extract_frames(_ffmpeg, _video_path, raw_dir, _fps):
+                    raw_dir.mkdir(parents=True, exist_ok=True)
+                    make_green_frame(raw_dir / "frame_000.png", (8, 8, 15, 15))
+
+                def fake_process_frames_to_processed(raw_dir, processed_dir, *args, **kwargs):
+                    processed_dir.mkdir(parents=True, exist_ok=True)
+                    make_frame(processed_dir / "frame_000.png", (8, 8, 15, 15))
+                    return [processed_dir / "frame_000.png"], {"normalizationMode": "source-canvas"}
+
+                cli.extract_frames = fake_extract_frames
+                cli.process_frames_to_processed = fake_process_frames_to_processed
+                cli.process_action_core(
+                    action="test_squat",
+                    ffmpeg="ffmpeg",
+                    fps="1",
+                    video_path=video_path,
+                    no_loop=True,
+                    keep_raw=keep_raw,
+                    clean_raw=clean_raw,
+                )
+                return (action_dir / "raw_frames" / "frame_000.png").exists()
+            finally:
+                cli.ANIMATIONS_ROOT = original_root
+                cli.extract_frames = original_extract
+                cli.process_frames_to_processed = original_process
+
+    def test_process_action_core_keeps_raw_frames_by_default(self) -> None:
+        raw_frame_exists = self.run_fake_action_processing()
+
+        self.assertTrue(raw_frame_exists)
+
+    def test_process_action_core_clean_raw_removes_raw_frames(self) -> None:
+        raw_frame_exists = self.run_fake_action_processing(clean_raw=True)
+
+        self.assertFalse(raw_frame_exists)
+
+    def test_raw_frame_cli_flags_are_compatible_and_mutually_exclusive(self) -> None:
+        from process_pet_actions import add_common_args
+
+        parser = argparse.ArgumentParser()
+        add_common_args(parser)
+
+        keep_args = parser.parse_args(["--keep-raw"])
+        clean_args = parser.parse_args(["--clean-raw"])
+
+        self.assertTrue(keep_args.keep_raw)
+        self.assertFalse(keep_args.clean_raw)
+        self.assertTrue(clean_args.clean_raw)
+        self.assertFalse(clean_args.keep_raw)
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stderr(io.StringIO()):
+                parser.parse_args(["--keep-raw", "--clean-raw"])
+
     def test_trim_ground_alpha_remnants_auto_clears_only_low_alpha_tail(self) -> None:
         from pet_actions.chroma import trim_ground_alpha_remnants_auto
 

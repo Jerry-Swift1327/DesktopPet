@@ -44,7 +44,7 @@
                               ↓
                      生成 loop.json + 更新 manifest
                               ↓
-                     [默认] 删除 raw_frames/
+                     [可选 --clean-raw] 删除 raw_frames/
 ```
 
 ### process 子命令
@@ -91,7 +91,8 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--center-visible-target-x` / `--center-visible-max-shift` | 覆盖动作级 X 居中的目标位置和最大平移量 |
 | `--align-reference-action` | 使用指定动作首帧作为几何对齐参考 |
 | `--align-reference-center-x` / `--align-reference-bottom` | 将素材池帧的可见中心 X 或底线对齐到参考动作；未指定参考动作时默认使用同变体 `squat` |
-| `--keep-raw` | 保留 `raw_frames` 中间产物 |
+| `--keep-raw` | 保留 `raw_frames` 中间产物；当前为默认行为，保留该参数用于兼容旧命令 |
+| `--clean-raw` | 处理完成后删除 `raw_frames` 中间产物，用于恢复旧的自动清理行为 |
 
 ### replace 子命令
 
@@ -170,6 +171,7 @@ python tools\process_pet_actions.py audit --variants tabby van bshmitted
 
 ### 素材池和运行帧边界
 
+- `raw_frames` 默认保留，便于查看源帧分辨率和排查抠像问题；需要节省本地空间时使用 `--clean-raw` 删除。
 - `processed_frames` 是本机处理时的最终素材池，默认保留源画布构图并输出 256px 增强透明帧；使用 `crop` 模式时可包含裁剪、贴地、底部 alpha 清理和参考动作对齐结果，但仍属于可再生成维护产物，不提交到 Git。
 - `transparent_frames` 是从素材池选取或采样出的最终运行帧，需要随 `loop.json` 和 manifest 提交，保证跨机器运行一致。
 - 修复动作资源时，先修生成素材池的参数和处理逻辑，再从素材池导出运行帧；不要只手动改 `transparent_frames`，否则后续重新导出会覆盖修复。
@@ -209,5 +211,5 @@ python tools\build_quality_previews.py --actions dog_walk --clean
 
 - 脚本会写入资源目录，运行前确认目标 `--action`/`--variant` 和 `--manifest`。
 - 不要把 `__pycache__` 当作源码。
-- `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库。
+- `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库；`raw_frames` 默认保留但可用 `--clean-raw` 清理。
 - 修改脚本参数或默认行为后，同步更新本 README、`../assets/animations/README.md` 和 `../docs/PROJECT_MAP.md`。

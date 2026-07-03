@@ -81,6 +81,7 @@ def process_action_core(
     align_reference_bottom: bool = False,
     align_reference_max_shift: int = 32,
     keep_raw: bool = False,
+    clean_raw: bool = False,
     is_replace: bool = False,
     direction_count: int | None = None,
 ) -> dict[str, object]:
@@ -277,12 +278,13 @@ def process_action_core(
     else:
         print(f"[{action}] video already in place: {official_video.name}")
 
-    # Step 7: Clean up raw_frames
-    if not keep_raw and raw_dir.exists():
+    # Step 7: Keep raw_frames by default; --clean-raw restores the old cleanup behavior.
+    if clean_raw and raw_dir.exists():
         shutil.rmtree(raw_dir)
         print(f"[{action}] raw_frames removed")
     elif raw_dir.exists():
-        print(f"[{action}] raw_frames kept (--keep-raw)")
+        reason = "--keep-raw" if keep_raw else "default"
+        print(f"[{action}] raw_frames kept ({reason})")
 
     return metadata
 
@@ -392,6 +394,7 @@ def cmd_process(args: argparse.Namespace) -> None:
             align_reference_bottom=args.align_reference_bottom,
             align_reference_max_shift=args.align_reference_max_shift,
             keep_raw=args.keep_raw,
+            clean_raw=args.clean_raw,
             direction_count=args.direction_count,
         )
         results.append(metadata)
@@ -444,6 +447,7 @@ def cmd_replace(args: argparse.Namespace) -> None:
         align_reference_bottom=args.align_reference_bottom,
         align_reference_max_shift=args.align_reference_max_shift,
         keep_raw=args.keep_raw,
+        clean_raw=args.clean_raw,
         is_replace=True,
         direction_count=args.direction_count,
     )
@@ -487,7 +491,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--align-reference-center-x", action="store_true", help="Align processed_frames visible center X to --align-reference-action.")
     parser.add_argument("--align-reference-bottom", action="store_true", help="Align processed_frames visible bottom to --align-reference-action.")
     parser.add_argument("--align-reference-max-shift", type=int, default=32, help="Maximum per-axis pixel shift for reference alignment.")
-    parser.add_argument("--keep-raw", action="store_true", help="Keep raw_frames after processing.")
+    raw_group = parser.add_mutually_exclusive_group()
+    raw_group.add_argument("--keep-raw", action="store_true", help="Keep raw_frames after processing. This is the default.")
+    raw_group.add_argument("--clean-raw", action="store_true", help="Remove raw_frames after processing.")
     parser.add_argument("--direction-count", type=int, default=None, help="Sample N direction frames (for eye-tracking actions like tabby_look).")
 
 
