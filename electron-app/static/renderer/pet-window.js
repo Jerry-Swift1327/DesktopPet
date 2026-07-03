@@ -189,17 +189,20 @@ async function renderPetWindow() {
 
   function applyScale(nextScale) {
     scale = nextScale || scale;
-    app.style.width = `${scale.windowWidth || 180}px`;
-    app.style.height = `${scale.windowHeight || 180}px`;
-    const spriteSize = scale.spriteSize || 128;
-    const spriteOffsetX = Number.isFinite(scale.spriteOffsetX)
-      ? Math.round(scale.spriteOffsetX)
-      : Math.max(0, Math.round(((scale.windowWidth || 180) - spriteSize) / 2));
-    spriteHost.style.width = `${spriteSize}px`;
-    spriteHost.style.height = `${spriteSize}px`;
-    spriteHost.style.transform = `translateX(${spriteOffsetX}px)`;
-    img.style.width = `${spriteSize}px`;
-    img.style.height = `${spriteSize}px`;
+    const layout = frameCache?.buildResponsiveScaleLayout
+      ? frameCache.buildResponsiveScaleLayout(scale)
+      : window.buildResponsiveScaleLayout?.(scale);
+    if (!layout) {
+      return;
+    }
+    app.style.width = layout.appWidth;
+    app.style.height = layout.appHeight;
+    spriteHost.style.left = layout.hostLeft;
+    spriteHost.style.width = layout.hostWidth;
+    spriteHost.style.height = layout.hostHeight;
+    spriteHost.style.transform = "";
+    img.style.width = layout.imageWidth;
+    img.style.height = layout.imageHeight;
   }
 
   app.addEventListener("mousedown", (event) => {
@@ -274,10 +277,6 @@ async function renderPetWindow() {
       return;
     }
     event.preventDefault();
-    const predictedScale = frameCache?.predictScaleSummary(scale, event.deltaY);
-    if (predictedScale) {
-      applyScale(predictedScale);
-    }
     window.desktopPet.adjustScale(event.deltaY);
   }, { passive: false });
 

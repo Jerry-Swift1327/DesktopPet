@@ -266,7 +266,9 @@ function createSurfaceScaleController(context) {
     setTaskbarWalkRunway(null);
     clearPetWindowHitRegion();
     const next = clampPetWindowPositionToSurface(bounds.x, groundedY, activeSurface, stateId, direction);
-    setPetWindowPosition(next.x, next.y);
+    if (next.x !== bounds.x || next.y !== bounds.y) {
+      setPetWindowPosition(next.x, next.y);
+    }
     if (activeSurface.type === "window") {
       const applyWindowDockCorrection = (limit, label = "coarse") => {
         const correctionWin = getPetWindow();

@@ -25,7 +25,8 @@ node --test "test/**/*.test.cjs"
 | `walk-controller-accessor.test.cjs` | walk-controller 访问器与 main.cjs 接线结构断言 | `../electron/behavior/walk-controller.cjs`、`../electron/main.cjs` |
 | `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除与 main.cjs 薄包装接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |
 | `ipc-contract.test.cjs` | IPC 契约一致性结构断言（preload invoke/send/onXxx、register-ipc-handlers.cjs 注册模块、renderer 调用、高风险 channel 名称、main→renderer 事件推送） | `../electron/preload.cjs`、`../electron/main.cjs`、`../electron/ipc/register-ipc-handlers.cjs`、`../static/renderer/**` |
-| `pet-frame-cache.test.cjs` | 宠物帧缓存、首帧解码门禁、失败降级、本地缩放预测和 renderer 接线结构 | `../static/renderer/pet-frame-cache.js`、`../static/renderer/pet-window.js`、`../static/index.html` |
+| `pet-frame-cache.test.cjs` | 宠物帧缓存、首帧解码门禁、失败降级、响应式缩放布局和 renderer 接线结构 | `../static/renderer/pet-frame-cache.js`、`../static/renderer/pet-window.js`、`../static/index.html` |
+| `state-visual-commit.test.cjs` | 状态切换视觉提交事务（旧帧贴地保持、目标首帧上报后落地/启动行走） | `../electron/behavior/state-controller.cjs`、`../electron/main.cjs` |
 | `contact-qrcode.test.cjs` | 联系二维码查找辅助模块结构断言（开发/打包路径构造、Downloads fallback、文件存在/不存在、读取异常跳过、返回结构） | `../electron/ipc/contact-qrcode.cjs` |
 | `app-lifecycle-contract.test.cjs` | 应用生命周期契约结构断言（单实例锁、whenReady 启动序列、before-quit 退出清理、window-all-closed、activate、display-metrics-changed、switch-variant 重启、启动/退出顺序） | `../electron/main.cjs` |
 | `register-app-lifecycle.test.cjs` | 生命周期注册模块结构断言（导出函数、事件注册、darwin 条件、不包含业务逻辑函数） | `../electron/lifecycle/register-app-lifecycle.cjs` |

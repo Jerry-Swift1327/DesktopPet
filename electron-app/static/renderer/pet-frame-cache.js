@@ -5,48 +5,34 @@
   }
   if (root) {
     root.createPetFrameCache = api.createPetFrameCache;
-    root.predictScaleSummary = api.predictScaleSummary;
+    root.buildResponsiveScaleLayout = api.buildResponsiveScaleLayout;
   }
 })(typeof window !== "undefined" ? window : globalThis, function createApi() {
-  function roundScale(value) {
-    return Math.round(value * 100) / 100;
+  function formatPercent(part, whole) {
+    const total = Number(whole);
+    if (!Number.isFinite(total) || total <= 0) {
+      return "0%";
+    }
+    const value = Math.max(0, Number(part) || 0) / total * 100;
+    return `${Math.round(value * 1000000) / 1000000}%`;
   }
 
-  function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-  }
-
-  function predictScaleSummary(currentScale, deltaY) {
-    if (!currentScale || currentScale.taskbarRunway) {
-      return null;
-    }
-
-    const currentValue = Number(currentScale.value);
-    if (!Number.isFinite(currentValue) || currentValue <= 0) {
-      return null;
-    }
-
-    const step = Number.isFinite(currentScale.step) ? currentScale.step : 0.08;
-    const min = Number.isFinite(currentScale.min) ? currentScale.min : currentValue;
-    const max = Number.isFinite(currentScale.max) ? currentScale.max : currentValue;
-    const direction = deltaY < 0 ? 1 : -1;
-    const nextValue = roundScale(clamp(currentValue + direction * step, min, max));
-
-    const baseWindowWidth = (Number(currentScale.windowWidth) || 180) / currentValue;
-    const baseWindowHeight = (Number(currentScale.windowHeight) || 180) / currentValue;
-    const baseSpriteSize = (Number(currentScale.spriteSize) || 128) / currentValue;
-    const windowWidth = Math.round(baseWindowWidth * nextValue);
-    const windowHeight = Math.round(baseWindowHeight * nextValue);
-    const spriteSize = Math.round(baseSpriteSize * nextValue);
+  function buildResponsiveScaleLayout(currentScale = {}) {
+    const windowWidth = Number(currentScale.windowWidth) || 180;
+    const windowHeight = Number(currentScale.windowHeight) || 180;
+    const spriteSize = Number(currentScale.spriteSize) || 128;
+    const spriteOffsetX = Number.isFinite(currentScale.spriteOffsetX)
+      ? Math.round(currentScale.spriteOffsetX)
+      : Math.max(0, Math.round((windowWidth - spriteSize) / 2));
 
     return {
-      ...currentScale,
-      value: nextValue,
-      windowWidth,
-      windowHeight,
-      spriteSize,
-      spriteOffsetX: Math.max(0, Math.round((windowWidth - spriteSize) / 2)),
-      taskbarRunway: false
+      appWidth: "100%",
+      appHeight: "100%",
+      hostLeft: formatPercent(spriteOffsetX, windowWidth),
+      hostWidth: formatPercent(spriteSize, windowWidth),
+      hostHeight: formatPercent(spriteSize, windowHeight),
+      imageWidth: "100%",
+      imageHeight: "100%"
     };
   }
 
@@ -141,12 +127,12 @@
       ensureFramesReady,
       isFrameReady,
       getFrameStatus,
-      predictScaleSummary: (currentScale, deltaY) => predictScaleSummary(currentScale, deltaY)
+      buildResponsiveScaleLayout
     };
   }
 
   return {
     createPetFrameCache,
-    predictScaleSummary
+    buildResponsiveScaleLayout
   };
 });

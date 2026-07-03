@@ -50,7 +50,7 @@ test("controller context 解构包含共享运行态访问器", () => {
   }
 });
 
-test("controller 导出 6 个方法", () => {
+test("controller 导出 7 个方法", () => {
   const matches = [...controllerSource.matchAll(/return \{([\s\S]*?)\};/g)];
   const exportBlock = matches.length > 0 ? matches[matches.length - 1][1] : "";
   const expectedExports = [
@@ -59,7 +59,8 @@ test("controller 导出 6 个方法", () => {
     "moveToStartPosition",
     "settlePetQuietly",
     "setWalkDirection",
-    "isWalkingState"
+    "isWalkingState",
+    "completeVisualStateCommit"
   ];
   for (const name of expectedExports) {
     assert.match(exportBlock, new RegExp(name), `导出应包含 ${name}`);
@@ -113,4 +114,9 @@ test("main.cjs handlers 映射仍引用 handleSetState/handleCompleteOneShot/han
   assert.match(mainStripped, /wakeSleepingPet:\s*handleWakeSleepingPet\s*,/);
   assert.match(mainStripped, /completeOneShot:\s*handleCompleteOneShot\s*,/);
   assert.match(mainStripped, /resetPosition:\s*handleResetPosition\s*,/);
+});
+
+test("main.cjs 在 renderer 上报目标帧后完成视觉状态提交", () => {
+  const body = mainStripped.match(/function updateRenderedFrame\(info\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.match(body, /stateController\.completeVisualStateCommit\(info\.state\)/);
 });

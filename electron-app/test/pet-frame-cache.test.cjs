@@ -78,8 +78,8 @@ test("frame cache resolves failed frames without throwing and keeps the failure 
   assert.equal(cache.getFrameStatus("file:///pet/missing.png"), "failed");
 });
 
-test("predictScaleSummary updates local renderer dimensions and clamps scale", () => {
-  const { predictScaleSummary } = require(helperPath);
+test("buildResponsiveScaleLayout expresses pet geometry as viewport-synchronized percentages", () => {
+  const { buildResponsiveScaleLayout } = require(helperPath);
 
   const current = {
     value: 1,
@@ -93,21 +93,18 @@ test("predictScaleSummary updates local renderer dimensions and clamps scale", (
     taskbarRunway: false
   };
 
-  const enlarged = predictScaleSummary(current, -120);
-  assert.deepEqual(enlarged, {
-    ...current,
-    value: 1.08,
-    windowWidth: 194,
-    windowHeight: 194,
-    spriteSize: 138,
-    spriteOffsetX: 28
+  assert.deepEqual(buildResponsiveScaleLayout(current), {
+    appWidth: "100%",
+    appHeight: "100%",
+    hostLeft: "14.444444%",
+    hostWidth: "71.111111%",
+    hostHeight: "71.111111%",
+    imageWidth: "100%",
+    imageHeight: "100%"
   });
-
-  const clamped = predictScaleSummary({ ...current, value: 1.16 }, -120);
-  assert.equal(clamped.value, 1.16);
 });
 
-test("renderer wires the frame cache before pet-window and gates state changes on first frame readiness", () => {
+test("renderer wires the frame cache before pet-window, gates state changes, and does not predict wheel scale locally", () => {
   const indexSource = fs.readFileSync(indexPath, "utf8");
   const petWindowSource = fs.readFileSync(petWindowPath, "utf8");
 
@@ -116,4 +113,6 @@ test("renderer wires the frame cache before pet-window and gates state changes o
   assert.match(petWindowSource, /createPetFrameCache/);
   assert.match(petWindowSource, /ensureFrameReady/);
   assert.match(petWindowSource, /commitStateChange/);
+  assert.doesNotMatch(petWindowSource, /predictScaleSummary/);
+  assert.doesNotMatch(petWindowSource, /applyScale\(predictedScale\)/);
 });

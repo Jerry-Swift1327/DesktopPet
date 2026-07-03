@@ -85,6 +85,7 @@ function createStateController(context) {
   } = context;
 
   let pendingActionStatsState = null;
+  let pendingVisualStateCommit = null;
 
   function setWalkDirection(nextDirection) {
     const normalizedDirection = nextDirection >= 0 ? 1 : -1;
@@ -104,9 +105,10 @@ function createStateController(context) {
       return;
     }
     const previousState = getActiveState();
+    const previousDirection = getWalkDirection();
     const nextState = getState(state);
-    const transitionAnchor = previousState !== state && !nextState?.moving
-      ? getTransitionBottomAnchor(previousState, getWalkDirection())
+    const transitionAnchor = previousState !== state
+      ? getTransitionBottomAnchor(previousState, previousDirection)
       : null;
     const leavingMovingState = Boolean(getState(previousState)?.moving && !nextState?.moving);
     const leavingTaskbarWalkRunway = Boolean(getTaskbarWalkRunway() && previousState === STATE_WALK && !nextState?.moving);
@@ -144,16 +146,28 @@ function createStateController(context) {
     if (previousState === STATE_WALK && getActiveState() !== DEFAULT_STATE) {
       clearPendingWalkBubbleMessage();
     }
+    pendingVisualStateCommit = null;
+    const deferredVisualCommit = previousState !== state
+      && transitionAnchor
+      && preserveBottomAnchorForState(transitionAnchor, previousState, previousDirection, getCurrentSurface());
     if (getState(getActiveState())?.moving) {
       hideStartupBubble({ force: true });
       hidePetMenu();
       hideHoverPanel();
       resetWalkRuntime();
-      startWalkLoop();
+      if (deferredVisualCommit) {
+        pendingVisualStateCommit = { state, moving: true };
+      } else {
+        startWalkLoop();
+      }
     } else {
       resetWalkRuntime();
-      groundPetToSurface(getActiveState(), getWalkDirection(), getCurrentSurface());
-      preserveBottomAnchorForState(transitionAnchor, getActiveState(), getWalkDirection(), getCurrentSurface());
+      if (deferredVisualCommit) {
+        pendingVisualStateCommit = { state, moving: false };
+      } else {
+        groundPetToSurface(getActiveState(), getWalkDirection(), getCurrentSurface());
+        preserveBottomAnchorForState(transitionAnchor, getActiveState(), getWalkDirection(), getCurrentSurface());
+      }
     }
     sendPetState();
     if (getActiveState() === STATE_SLEEP) {
@@ -161,6 +175,28 @@ function createStateController(context) {
     }
     showStatMessages(statMessagesToShow);
     showPendingWalkBubbleMessage();
+  }
+
+  function completeVisualStateCommit(renderedState) {
+    if (!pendingVisualStateCommit) {
+      return false;
+    }
+    if (getActiveState() !== pendingVisualStateCommit.state) {
+      pendingVisualStateCommit = null;
+      return false;
+    }
+    if (renderedState !== pendingVisualStateCommit.state) {
+      return false;
+    }
+
+    const commit = pendingVisualStateCommit;
+    pendingVisualStateCommit = null;
+    if (commit.moving) {
+      startWalkLoop();
+    } else {
+      groundPetToSurface(getActiveState(), getWalkDirection(), getCurrentSurface());
+    }
+    return true;
   }
 
   function completeOneShotState(state) {
@@ -262,7 +298,8 @@ function createStateController(context) {
     moveToStartPosition,
     settlePetQuietly,
     setWalkDirection,
-    isWalkingState
+    isWalkingState,
+    completeVisualStateCommit
   };
 }
 

@@ -9,7 +9,7 @@
 | `index.html` | 渲染窗口 HTML 入口，按顺序加载 renderer/ 下各模块和 renderer.js | 页面结构或资源入口变化 |
 | `renderer.js` | 渲染层轻入口，按 hash 分发到对应渲染模块 | 调整渲染模式分发逻辑 |
 | `renderer/shared.js` | 公共变量（app、mode）和工具函数（logWalkDiagnostic 等） | 修改全局变量或公共工具 |
-| `renderer/pet-frame-cache.js` | 宠物帧预热、解码缓存和本地缩放预测 helper | 帧加载、动作切换平滑度、滚轮缩放预测 |
+| `renderer/pet-frame-cache.js` | 宠物帧预热、解码缓存和响应式缩放布局 helper | 帧加载、动作切换平滑度、缩放布局同步 |
 | `renderer/pet-window.js` | 宠物窗口渲染（帧播放、拖拽、缩放、状态切换、行走步进） | UI 行为、动画播放、拖拽、缩放 |
 | `renderer/menu-window.js` | 快捷菜单窗口渲染（菜单项、按钮交互、状态显示；切换项显示短反馈后关闭） | 菜单项、按钮、状态显示 |
 | `renderer/hover-window.js` | 悬停面板渲染（属性、计时器、动作按钮） | 属性条、计时器、动作按钮 |

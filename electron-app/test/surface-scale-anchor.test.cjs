@@ -309,6 +309,8 @@ test("setPetScale keeps the visible bottom on the surface through repeated scale
     workArea: { x: 0, y: 0, width: 1200, height: 760 }
   };
   let controller = null;
+  let setBoundsCalls = 0;
+  let setPositionCalls = 0;
 
   function scaleValue() {
     return controller.getPetScale();
@@ -371,6 +373,7 @@ test("setPetScale keeps the visible bottom on the surface through repeated scale
     getWalkVisibleCenterFromWindowX: (x) => x,
     getTaskbarWalkRunwayWindowWidth: () => 1200,
     setPetWindowPosition: (x, y) => {
+      setPositionCalls += 1;
       bounds = { x: Math.round(x), y: Math.round(y), width: windowWidth(), height: windowHeight() };
     },
     syncWalkTrackX: () => {},
@@ -403,6 +406,7 @@ test("setPetScale keeps the visible bottom on the surface through repeated scale
       isDestroyed: () => false,
       getBounds: () => ({ ...bounds }),
       setBounds: (nextBounds) => {
+        setBoundsCalls += 1;
         bounds = { ...bounds, ...nextBounds };
       }
     }),
@@ -427,8 +431,12 @@ test("setPetScale keeps the visible bottom on the surface through repeated scale
   assert.equal(visibleRectFromBounds(bounds).y + visibleRectFromBounds(bounds).height, currentSurface.groundY);
 
   for (const nextScale of [0.92, 1.08, 1.16, 0.84, 0.75, 1.24]) {
+    setBoundsCalls = 0;
+    setPositionCalls = 0;
     controller.setPetScale(nextScale);
     const visible = visibleRectFromBounds(bounds);
     assert.equal(visible.y + visible.height, currentSurface.groundY, `scale ${nextScale} should stay grounded`);
+    assert.equal(setBoundsCalls, 1, `scale ${nextScale} should resize once`);
+    assert.equal(setPositionCalls, 0, `scale ${nextScale} should not repeat an already-grounded position commit`);
   }
 });
