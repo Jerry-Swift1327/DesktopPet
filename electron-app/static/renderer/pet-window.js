@@ -25,6 +25,7 @@ async function renderPetWindow() {
   let tickAccumulator = 0;
   let lastTickAt = performance.now();
   let lastAnimationSkipLogAt = 0;
+  let stateChangeToken = 0;
   const decodedStates = new Set();
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
@@ -54,6 +55,10 @@ async function renderPetWindow() {
       window.desktopPet.rendererDiagnostic(message);
     }
   }
+
+  const frameCache = window.createPetFrameCache
+    ? window.createPetFrameCache({ ImageCtor: window.Image })
+    : null;
 
   function getStateFrameIndex(state) {
     if (!state || state.frames.length === 0) {
@@ -153,15 +158,22 @@ async function renderPetWindow() {
     return state._frameSequence;
   }
 
-  for (const state of config.states) {
-    for (const frame of state.frames) {
+  if (frameCache) {
+    for (const state of config.states) {
+      frameCache.preloadFrames(state.frames);
+    }
+    frameCache.preloadFrames(Object.values(eyeTrackingFrames));
+  } else {
+    for (const state of config.states) {
+      for (const frame of state.frames) {
+        const preload = new Image();
+        preload.src = frame;
+      }
+    }
+    for (const frame of Object.values(eyeTrackingFrames)) {
       const preload = new Image();
       preload.src = frame;
     }
-  }
-  for (const frame of Object.values(eyeTrackingFrames)) {
-    const preload = new Image();
-    preload.src = frame;
   }
 
   app.className = "pet-stage";
@@ -262,6 +274,10 @@ async function renderPetWindow() {
       return;
     }
     event.preventDefault();
+    const predictedScale = frameCache?.predictScaleSummary(scale, event.deltaY);
+    if (predictedScale) {
+      applyScale(predictedScale);
+    }
     window.desktopPet.adjustScale(event.deltaY);
   }, { passive: false });
 
@@ -278,6 +294,19 @@ async function renderPetWindow() {
 
   function getState() {
     return config.states.find((state) => state.id === activeState) || config.states[0];
+  }
+
+  function getStateById(stateId) {
+    return config.states.find((state) => state.id === stateId) || config.states[0];
+  }
+
+  function getFirstFrameForState(state) {
+    if (!state || !Array.isArray(state.frames) || state.frames.length === 0) {
+      return "";
+    }
+    const frameSequence = getStateFrameSequence(state);
+    const firstFrameIndex = frameSequence[0] ?? 0;
+    return state.frames[firstFrameIndex] || state.frames[0] || "";
   }
 
   function stopSquatSound() {
@@ -372,21 +401,24 @@ async function renderPetWindow() {
     }
 
     const startedAt = performance.now();
-    const decodePromise = Promise.all(state.frames.map((frame) => new Promise((resolve) => {
-      const image = new Image();
-      image.onload = async () => {
-        try {
-          if (image.decode) {
-            await image.decode();
+    const decodePromise = (frameCache
+      ? frameCache.ensureFramesReady(state.frames)
+      : Promise.all(state.frames.map((frame) => new Promise((resolve) => {
+        const image = new Image();
+        image.onload = async () => {
+          try {
+            if (image.decode) {
+              await image.decode();
+            }
+          } catch {
+            // A decoded frame is a performance hint; a failed decode should not block the pet.
           }
-        } catch {
-          // A decoded frame is a performance hint; a failed decode should not block the pet.
-        }
-        resolve();
-      };
-      image.onerror = () => resolve();
-      image.src = frame;
-    }))).then(() => {
+          resolve();
+        };
+        image.onerror = () => resolve();
+        image.src = frame;
+      })))
+    ).then(() => {
       decodedStates.add(state.id);
       decodingStates.delete(state.id);
       logAnimationDiagnostic(`decode state=${state.id} frames=${state.frames.length} elapsedMs=${Math.round(performance.now() - startedAt)}`);
@@ -394,6 +426,58 @@ async function renderPetWindow() {
     });
     decodingStates.set(state.id, decodePromise);
     return decodePromise;
+  }
+
+  function commitStateChange(previousState, state, nextState) {
+    activeState = state;
+    if ((previousState === config.actionIds?.yawn || previousState === config.actionIds?.sleep) && state !== previousState) {
+      stopSleepSound();
+    }
+    if (state !== config.defaultState) {
+      stopSquatSound();
+    } else {
+      maybePlaySquatSound(previousState, state);
+    }
+    frameStep = previousState === config.actionIds?.sleep && state === config.actionIds?.yawn && Number.isInteger(nextState?.tailLoopStart)
+      ? nextState.tailLoopStart
+      : 0;
+    completedOneShotState = "";
+    animationEpoch += 1;
+    walkFailureCount = 0;
+    tickAccumulator = 0;
+    lastTickAt = performance.now();
+    lastRenderedFrameKey = "";
+    lastRenderedFrameSentAt = 0;
+    lastRenderedFrameDirection = direction;
+    sleepStageFrameReported = false;
+    img.style.willChange = nextState?.moving ? "transform" : "";
+    if (nextState?.moving) {
+      decodeStateFrames(nextState);
+    }
+    renderFrame();
+    restartAnimationTimer();
+  }
+
+  function switchStateWhenFirstFrameReady(state) {
+    const previousState = activeState;
+    const nextState = getStateById(state);
+    const firstFrame = getFirstFrameForState(nextState);
+    const token = ++stateChangeToken;
+    logAnimationDiagnostic(`state-change from=${previousState} to=${state}`);
+    if (!frameCache || !firstFrame || frameCache.isFrameReady(firstFrame)) {
+      commitStateChange(previousState, state, nextState);
+      return;
+    }
+
+    frameCache.ensureFrameReady(firstFrame).then((result) => {
+      if (token !== stateChangeToken) {
+        return;
+      }
+      if (!result.ready) {
+        logAnimationDiagnostic(`state-first-frame-fallback state=${state}`);
+      }
+      commitStateChange(previousState, state, nextState);
+    });
   }
 
   function renderFrame() {
@@ -546,36 +630,7 @@ async function renderPetWindow() {
   }
 
   window.desktopPet.onStateChanged((state) => {
-    const previousState = activeState;
-    activeState = state;
-    logAnimationDiagnostic(`state-change from=${previousState} to=${state}`);
-    if ((previousState === config.actionIds?.yawn || previousState === config.actionIds?.sleep) && state !== previousState) {
-      stopSleepSound();
-    }
-    if (state !== config.defaultState) {
-      stopSquatSound();
-    } else {
-      maybePlaySquatSound(previousState, state);
-    }
-    const nextState = getState();
-    frameStep = previousState === config.actionIds?.sleep && state === config.actionIds?.yawn && Number.isInteger(nextState?.tailLoopStart)
-      ? nextState.tailLoopStart
-      : 0;
-    completedOneShotState = "";
-    animationEpoch += 1;
-    walkFailureCount = 0;
-    tickAccumulator = 0;
-    lastTickAt = performance.now();
-    lastRenderedFrameKey = "";
-    lastRenderedFrameSentAt = 0;
-    lastRenderedFrameDirection = direction;
-    sleepStageFrameReported = false;
-    img.style.willChange = nextState?.moving ? "transform" : "";
-    if (nextState?.moving) {
-      decodeStateFrames(nextState);
-    }
-    renderFrame();
-    restartAnimationTimer();
+    switchStateWhenFirstFrameReady(state);
   });
 
   window.desktopPet.onDirectionChanged((nextDirection) => {
@@ -619,6 +674,12 @@ async function renderPetWindow() {
   });
 
   applyScale(scale);
+  if (frameCache) {
+    const initialFrame = getFirstFrameForState(getState());
+    if (initialFrame) {
+      await frameCache.ensureFrameReady(initialFrame);
+    }
+  }
   renderFrame();
   restartAnimationTimer();
 }

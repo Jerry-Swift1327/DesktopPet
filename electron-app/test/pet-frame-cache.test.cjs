@@ -1,0 +1,119 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const helperPath = path.join(__dirname, "..", "static", "renderer", "pet-frame-cache.js");
+const petWindowPath = path.join(__dirname, "..", "static", "renderer", "pet-window.js");
+const indexPath = path.join(__dirname, "..", "static", "index.html");
+
+class FakeImage {
+  static loads = new Map();
+  static created = [];
+
+  constructor() {
+    this.decodeCalls = 0;
+    this.onload = null;
+    this.onerror = null;
+    this._src = "";
+    FakeImage.created.push(this);
+  }
+
+  set src(value) {
+    this._src = value;
+    const behavior = FakeImage.loads.get(value) || "load";
+    queueMicrotask(() => {
+      if (behavior === "error") {
+        this.onerror?.(new Error("failed"));
+      } else {
+        this.onload?.();
+      }
+    });
+  }
+
+  get src() {
+    return this._src;
+  }
+
+  decode() {
+    this.decodeCalls += 1;
+    return Promise.resolve();
+  }
+}
+
+function resetFakeImage() {
+  FakeImage.loads = new Map();
+  FakeImage.created = [];
+}
+
+test("frame cache keeps one Image per frame and reuses the decode promise", async () => {
+  resetFakeImage();
+  const { createPetFrameCache } = require(helperPath);
+  const cache = createPetFrameCache({ ImageCtor: FakeImage });
+
+  const first = cache.ensureFrameReady("file:///pet/frame_000.png");
+  const second = cache.ensureFrameReady("file:///pet/frame_000.png");
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.equal(FakeImage.created.length, 1);
+  assert.equal(FakeImage.created[0].decodeCalls, 1);
+  assert.equal(firstResult.ready, true);
+  assert.equal(secondResult.ready, true);
+  assert.equal(cache.isFrameReady("file:///pet/frame_000.png"), true);
+});
+
+test("frame cache resolves failed frames without throwing and keeps the failure cached", async () => {
+  resetFakeImage();
+  FakeImage.loads.set("file:///pet/missing.png", "error");
+  const { createPetFrameCache } = require(helperPath);
+  const cache = createPetFrameCache({ ImageCtor: FakeImage });
+
+  const result = await cache.ensureFrameReady("file:///pet/missing.png");
+  const second = await cache.ensureFrameReady("file:///pet/missing.png");
+
+  assert.equal(result.ready, false);
+  assert.equal(result.failed, true);
+  assert.equal(second.failed, true);
+  assert.equal(FakeImage.created.length, 1);
+  assert.equal(cache.getFrameStatus("file:///pet/missing.png"), "failed");
+});
+
+test("predictScaleSummary updates local renderer dimensions and clamps scale", () => {
+  const { predictScaleSummary } = require(helperPath);
+
+  const current = {
+    value: 1,
+    min: 0.75,
+    max: 1.16,
+    step: 0.08,
+    windowWidth: 180,
+    windowHeight: 180,
+    spriteSize: 128,
+    spriteOffsetX: 26,
+    taskbarRunway: false
+  };
+
+  const enlarged = predictScaleSummary(current, -120);
+  assert.deepEqual(enlarged, {
+    ...current,
+    value: 1.08,
+    windowWidth: 194,
+    windowHeight: 194,
+    spriteSize: 138,
+    spriteOffsetX: 28
+  });
+
+  const clamped = predictScaleSummary({ ...current, value: 1.16 }, -120);
+  assert.equal(clamped.value, 1.16);
+});
+
+test("renderer wires the frame cache before pet-window and gates state changes on first frame readiness", () => {
+  const indexSource = fs.readFileSync(indexPath, "utf8");
+  const petWindowSource = fs.readFileSync(petWindowPath, "utf8");
+
+  assert.ok(indexSource.indexOf("./renderer/pet-frame-cache.js") > -1);
+  assert.ok(indexSource.indexOf("./renderer/pet-frame-cache.js") < indexSource.indexOf("./renderer/pet-window.js"));
+  assert.match(petWindowSource, /createPetFrameCache/);
+  assert.match(petWindowSource, /ensureFrameReady/);
+  assert.match(petWindowSource, /commitStateChange/);
+});

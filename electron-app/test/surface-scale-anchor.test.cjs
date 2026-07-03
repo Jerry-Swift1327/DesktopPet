@@ -298,3 +298,137 @@ test("moveToStartPosition keeps the same visual home anchor across scales", () =
   assert.equal(largeAnchor.x + largeAnchor.width, defaultAnchor.x + defaultAnchor.width);
   assert.equal(largeAnchor.y + largeAnchor.height, defaultAnchor.y + defaultAnchor.height);
 });
+
+test("setPetScale keeps the visible bottom on the surface through repeated scale changes", () => {
+  let bounds = { x: 120, y: 0, width: 180, height: 180 };
+  let currentSurface = {
+    type: "taskbar",
+    left: 0,
+    right: 1200,
+    groundY: 760,
+    workArea: { x: 0, y: 0, width: 1200, height: 760 }
+  };
+  let controller = null;
+
+  function scaleValue() {
+    return controller.getPetScale();
+  }
+
+  function windowWidth() {
+    return Math.round(180 * scaleValue());
+  }
+
+  function windowHeight() {
+    return Math.round(180 * scaleValue());
+  }
+
+  function spriteSize() {
+    return Math.round(128 * scaleValue());
+  }
+
+  function spriteOffsetX(width = windowWidth()) {
+    return Math.max(0, Math.round((width - spriteSize()) / 2));
+  }
+
+  function visibleRectFromBounds(nextBounds) {
+    const scale = scaleValue();
+    const offsetX = spriteOffsetX(nextBounds.width) + Math.round(8 * scale);
+    const offsetY = Math.round(18 * scale);
+    return {
+      x: Math.round(nextBounds.x + offsetX),
+      y: Math.round(nextBounds.y + offsetY),
+      width: Math.max(1, Math.round(70 * scale)),
+      height: Math.max(1, Math.round(94 * scale))
+    };
+  }
+
+  function groundedWindowYForSurface(surface) {
+    const probe = { x: bounds.x, y: 0, width: windowWidth(), height: windowHeight() };
+    const visible = visibleRectFromBounds(probe);
+    return Math.round(surface.groundY - (visible.y + visible.height - probe.y));
+  }
+
+  function windowXForVisibleCenter(centerX) {
+    const probe = { x: 0, y: 0, width: windowWidth(), height: windowHeight() };
+    const visible = visibleRectFromBounds(probe);
+    return Math.round(centerX - (visible.x - probe.x) - visible.width / 2);
+  }
+
+  controller = createSurfaceScaleController({
+    clampPetScale: (value) => Math.round(Math.min(Math.max(Number(value) || 1, 0.75), 1.6) * 100) / 100,
+    getPetWindowWidth: windowWidth,
+    getPetWindowHeight: windowHeight,
+    getPetSpriteSize: spriteSize,
+    getSpriteLocalXForWindowWidth: spriteOffsetX,
+    getSurfaceWorkArea: () => currentSurface.workArea,
+    getVisibleSpriteInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }),
+    getGroundedWindowYForSurface: groundedWindowYForSurface,
+    clampPetWindowPositionToSurface: (x, y) => ({ x: Math.round(x), y: Math.round(y) }),
+    getTaskbarWalkCenterLimits: () => ({ left: 0, right: 1200 }),
+    ensureTaskbarWalkRunwayForCenter: () => null,
+    isTaskbarWalkActive: () => false,
+    clearPetWindowHitRegion: () => {},
+    getWalkVisibleCenterFromWindowX: (x) => x,
+    getTaskbarWalkRunwayWindowWidth: () => 1200,
+    setPetWindowPosition: (x, y) => {
+      bounds = { x: Math.round(x), y: Math.round(y), width: windowWidth(), height: windowHeight() };
+    },
+    syncWalkTrackX: () => {},
+    updatePetWindowMousePassthrough: () => {},
+    scheduleWalkLoopTimeout: () => {},
+    resetToTaskbarSurface: () => currentSurface,
+    setCurrentSurface: (surface) => {
+      currentSurface = surface;
+      return currentSurface;
+    },
+    getCurrentSurface: () => currentSurface,
+    getVisiblePetRectFromBounds: visibleRectFromBounds,
+    getWindowXForVisibleCenter: windowXForVisibleCenter,
+    setWalkWindowPosition: () => null,
+    setTaskbarWalkWindowPositionForCenter: () => null,
+    isWalkingState: () => false,
+    refreshMenuAnchorAfterScale: () => {},
+    refreshHoverAnchorAfterScale: () => {},
+    refreshCustomizationAnchorAfterScale: () => {},
+    repositionStartupBubbleWindow: () => {},
+    sendScaleChanged: () => {},
+    preferencesStore: {
+      readPetScalePreference: () => {},
+      getPetScale: () => 1,
+      getPreferredPetScale: () => 1,
+      setPreferredPetScale: () => {},
+      writePetScalePreference: () => {}
+    },
+    getPetWindow: () => ({
+      isDestroyed: () => false,
+      getBounds: () => ({ ...bounds }),
+      setBounds: (nextBounds) => {
+        bounds = { ...bounds, ...nextBounds };
+      }
+    }),
+    getActiveState: () => "petSquat",
+    getWalkDirection: () => -1,
+    getTaskbarWalkRunway: () => null,
+    setTaskbarWalkRunway: () => {},
+    getWalkTrackX: () => null,
+    setWalkTrackX: () => {},
+    log: () => {},
+    DEFAULT_PET_SCALE: 1,
+    PET_SCALE_MIN: 0.75,
+    PET_SCALE_MAX: 1.6,
+    PET_SCALE_STEP: 0.08,
+    VISIBLE_TOP_GAP: 0,
+    WINDOW_DOCK_DEBUG: false,
+    WINDOW_DOCK_COARSE_CORRECTION_LIMIT: 28,
+    WINDOW_DOCK_FINE_CORRECTION_LIMIT: 2
+  });
+
+  controller.groundPetToSurface("petSquat", -1, currentSurface);
+  assert.equal(visibleRectFromBounds(bounds).y + visibleRectFromBounds(bounds).height, currentSurface.groundY);
+
+  for (const nextScale of [0.92, 1.08, 1.16, 0.84, 0.75, 1.24]) {
+    controller.setPetScale(nextScale);
+    const visible = visibleRectFromBounds(bounds);
+    assert.equal(visible.y + visible.height, currentSurface.groundY, `scale ${nextScale} should stay grounded`);
+  }
+});
