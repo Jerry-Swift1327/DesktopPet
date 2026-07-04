@@ -80,12 +80,14 @@ test("main.cjs onBeforeQuit handler 包含退出清理", () => {
     "stopWindowSurfacePolling",
     "stopWindowRoamPolling",
     "stopEyeTrackingPolling",
+    "stopTabbyIdlePolling",
     "stopIntimacyDecayTimer",
     "clearHoverIntent",
     "clearDragState",
     "clearStartupBubbleTimer",
     "clearHoverHideTimer",
-    "clearMenuHideTimer"
+    "clearMenuHideTimer",
+    "clearTabbySleepPoseTimer"
   ];
 
   for (const fn of expectedCalls) {

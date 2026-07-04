@@ -387,6 +387,7 @@ let tabbyIdlePollTimer = null;
 let tabbySleepPoseTimer = null;
 let tabbySleepPoseSwitchAt = 0;
 let ragdollYawnSleepLoopTimer = null;
+let appLifecycleShuttingDown = false;
 let idleGreetingPool = [];
 let lastUserOperationAt = Date.now();
 let lastTabbyUserOperationAt = Date.now();
@@ -1786,7 +1787,7 @@ function setCurrentSurface(surface) {
   return currentSurface;
 }
 
-function resetToTaskbarSurface(bounds = getPetWindow()?.getBounds()) {
+function resetToTaskbarSurface(bounds = getPetWindowBoundsSafe()) {
   const surface = getTaskbarSurfaceForBounds(bounds);
   return setCurrentSurface(surface);
 }
@@ -1848,7 +1849,7 @@ function clampPetWindowPositionToSurface(x, y, surface = getCurrentSurface(), st
   return surfaceFitRules.clampWindowPositionToSurface(x, y, surface.left, surface.right, visibleRect, surfaceY);
 }
 
-function getVisibleBottomPoint(bounds = getPetWindow()?.getBounds(), stateId = activeState, direction = walkDirection) {
+function getVisibleBottomPoint(bounds = getPetWindowBoundsSafe(), stateId = activeState, direction = walkDirection) {
   if (!bounds) {
     return null;
   }
@@ -1856,7 +1857,7 @@ function getVisibleBottomPoint(bounds = getPetWindow()?.getBounds(), stateId = a
   return frameGeometry.getBottomAnchorFromVisibleRect(visibleRect);
 }
 
-function getRenderedFrameBottomAnchor(bounds = getPetWindow()?.getBounds(), stateId = activeState, direction = walkDirection) {
+function getRenderedFrameBottomAnchor(bounds = getPetWindowBoundsSafe(), stateId = activeState, direction = walkDirection) {
   if (!bounds) {
     return null;
   }
@@ -1872,7 +1873,7 @@ function getTransitionBottomAnchor(stateId = activeState, direction = walkDirect
   if (visibleRect) {
     return frameGeometry.getBottomAnchorFromVisibleRect(visibleRect);
   }
-  return getRenderedFrameBottomAnchor(getPetWindow()?.getBounds(), stateId, direction);
+  return getRenderedFrameBottomAnchor(getPetWindowBoundsSafe(), stateId, direction);
 }
 
 function preserveBottomAnchorForState(anchor, stateId = activeState, direction = walkDirection, surface = getCurrentSurface()) {
@@ -1984,7 +1985,7 @@ function getLastWindowSurfaceAsyncRefreshAt() {
   return windowSurfaceController.getLastWindowSurfaceAsyncRefreshAt();
 }
 
-function diagnoseDockTargetFromCache(bounds = getPetWindow()?.getBounds()) {
+function diagnoseDockTargetFromCache(bounds = getPetWindowBoundsSafe()) {
   const bottom = getVisibleBottomPoint(bounds);
   if (!bottom) {
     return { ok: false, reason: "missing-bottom-point", surface: null, elapsedMs: 0 };
@@ -2124,8 +2125,15 @@ function startTabbyIdlePolling() {
   updateTabbyIdleActions();
 }
 
+function stopTabbyIdlePolling() {
+  if (tabbyIdlePollTimer) {
+    clearInterval(tabbyIdlePollTimer);
+    tabbyIdlePollTimer = null;
+  }
+}
+
 function updateTabbyIdleActions() {
-  if (!petRuntimeConfig.features.idleYawn || activeState !== DEFAULT_STATE) {
+  if (!petRuntimeConfig.features.idleYawn || activeState !== DEFAULT_STATE || !canDrivePetStateFromTimer()) {
     return;
   }
   if (Date.now() - lastTabbyUserOperationAt >= TABBY_YAWN_IDLE_MS) {
@@ -2158,6 +2166,9 @@ function scheduleTabbySleepPose(state) {
   tabbySleepPoseTimer = setTimeout(() => {
     tabbySleepPoseTimer = null;
     tabbySleepPoseSwitchAt = 0;
+    if (!canDrivePetStateFromTimer()) {
+      return;
+    }
     setState(activeState === STATE_SLEEP ? STATE_YAWN : STATE_SLEEP, false);
   }, TABBY_SLEEP_POSE_MS);
 }
@@ -2168,7 +2179,7 @@ function scheduleRagdollYawnSleepLoopTimeout(state) {
   }
   ragdollYawnSleepLoopTimer = setTimeout(() => {
     ragdollYawnSleepLoopTimer = null;
-    if (petRuntimeConfig.variant === "pet2609" && activeState === STATE_YAWN) {
+    if (petRuntimeConfig.variant === "pet2609" && activeState === STATE_YAWN && canDrivePetStateFromTimer()) {
       setState(STATE_WALK, false);
     }
   }, RAGDOLL_YAWN_SLEEP_LOOP_MAX_MS);
@@ -2723,6 +2734,20 @@ function setFixedWindowBounds(targetWindow, bounds, width, height, cacheKey) {
 
 function getPetWindow() {
   return petWindowController.getPetWindow();
+}
+
+function getLivePetWindow() {
+  const win = getPetWindow();
+  return win && !win.isDestroyed() ? win : null;
+}
+
+function getPetWindowBoundsSafe() {
+  const win = getLivePetWindow();
+  return win ? win.getBounds() : null;
+}
+
+function canDrivePetStateFromTimer() {
+  return !appLifecycleShuttingDown && Boolean(getLivePetWindow());
 }
 
 function setPetWindowPosition(x, y) {
@@ -3619,6 +3644,7 @@ function startDragTimer() {
 }
 
 function runAppReadyStartupSequence() {
+  appLifecycleShuttingDown = false;
   log("app ready");
   readPetStats();
   readAutoStartPreference();
@@ -3638,17 +3664,20 @@ function runAppReadyStartupSequence() {
 }
 
 function runAppBeforeQuitCleanupSequence() {
+  appLifecycleShuttingDown = true;
   writePetStats();
   stopHoverPolling();
   stopWindowSurfacePolling();
   stopWindowRoamPolling();
   stopEyeTrackingPolling();
+  stopTabbyIdlePolling();
   stopIntimacyDecayTimer();
   clearHoverIntent();
   clearDragState({ notify: false });
   clearStartupBubbleTimer();
   clearHoverHideTimer();
   clearMenuHideTimer();
+  clearTabbySleepPoseTimer();
   clearRagdollYawnSleepLoopTimer();
   if (randomGreetingTimer) {
     clearTimeout(randomGreetingTimer);

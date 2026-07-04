@@ -29,6 +29,7 @@ node --test "test/**/*.test.cjs"
 | `state-visual-commit.test.cjs` | 状态切换视觉提交事务（旧帧贴地保持、目标首帧上报后落地/启动行走） | `../electron/behavior/state-controller.cjs`、`../electron/main.cjs` |
 | `contact-qrcode.test.cjs` | 联系二维码查找辅助模块结构断言（开发/打包路径构造、Downloads fallback、文件存在/不存在、读取异常跳过、返回结构） | `../electron/ipc/contact-qrcode.cjs` |
 | `app-lifecycle-contract.test.cjs` | 应用生命周期契约结构断言（单实例锁、whenReady 启动序列、before-quit 退出清理、window-all-closed、activate、display-metrics-changed、switch-variant 重启、启动/退出顺序） | `../electron/main.cjs` |
+| `main-timer-lifecycle-race.test.cjs` | 主进程定时器与窗口销毁竞态护栏（idle/yawn/sleep 定时器退出清理、状态切换前窗口存活判断、transition anchor 安全读取 bounds） | `../electron/main.cjs` |
 | `register-app-lifecycle.test.cjs` | 生命周期注册模块结构断言（导出函数、事件注册、darwin 条件、不包含业务逻辑函数） | `../electron/lifecycle/register-app-lifecycle.cjs` |
 | `taskbar-surface-window-lifecycle.test.cjs` | 任务栏表面回退避免读取已销毁宠物窗口 bounds 的结构断言（控制器 destroyed window guard、main.cjs 薄包装委托） | `../electron/platform/screen-metrics.cjs`、`../electron/main.cjs` |
 | `screen-metrics-accessor.test.cjs` | screen-metrics 控制器访问器注入与 main.cjs 薄包装接线结构断言（不直接 require electron、不按值捕获可变状态、getSurfaceDisplay 默认参数使用 getCurrentSurfaceValue、导出 clearDisplayMetricsSettleTimer、8 个薄包装委托、退出清理调用 clearDisplayMetricsSettleTimer） | `../electron/platform/screen-metrics.cjs`、`../electron/main.cjs` |
