@@ -10,24 +10,30 @@ function createMockController({
   syncError = null,
   syncStdout = "1",
   isPackaged = true,
-  platform = "win32"
+  platform = "win32",
+  execPath = "C:\\Program Files\\Chongban\\Chongban.exe",
+  registryKey = "ChongbanDesktopPet-test"
 } = {}) {
   const preferenceWrites = [];
   const preferenceSets = [];
+  const execFileCalls = [];
+  const execFileSyncCalls = [];
   let menuConfigSends = 0;
   const controller = createAutoStartController({
     app: { isPackaged },
-    process: { platform, execPath: "C:\\Program Files\\Chongban\\Chongban.exe" },
-    execFile: (_file, _args, _options, callback) => {
+    process: { platform, execPath },
+    execFile: (file, args, options, callback) => {
+      execFileCalls.push({ file, args, options });
       callback(execError, stdout);
     },
-    execFileSync: () => {
+    execFileSync: (file, args, options) => {
+      execFileSyncCalls.push({ file, args, options });
       if (syncError) {
         throw syncError;
       }
       return syncStdout;
     },
-    petRuntimeConfig: { autoStartRegistryKey: "ChongbanDesktopPet-test" },
+    petRuntimeConfig: { autoStartRegistryKey: registryKey },
     WINDOWS_STARTUP_RUN_KEY: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
     isAutoStartPreferenceLoaded: () => preferenceLoaded,
     setAutoStartEnabled: (enabled) => {
@@ -45,8 +51,24 @@ function createMockController({
     controller,
     preferenceWrites,
     preferenceSets,
+    getExecFileCalls: () => execFileCalls,
+    getExecFileSyncCalls: () => execFileSyncCalls,
     getMenuConfigSends: () => menuConfigSends
   };
+}
+
+function assertPowerShellRegistryReadCommand(call, {
+  registryKey = "ChongbanDesktopPet-test",
+  execPath = "C:\\Program Files\\Chongban\\Chongban.exe"
+} = {}) {
+  assert.equal(call.file, "powershell.exe");
+  assert.deepEqual(call.args.slice(0, 4), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]);
+  assert.equal(call.args.length, 5, "registry read arguments must be embedded in the script, not appended after -Command");
+  const script = call.args[4];
+  assert.equal(script.includes("$args"), false, "PowerShell registry read must not depend on trailing $args");
+  assert.ok(script.includes("$registryPath = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';"));
+  assert.ok(script.includes(`$registryName = '${registryKey.replace(/'/g, "''")}';`));
+  assert.ok(script.includes(`$expectedCommand = '"${execPath.replace(/'/g, "''")}"';`));
 }
 
 test("refreshAutoStartCacheAsync syncs registry state even when preference was already loaded", () => {
@@ -82,6 +104,34 @@ test("syncAutoStartPreferenceFromRegistrySync persists registry state before fir
   assert.deepEqual(mock.preferenceSets, [true]);
   assert.deepEqual(mock.preferenceWrites, [true]);
   assert.equal(mock.getMenuConfigSends(), 0);
+});
+
+test("sync registry read embeds PowerShell parameters instead of trailing args", () => {
+  const mock = createMockController({ syncStdout: "1" });
+
+  mock.controller.readAutoStartEnabledSync();
+
+  assert.equal(mock.getExecFileSyncCalls().length, 1);
+  assertPowerShellRegistryReadCommand(mock.getExecFileSyncCalls()[0]);
+});
+
+test("async registry read uses the same self-contained PowerShell command", () => {
+  const mock = createMockController({ stdout: "1" });
+
+  mock.controller.refreshAutoStartCacheAsync();
+
+  assert.equal(mock.getExecFileCalls().length, 1);
+  assertPowerShellRegistryReadCommand(mock.getExecFileCalls()[0]);
+});
+
+test("registry read escapes single quotes in PowerShell literals", () => {
+  const execPath = "C:\\Users\\O'Brien\\Chongban.exe";
+  const registryKey = "ChongbanDesktopPet-test'value";
+  const mock = createMockController({ syncStdout: "1", execPath, registryKey });
+
+  mock.controller.readAutoStartEnabledSync();
+
+  assertPowerShellRegistryReadCommand(mock.getExecFileSyncCalls()[0], { execPath, registryKey });
 });
 
 test("syncAutoStartPreferenceFromRegistrySync does not overwrite preferences when registry read fails", () => {

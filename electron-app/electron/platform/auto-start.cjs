@@ -29,6 +29,34 @@ function createAutoStartController(context) {
     return `"${process.execPath}"`;
   }
 
+  function toPowerShellStringLiteral(value) {
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  function buildReadAutoStartRegistryScript() {
+    const registryPath = toPowerShellStringLiteral("HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run");
+    const registryName = toPowerShellStringLiteral(petRuntimeConfig.autoStartRegistryKey);
+    const expectedCommand = toPowerShellStringLiteral(getAutoStartCommand());
+    return [
+      `$registryPath = ${registryPath};`,
+      `$registryName = ${registryName};`,
+      `$expectedCommand = ${expectedCommand};`,
+      "$item = Get-ItemProperty -Path $registryPath -Name $registryName -ErrorAction SilentlyContinue;",
+      "$value = if ($null -eq $item) { $null } else { $item.PSObject.Properties[$registryName].Value };",
+      "if ([string]$value -eq [string]$expectedCommand) { [Console]::Out.Write('1') } else { [Console]::Out.Write('0') }"
+    ].join(" ");
+  }
+
+  function getReadAutoStartRegistryArgs() {
+    return [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      buildReadAutoStartRegistryScript()
+    ];
+  }
+
   function isAutoStartSupported() {
     return process.platform === "win32" && app.isPackaged;
   }
@@ -39,16 +67,7 @@ function createAutoStartController(context) {
     }
 
     try {
-      const output = execFileSync("powershell.exe", [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "$item = Get-ItemProperty -Path $args[0] -Name $args[1] -ErrorAction SilentlyContinue; $value = if ($null -eq $item) { $null } else { $item.PSObject.Properties[$args[1]].Value }; if ([string]$value -eq [string]$args[2]) { [Console]::Out.Write('1') } else { [Console]::Out.Write('0') }",
-        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-        petRuntimeConfig.autoStartRegistryKey,
-        getAutoStartCommand()
-      ], {
+      const output = execFileSync("powershell.exe", getReadAutoStartRegistryArgs(), {
         encoding: "utf8",
         windowsHide: true,
         timeout: 1000,
@@ -70,16 +89,7 @@ function createAutoStartController(context) {
       return;
     }
 
-    execFile("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "$item = Get-ItemProperty -Path $args[0] -Name $args[1] -ErrorAction SilentlyContinue; $value = if ($null -eq $item) { $null } else { $item.PSObject.Properties[$args[1]].Value }; if ([string]$value -eq [string]$args[2]) { [Console]::Out.Write('1') } else { [Console]::Out.Write('0') }",
-      "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-      petRuntimeConfig.autoStartRegistryKey,
-      getAutoStartCommand()
-    ], {
+    execFile("powershell.exe", getReadAutoStartRegistryArgs(), {
       encoding: "utf8",
       windowsHide: true,
       timeout: 1000,
