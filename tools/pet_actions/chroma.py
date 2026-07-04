@@ -640,6 +640,7 @@ def process_frames_to_processed(
     align_reference: dict[str, float | int] | None = None,
     align_center_x: bool = False,
     align_bottom: bool = False,
+    align_bottom_per_frame: bool = False,
     align_max_shift: int = 32,
 ) -> tuple[list[Path], dict[str, object]]:
     """生成 256px 增强帧到 processed_frames（素材池）。"""
@@ -686,13 +687,21 @@ def process_frames_to_processed(
             enhanced_frames[0][1],
             align_reference,
             align_center_x=align_center_x,
-            align_bottom=align_bottom,
+            align_bottom=align_bottom and not align_bottom_per_frame,
             max_shift=align_max_shift,
         )
 
     for name, enhanced in enhanced_frames:
         if align_delta["dx"] or align_delta["dy"]:
             enhanced = translate_frame(enhanced, int(align_delta["dx"]), int(align_delta["dy"]))
+        if align_reference and align_bottom and align_bottom_per_frame:
+            enhanced, _frame_align_delta = align_frame_to_reference(
+                enhanced,
+                align_reference,
+                align_center_x=False,
+                align_bottom=True,
+                max_shift=align_max_shift,
+            )
         enhanced.save(processed_dir / name)
 
     info: dict[str, object] = {"normalizationMode": normalization_mode}

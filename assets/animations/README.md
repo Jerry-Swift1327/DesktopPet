@@ -10,7 +10,7 @@
 | `cat` | `cat_squat`、`cat_walk`、`cat_feed`、`cat_ball` |
 | `shorthair` | `shorthair_squat`、`shorthair_walk`、`shorthair_feed`、`shorthair_ball` |
 | `tabby` | 中华狸花猫历史 ID：`tabby_squat`、`tabby_walk`、`tabby_feed`、`tabby_ball`、`tabby_lie`、`tabby_lick`、`tabby_belly`、`tabby_stretch`、`tabby_look`、`tabby_shake`、`tabby_yawn`、`tabby_sleep`、`tabby_hiss` |
-| `ragdoll` | `ragdoll_squat`、`ragdoll_walk`、`ragdoll_feed`、`ragdoll_ball`、`ragdoll_spin`、`ragdoll_lick`、`ragdoll_stretch`、`ragdoll_belly`、`ragdoll_yawn`、`ragdoll_hiss` |
+| `ragdoll` | `ragdoll_squat`、`ragdoll_walk`、`ragdoll_feed`、`ragdoll_ball`、`ragdoll_spin`、`ragdoll_lick`、`ragdoll_stretch`、`ragdoll_splits`、`ragdoll_yawn`、`ragdoll_hiss` |
 | `brit` | `brit_squat`、`brit_walk`、`brit_feed`、`brit_ball` |
 | `bshmitted` | `bshmitted_squat`、`bshmitted_walk`、`bshmitted_feed`、`bshmitted_ball` |
 | `van` | `van_squat`、`van_walk`、`van_feed`、`van_ball` |
@@ -41,7 +41,7 @@
 
 `loop.json` 和 manifest 中的 `frameSize` 是运行 PNG 画布尺寸，当前仍为 256；Electron 默认基础精灵是 128 CSS 像素，因此 256px 运行帧属于 2x 素材。`sourceCanvasSize` 记录源视频抽帧尺寸，不要求所有动作相同。
 
-新加入变体或动作时，优先使用默认 `source-canvas` 保留源视频构图，并在素材池生成阶段检查动作级画布居中。如果源视频本身主体整体偏左或偏右，可使用 `--center-visible-action-x` 对该动作全部素材池帧应用同一个 X 平移，使中位可见中心靠近 256px 画布中心。不要逐帧单独居中，否则会抵消走路、扑球、转身等动作本身的自然位移。近蹲坐动作可在 squat 自身构图正确后，再使用 `--align-reference-center-x --align-reference-bottom` 对齐到同变体 squat。
+新加入变体或动作时，优先使用默认 `source-canvas` 保留源视频构图，并在素材池生成阶段检查动作级画布居中。如果源视频本身主体整体偏左或偏右，可使用 `--center-visible-action-x` 对该动作全部素材池帧应用同一个 X 平移，使中位可见中心靠近 256px 画布中心。不要逐帧单独居中，否则会抵消走路、扑球、转身等动作本身的自然位移。近蹲坐动作可在 squat 自身构图正确后，再使用 `--align-reference-center-x --align-reference-bottom` 对齐到同变体 squat；若 one-shot 动作底线随源视频下沉但实际应始终贴合 surface，可追加 `--align-reference-bottom-per-frame` 逐帧贴地。
 
 对亮白或低饱和毛色的变体，处理脚本会自动执行 alpha 稳定化，减少主体内部透明针孔和低透明裂纹。新增或替换此类资源后，建议使用 `process_pet_actions.py audit` 检查 `interiorAlphaHoles` 和 `denseLowAlphaCracks` 指标，再抽查 `processed_frames` 与 `transparent_frames` 的关键帧。
 

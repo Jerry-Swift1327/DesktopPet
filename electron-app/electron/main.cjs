@@ -310,6 +310,7 @@ const STATE_SPIN = petActionIds.spin;
 const STATE_LICK = petActionIds.lick;
 const STATE_BELLY = petActionIds.belly;
 const STATE_STRETCH = petActionIds.stretch;
+const STATE_SPLITS = petActionIds.splits;
 const STATE_SHAKE = petActionIds.shake;
 const STATE_YAWN = petActionIds.yawn;
 const STATE_SLEEP = petActionIds.sleep;
@@ -318,7 +319,7 @@ const STATE_HISS = petActionIds.hiss;
 const HOVER_PANEL_HEIGHT = petRuntimeConfig.channelConfig.hoverPanelHeight;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_SPIN, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SHAKE, STATE_HISS]);
+const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_SPIN, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SPLITS, STATE_SHAKE, STATE_HISS]);
 const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 
 // STATE_* 常量映射，传给 rules 模块做相等比较（rules 不依赖 petActionIds）
@@ -328,7 +329,8 @@ const petStatsStateConstants = {
   lie: STATE_LIE,
   lick: STATE_LICK,
   belly: STATE_BELLY,
-  stretch: STATE_STRETCH
+  stretch: STATE_STRETCH,
+  splits: STATE_SPLITS
 };
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -2177,7 +2179,7 @@ function applyActionStats(stateId) {
 }
 
 function shouldDelayActionStats(stateId) {
-  return stateId === STATE_FEED || stateId === STATE_BALL || stateId === STATE_LICK || stateId === STATE_BELLY || stateId === STATE_STRETCH;
+  return stateId === STATE_FEED || stateId === STATE_BALL || stateId === STATE_LICK || stateId === STATE_BELLY || stateId === STATE_STRETCH || stateId === STATE_SPLITS;
 }
 
 function showStatMessages(messages) {

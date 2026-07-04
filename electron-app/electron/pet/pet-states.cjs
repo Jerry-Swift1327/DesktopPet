@@ -88,6 +88,7 @@ const PET_ACTION_DEFS = [
   { action: "lick", label: "舔爪", moving: false },
   { action: "belly", label: "翻肚", moving: false },
   { action: "stretch", label: "伸展", moving: false },
+  { action: "splits", label: "劈叉", moving: false },
   { action: "shake", label: "抖身", moving: false },
   { action: "yawn", label: "打哈欠", moving: false },
   { action: "sleep", label: "睡觉", moving: false },

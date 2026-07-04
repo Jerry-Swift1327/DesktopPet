@@ -18,6 +18,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from PIL import Image
+
 # 确保 tools/ 目录在 sys.path 中，以便导入 pet_actions 包
 TOOLS_ROOT = Path(__file__).resolve().parent
 if str(TOOLS_ROOT) not in sys.path:
@@ -33,7 +35,7 @@ from pet_actions import (  # noqa: E402
     SOURCE_CANVAS_NORMALIZATION,
     SOURCE_FRAME_SIZE,
 )
-from pet_actions.chroma import process_frames_to_processed, validate_normalization_options  # noqa: E402
+from pet_actions.chroma import align_frame_to_reference, process_frames_to_processed, validate_normalization_options  # noqa: E402
 from pet_actions.ffmpeg import extract_frames, find_ffmpeg  # noqa: E402
 from pet_actions.files import find_video, write_json  # noqa: E402
 from pet_actions.frames import (  # noqa: E402
@@ -49,6 +51,25 @@ from pet_actions.audit import build_variant_audit, write_audit_report  # noqa: E
 # ---------------------------------------------------------------------------
 # Core action processing
 # ---------------------------------------------------------------------------
+def align_runtime_frames_bottom_to_reference(
+    transparent_dir: Path,
+    reference: dict[str, float | int] | None,
+    max_shift: int,
+) -> None:
+    if not reference:
+        return
+    for frame_path in sorted(transparent_dir.glob("frame_*.png")):
+        image = Image.open(frame_path).convert("RGBA")
+        aligned, _delta = align_frame_to_reference(
+            image,
+            reference,
+            align_center_x=False,
+            align_bottom=True,
+            max_shift=max_shift,
+        )
+        aligned.save(frame_path)
+
+
 def process_action_core(
     action: str,
     ffmpeg: str,
@@ -79,6 +100,7 @@ def process_action_core(
     align_reference_action: str | None = None,
     align_reference_center_x: bool = False,
     align_reference_bottom: bool = False,
+    align_reference_bottom_per_frame: bool = False,
     align_reference_max_shift: int = 32,
     keep_raw: bool = False,
     clean_raw: bool = False,
@@ -133,6 +155,7 @@ def process_action_core(
         align_reference=align_reference,
         align_center_x=align_reference_center_x,
         align_bottom=align_reference_bottom,
+        align_bottom_per_frame=align_reference_bottom_per_frame,
         align_max_shift=align_reference_max_shift,
     )
     processed_frame_count = len(list(processed_dir.glob("frame_*.png")))
@@ -163,6 +186,8 @@ def process_action_core(
         metadata["alignReferenceAction"] = align_reference_action
         metadata["alignReferenceCenterX"] = bool(align_reference_center_x)
         metadata["alignReferenceBottom"] = bool(align_reference_bottom)
+        if align_reference_bottom_per_frame:
+            metadata["alignReferenceBottomPerFrame"] = True
         metadata["alignReferenceMaxShift"] = int(align_reference_max_shift)
 
     if not no_loop:
@@ -233,6 +258,12 @@ def process_action_core(
             )
             if frame_count <= 0:
                 raise RuntimeError("Loop frame generation did not produce any frames.")
+            if align_reference_bottom_per_frame:
+                align_runtime_frames_bottom_to_reference(
+                    transparent_dir,
+                    align_reference,
+                    align_reference_max_shift,
+                )
 
             metadata["frameCount"] = frame_count
             metadata["loopStart"] = 0
@@ -392,6 +423,7 @@ def cmd_process(args: argparse.Namespace) -> None:
             align_reference_action=align_reference_action,
             align_reference_center_x=args.align_reference_center_x,
             align_reference_bottom=args.align_reference_bottom,
+            align_reference_bottom_per_frame=args.align_reference_bottom_per_frame,
             align_reference_max_shift=args.align_reference_max_shift,
             keep_raw=args.keep_raw,
             clean_raw=args.clean_raw,
@@ -445,6 +477,7 @@ def cmd_replace(args: argparse.Namespace) -> None:
         ),
         align_reference_center_x=args.align_reference_center_x,
         align_reference_bottom=args.align_reference_bottom,
+        align_reference_bottom_per_frame=args.align_reference_bottom_per_frame,
         align_reference_max_shift=args.align_reference_max_shift,
         keep_raw=args.keep_raw,
         clean_raw=args.clean_raw,
@@ -490,6 +523,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--align-reference-action", default=None, help="Action folder whose first frame is used as geometry alignment reference.")
     parser.add_argument("--align-reference-center-x", action="store_true", help="Align processed_frames visible center X to --align-reference-action.")
     parser.add_argument("--align-reference-bottom", action="store_true", help="Align processed_frames visible bottom to --align-reference-action.")
+    parser.add_argument("--align-reference-bottom-per-frame", action="store_true", help="Align each processed frame bottom to --align-reference-action instead of applying the first-frame bottom shift to the whole action.")
     parser.add_argument("--align-reference-max-shift", type=int, default=32, help="Maximum per-axis pixel shift for reference alignment.")
     raw_group = parser.add_mutually_exclusive_group()
     raw_group.add_argument("--keep-raw", action="store_true", help="Keep raw_frames after processing. This is the default.")

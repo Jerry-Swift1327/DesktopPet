@@ -163,8 +163,8 @@
     "trimGroundPadding": 1
   },
   {
-    "action": "ragdoll_belly",
-    "video": "ragdoll_belly.mp4",
+    "action": "ragdoll_splits",
+    "video": "ragdoll_splits.mp4",
     "frameMs": 30,
     "sourceFrameSize": 128,
     "frameSize": 256,
@@ -178,6 +178,7 @@
     "alignReferenceAction": "ragdoll_squat",
     "alignReferenceCenterX": false,
     "alignReferenceBottom": true,
+    "alignReferenceBottomPerFrame": true,
     "alignReferenceMaxShift": 32,
     "frameCount": 167,
     "loopStart": 0,

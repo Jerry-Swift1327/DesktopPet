@@ -234,7 +234,7 @@ function applyNaturalStatsTickRules(stats, now, decayRefs) {
 }
 
 // options = { intimacyGainDelta, stateConstants }
-// stateConstants = { squat, feed, lie, lick, belly, stretch }
+// stateConstants = { squat, feed, lie, lick, belly, stretch, splits }
 // STATE_* 常量来自运行时 petActionIds，不在本模块定义，由调用方传入以便做相等比较。
 function getActionStatEffect(stateId, stateConstants, actionStatEffects) {
   if (!actionStatEffects || typeof actionStatEffects !== "object") {

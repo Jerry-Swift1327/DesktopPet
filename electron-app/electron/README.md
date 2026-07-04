@@ -123,6 +123,7 @@
 - `../build-installer-win.ps1`。
 - `../build-installer-mac.cjs`，如果变体支持 macOS。
 - `../test/pet-variants.test.cjs`。
+- 新增动作类型时，同步 `pet/pet-states.cjs`、`main.cjs` 中的 one-shot/stats 接线和对应测试。
 - `../../docs/PROJECT_MAP.md`。
 
 ## 验证

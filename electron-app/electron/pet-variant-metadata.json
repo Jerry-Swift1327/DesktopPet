@@ -155,18 +155,15 @@
         "spin",
         "lick",
         "stretch",
-        "belly"
+        "splits"
       ],
       "extraAssets": [
         "yawn",
         "hiss"
       ],
-      "actionLabelOverrides": {
-        "belly": "听歌"
-      },
       "actionStatEffects": {
-        "belly": {
-          "healthDelta": 1,
+        "splits": {
+          "healthDelta": 2,
           "fullnessDelta": -1
         }
       },

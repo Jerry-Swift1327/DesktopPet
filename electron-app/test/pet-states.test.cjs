@@ -19,12 +19,12 @@ test("sharedGreetings 是非空字符串数组", () => {
 
 test("buildPetStates supports variant-specific action label overrides", () => {
   const states = buildPetStates(ACTION_IDS, "assets/animations", "ragdoll", sharedGreetings, {
-    belly: "听歌"
+    splits: "体操"
   });
-  const belly = states.find((state) => state.id === ACTION_IDS.belly);
+  const splits = states.find((state) => state.id === ACTION_IDS.splits);
   const stretch = states.find((state) => state.id === ACTION_IDS.stretch);
 
-  assert.equal(belly.label, "听歌");
+  assert.equal(splits.label, "体操");
   assert.equal(stretch.label, EXPECTED_LABELS[EXPECTED_ORDER.indexOf("stretch")]);
 });
 
@@ -90,19 +90,20 @@ const ACTION_IDS = {
   lick: "petLick",
   belly: "petBelly",
   stretch: "petStretch",
+  splits: "petSplits",
   shake: "petShake",
   yawn: "petYawn",
   sleep: "petSleep",
   hiss: "petHiss"
 };
 
-const EXPECTED_ORDER = ["squat", "walk", "feed", "ball", "lie", "spin", "lick", "belly", "stretch", "shake", "yawn", "sleep", "hiss"];
-const EXPECTED_LABELS = ["蹲坐", "闲逛", "喂食", "玩耍", "趴下", "转圈", "舔爪", "翻肚", "伸展", "抖身", "打哈欠", "睡觉", "哈气"];
+const EXPECTED_ORDER = ["squat", "walk", "feed", "ball", "lie", "spin", "lick", "belly", "stretch", "splits", "shake", "yawn", "sleep", "hiss"];
+const EXPECTED_LABELS = ["蹲坐", "闲逛", "喂食", "玩耍", "趴下", "转圈", "舔爪", "翻肚", "伸展", "劈叉", "抖身", "打哈欠", "睡觉", "哈气"];
 
-test("buildPetStates 生成 13 个状态", () => {
+test("buildPetStates 生成 14 个状态", () => {
   const states = buildPetStates(ACTION_IDS, "assets/animations", "dog");
 
-  assert.equal(states.length, 13);
+  assert.equal(states.length, 14);
 });
 
 test("buildPetStates 状态顺序与定义一致", () => {

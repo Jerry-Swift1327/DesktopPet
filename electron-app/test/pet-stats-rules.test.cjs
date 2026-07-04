@@ -60,7 +60,8 @@ const STATE_CONSTANTS = {
   lie: "lie",
   lick: "lick",
   belly: "belly",
-  stretch: "stretch"
+  stretch: "stretch",
+  splits: "splits"
 };
 
 // clampStat：将数值钳制到 [0, 100] 并做 Math.round
@@ -400,6 +401,23 @@ test("applyActionStatsRules supports state-specific stat effect overrides", () =
   });
   assert.equal(stats.intimacy, 55);
   assert.equal(stats.health, 81);
+  assert.equal(stats.fullness, 49);
+});
+
+test("applyActionStatsRules supports splits stat effect overrides", () => {
+  const stats = makeBaseStats({ intimacy: 50, fullness: 50, health: 80, fullPrompted: true });
+  applyActionStatsRules(stats, STATE_CONSTANTS.splits, {
+    intimacyGainDelta: 5,
+    stateConstants: STATE_CONSTANTS,
+    actionStatEffects: {
+      splits: {
+        healthDelta: 2,
+        fullnessDelta: -1
+      }
+    }
+  });
+  assert.equal(stats.intimacy, 55);
+  assert.equal(stats.health, 82);
   assert.equal(stats.fullness, 49);
 });
 

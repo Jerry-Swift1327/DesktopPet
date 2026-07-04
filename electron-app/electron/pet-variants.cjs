@@ -24,6 +24,7 @@ const PET_ACTIONS = Object.freeze({
   lick: Object.freeze({ id: "petLick", asset: "lick" }),
   belly: Object.freeze({ id: "petBelly", asset: "belly" }),
   stretch: Object.freeze({ id: "petStretch", asset: "stretch" }),
+  splits: Object.freeze({ id: "petSplits", asset: "splits" }),
   shake: Object.freeze({ id: "petShake", asset: "shake" }),
   yawn: Object.freeze({ id: "petYawn", asset: "yawn" }),
   sleep: Object.freeze({ id: "petSleep", asset: "sleep" }),

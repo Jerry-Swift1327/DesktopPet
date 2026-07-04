@@ -23,6 +23,7 @@ test("tabby extra actions settle stats at the right time", () => {
   assert.match(delayBody, /STATE_LICK/);
   assert.match(delayBody, /STATE_BELLY/);
   assert.match(delayBody, /STATE_STRETCH/);
+  assert.match(delayBody, /STATE_SPLITS/);
 });
 
 test("tabby lie loops instead of completing as a one-shot action", () => {

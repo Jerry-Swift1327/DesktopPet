@@ -91,6 +91,7 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--center-visible-target-x` / `--center-visible-max-shift` | 覆盖动作级 X 居中的目标位置和最大平移量 |
 | `--align-reference-action` | 使用指定动作首帧作为几何对齐参考 |
 | `--align-reference-center-x` / `--align-reference-bottom` | 将素材池帧的可见中心 X 或底线对齐到参考动作；未指定参考动作时默认使用同变体 `squat` |
+| `--align-reference-bottom-per-frame` | 配合 `--align-reference-bottom` 使用，逐帧对齐底线，适合底线随动作下沉但仍需贴合 surface 的 one-shot 动作 |
 | `--keep-raw` | 保留 `raw_frames` 中间产物；当前为默认行为，保留该参数用于兼容旧命令 |
 | `--clean-raw` | 处理完成后删除 `raw_frames` 中间产物，用于恢复旧的自动清理行为 |
 

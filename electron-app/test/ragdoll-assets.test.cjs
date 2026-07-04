@@ -66,7 +66,7 @@ test("ragdoll assets cover the configured actions", () => {
     "ragdoll_spin",
     "ragdoll_lick",
     "ragdoll_stretch",
-    "ragdoll_belly",
+    "ragdoll_splits",
     "ragdoll_yawn",
     "ragdoll_hiss"
   ];
@@ -115,7 +115,7 @@ test("ragdoll runtime frames use optimized source ranges", () => {
 
 test("ragdoll runtime frames trim ground alpha remnants", () => {
   for (const entry of manifest) {
-    const expectedAlpha = entry.action === "ragdoll_belly" ? 200 : 128;
+    const expectedAlpha = entry.action === "ragdoll_splits" ? 200 : 128;
     assert.equal(entry.trimGroundAlpha, expectedAlpha);
     assert.equal(entry.trimGroundPadding, 1);
   }
@@ -130,7 +130,7 @@ test("ragdoll runtime frames preserve source-canvas layout at 256px", () => {
     ragdoll_spin: [720, 720],
     ragdoll_lick: [960, 960],
     ragdoll_stretch: [720, 720],
-    ragdoll_belly: [960, 960],
+    ragdoll_splits: [960, 960],
     ragdoll_yawn: [720, 720],
     ragdoll_hiss: [720, 720]
   };
@@ -149,16 +149,17 @@ test("ragdoll runtime frames preserve source-canvas layout at 256px", () => {
   );
 });
 
-test("ragdoll listen frames keep their visible bottoms stable", () => {
-  const loop = JSON.parse(fs.readFileSync(path.join(animationsRoot, "ragdoll_belly", "loop.json"), "utf8"));
-  const bottoms = measureActionBottoms("ragdoll_belly");
+test("ragdoll splits frames keep their visible bottoms stable", () => {
+  const loop = JSON.parse(fs.readFileSync(path.join(animationsRoot, "ragdoll_splits", "loop.json"), "utf8"));
+  const bottoms = measureActionBottoms("ragdoll_splits");
   const bottomRange = Math.max(...bottoms) - Math.min(...bottoms);
 
   assert.equal(loop.alignReferenceAction, "ragdoll_squat");
   assert.equal(loop.alignReferenceBottom, true);
+  assert.equal(loop.alignReferenceBottomPerFrame, true);
   assert.equal(loop.trimGroundAlpha, 200);
   assert.ok(
     bottomRange <= 2,
-    `ragdoll_belly bottom range should stay within 2px, got ${bottomRange}`
+    `ragdoll_splits bottom range should stay within 2px, got ${bottomRange}`
   );
 });
