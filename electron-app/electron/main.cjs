@@ -106,6 +106,7 @@ const {
   WINDOW_DOCK_FINE_CORRECTION_LIMIT,
   WINDOW_DOCK_DRAG_RELEASE_BUDGET_MS,
   WINDOW_DOCK_DEBUG,
+  WINDOW_SURFACE_STABILITY_TOLERANCE_PX,
   STARTUP_BUBBLE_DEFAULT_WIDTH,
   STARTUP_BUBBLE_MIN_WIDTH,
   STARTUP_BUBBLE_MAX_WIDTH,
@@ -1764,9 +1765,18 @@ function getCurrentSurface() {
 }
 
 function setCurrentSurface(surface) {
-  currentSurface = surface?.type === "window"
-    ? validateWindowSurface(surface) || getTaskbarSurfaceForBounds()
-    : surface || getTaskbarSurfaceForBounds();
+  if (surface?.type === "window") {
+    const validatedSurface = validateWindowSurface(surface);
+    currentSurface = validatedSurface
+      ? surfaceFitRules.stabilizeWindowSurfaceGeometry(
+        currentSurface,
+        validatedSurface,
+        WINDOW_SURFACE_STABILITY_TOLERANCE_PX
+      )
+      : getTaskbarSurfaceForBounds();
+  } else {
+    currentSurface = surface || getTaskbarSurfaceForBounds();
+  }
   if (currentSurface.type !== "window") {
     windowSurfaceMissingTicks = 0;
   }

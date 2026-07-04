@@ -135,7 +135,8 @@ test("installer no longer writes split auto start preference json", () => {
 test("auto start registry state is persisted into preferences", () => {
   const refreshBody = autoStartControllerSource.match(/function refreshAutoStartCacheAsync\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 
-  assert.match(refreshBody, /if \(!isAutoStartPreferenceLoaded\(\)\) \{[\s\S]*writeAutoStartPreference\(enabled\);/);
+  assert.match(refreshBody, /const shouldSyncPreference = !error && \(details\.supported \|\| !isAutoStartPreferenceLoaded\(\)\);/);
+  assert.match(refreshBody, /if \(shouldSyncPreference\) \{[\s\S]*writeAutoStartPreference\(enabled\);/);
 });
 
 test("pet scale changes persist the preferred scale", () => {

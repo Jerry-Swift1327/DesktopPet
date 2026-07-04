@@ -133,6 +133,68 @@ function validateWindowSurfaceBounds(surface, workArea, displayId, visibleSideGa
   };
 }
 
+function isSameWindowSurface(previousSurface, nextSurface) {
+  if (!previousSurface || !nextSurface || previousSurface.type !== "window" || nextSurface.type !== "window") {
+    return false;
+  }
+  const previousId = previousSurface.sourceWindowId === undefined ? "" : String(previousSurface.sourceWindowId);
+  const nextId = nextSurface.sourceWindowId === undefined ? "" : String(nextSurface.sourceWindowId);
+  return Boolean(previousId && nextId && previousId === nextId && previousSurface.displayId === nextSurface.displayId);
+}
+
+function isWithinPixelTolerance(previousValue, nextValue, tolerancePx) {
+  if (!Number.isFinite(previousValue) || !Number.isFinite(nextValue)) {
+    return false;
+  }
+  return Math.abs(Math.round(previousValue) - Math.round(nextValue)) <= tolerancePx;
+}
+
+function isWindowSurfaceGeometryWithinTolerance(previousSurface, nextSurface, tolerancePx) {
+  const surfaceKeys = ["left", "right", "groundY"];
+  if (!surfaceKeys.every((key) => isWithinPixelTolerance(previousSurface[key], nextSurface[key], tolerancePx))) {
+    return false;
+  }
+
+  const previousBounds = previousSurface.bounds;
+  const nextBounds = nextSurface.bounds;
+  if (!previousBounds || !nextBounds) {
+    return previousBounds === nextBounds;
+  }
+
+  return ["left", "top", "right", "bottom", "width", "height"]
+    .every((key) => isWithinPixelTolerance(previousBounds[key], nextBounds[key], tolerancePx));
+}
+
+function stabilizeWindowSurfaceGeometry(previousSurface, nextSurface, tolerancePx = 0) {
+  const tolerance = Math.max(0, Math.round(Number(tolerancePx) || 0));
+  if (tolerance <= 0 || !isSameWindowSurface(previousSurface, nextSurface)) {
+    return nextSurface;
+  }
+  if (!isWindowSurfaceGeometryWithinTolerance(previousSurface, nextSurface, tolerance)) {
+    return nextSurface;
+  }
+
+  const nextBounds = nextSurface.bounds;
+  const previousBounds = previousSurface.bounds;
+  return {
+    ...nextSurface,
+    bounds: nextBounds && previousBounds
+      ? {
+        ...nextBounds,
+        left: previousBounds.left,
+        top: previousBounds.top,
+        right: previousBounds.right,
+        bottom: previousBounds.bottom,
+        width: previousBounds.width,
+        height: previousBounds.height
+      }
+      : nextBounds,
+    left: previousSurface.left,
+    right: previousSurface.right,
+    groundY: previousSurface.groundY
+  };
+}
+
 // getSurfaceGroundYFromSurface：根据 darwinBottomDock 与可见区间判定 groundY（纯计算，surface 为 falsy 时保持原抛错语义）。
 function getSurfaceGroundYFromSurface(surface, visibleLeft, visibleRight) {
   const dock = surface?.darwinBottomDock;
@@ -155,5 +217,6 @@ module.exports = {
   getTaskbarWalkCenterLimits,
   getSafeWindowXForDirection,
   validateWindowSurfaceBounds,
+  stabilizeWindowSurfaceGeometry,
   getSurfaceGroundYFromSurface
 };

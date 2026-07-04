@@ -62,7 +62,7 @@ function createAutoStartController(context) {
 
   function readAutoStartEnabledAsync(callback) {
     if (!isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
-      callback(false);
+      callback(false, null, { supported: false });
       return;
     }
 
@@ -81,7 +81,11 @@ function createAutoStartController(context) {
       timeout: 1000,
       maxBuffer: 64 * 1024
     }, (error, stdout) => {
-      callback(!error && String(stdout || "").trim() === "1");
+      if (error) {
+        callback(false, error, { supported: true });
+        return;
+      }
+      callback(String(stdout || "").trim() === "1", null, { supported: true });
     });
   }
 
@@ -91,8 +95,9 @@ function createAutoStartController(context) {
     }
 
     autoStartRefreshInFlight = true;
-    readAutoStartEnabledAsync((enabled) => {
-      if (!isAutoStartPreferenceLoaded()) {
+    readAutoStartEnabledAsync((enabled, error, details = {}) => {
+      const shouldSyncPreference = !error && (details.supported || !isAutoStartPreferenceLoaded());
+      if (shouldSyncPreference) {
         setAutoStartPreferenceEnabled(enabled);
         writeAutoStartPreference(enabled);
       }

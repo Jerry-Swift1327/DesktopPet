@@ -37,7 +37,7 @@ test("surface-fit-rules 不引用 nativeImage/窗口/screen/IPC/bubble/运行态
   assert.doesNotMatch(sourceCode, /\bscreen\b/);
 });
 
-test("surface-fit-rules 导出 11 个函数", () => {
+test("surface-fit-rules 导出 12 个函数", () => {
   const expected = [
     "getSurfaceVisibleTopFromGroundY",
     "getGroundedWindowYFromSurface",
@@ -49,12 +49,13 @@ test("surface-fit-rules 导出 11 个函数", () => {
     "getTaskbarWalkCenterLimits",
     "getSafeWindowXForDirection",
     "validateWindowSurfaceBounds",
+    "stabilizeWindowSurfaceGeometry",
     "getSurfaceGroundYFromSurface"
   ];
   for (const fn of expected) {
     assert.equal(typeof surfaceFit[fn], "function", `应导出 ${fn}`);
   }
-  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 11");
+  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 12");
 });
 
 // getSurfaceVisibleTopFromGroundY
@@ -342,6 +343,84 @@ test("validateWindowSurfaceBounds 正常返回含 displayId/left/right/groundY/w
     groundY: 492,
     workArea: { x: 0, y: 0, width: 1920, height: 1080 }
   });
+});
+
+// stabilizeWindowSurfaceGeometry
+test("stabilizeWindowSurfaceGeometry 同一窗口 1px 抖动沿用上一轮几何", () => {
+  const previous = {
+    type: "window",
+    displayId: 1,
+    sourceWindowId: "0x123",
+    title: "Old",
+    bounds: { left: 100, top: 300, right: 700, bottom: 900, width: 600, height: 600 },
+    left: 100,
+    right: 700,
+    groundY: 300
+  };
+  const next = {
+    type: "window",
+    displayId: 1,
+    sourceWindowId: "0x123",
+    title: "New",
+    bounds: { left: 101, top: 301, right: 701, bottom: 901, width: 600, height: 600 },
+    left: 101,
+    right: 701,
+    groundY: 301
+  };
+
+  const result = surfaceFit.stabilizeWindowSurfaceGeometry(previous, next, 1);
+
+  assert.equal(result.title, "New", "非几何元数据应保留最新值");
+  assert.equal(result.left, 100);
+  assert.equal(result.right, 700);
+  assert.equal(result.groundY, 300);
+  assert.deepEqual(result.bounds, previous.bounds);
+});
+
+test("stabilizeWindowSurfaceGeometry 同一窗口真实移动超过阈值时接受新几何", () => {
+  const previous = {
+    type: "window",
+    displayId: 1,
+    sourceWindowId: "0x123",
+    bounds: { left: 100, top: 300, right: 700, bottom: 900, width: 600, height: 600 },
+    left: 100,
+    right: 700,
+    groundY: 300
+  };
+  const next = {
+    type: "window",
+    displayId: 1,
+    sourceWindowId: "0x123",
+    bounds: { left: 104, top: 305, right: 704, bottom: 905, width: 600, height: 600 },
+    left: 104,
+    right: 704,
+    groundY: 305
+  };
+
+  assert.equal(surfaceFit.stabilizeWindowSurfaceGeometry(previous, next, 1), next);
+});
+
+test("stabilizeWindowSurfaceGeometry 不同窗口不沿用上一轮几何", () => {
+  const previous = {
+    type: "window",
+    displayId: 1,
+    sourceWindowId: "0x123",
+    bounds: { left: 100, top: 300, right: 700, bottom: 900, width: 600, height: 600 },
+    left: 100,
+    right: 700,
+    groundY: 300
+  };
+  const next = {
+    type: "window",
+    displayId: 1,
+    sourceWindowId: "0x456",
+    bounds: { left: 101, top: 301, right: 701, bottom: 901, width: 600, height: 600 },
+    left: 101,
+    right: 701,
+    groundY: 301
+  };
+
+  assert.equal(surfaceFit.stabilizeWindowSurfaceGeometry(previous, next, 1), next);
 });
 
 // getSurfaceGroundYFromSurface
