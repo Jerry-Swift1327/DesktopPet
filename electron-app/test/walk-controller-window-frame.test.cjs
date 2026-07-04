@@ -71,10 +71,6 @@ function createWindowWalkHarness() {
       width: 80,
       height: 90
     }),
-    getRenderedGroundedWindowYForSurface: (_surface, _state, _direction, x) => {
-      calls.push({ type: "rendered-ground", x: Math.round(x) });
-      return 100;
-    },
     getRenderedWalkVisibleRectFromWindowX: (x, y) => {
       calls.push({ type: "rendered-rect", x: Math.round(x), y: Math.round(y) });
       return {
@@ -151,17 +147,18 @@ function createWindowWalkHarness() {
   return { controller, calls };
 }
 
-test("window-surface walk uses rendered frame geometry for grounding and clamping", () => {
+test("window-surface walk uses state-stable groundY with rendered frame for X clamping", () => {
   const harness = createWindowWalkHarness();
 
   const result = harness.controller.advanceWalkStep(3, 80);
 
-  assert.equal(result.y, 100);
+  assert.equal(result.y, 90);
   assert.equal(result.x, 103);
   assert.deepEqual(
     harness.calls.map((call) => call.type),
-    ["rendered-ground", "rendered-rect", "rendered-safe", "direct-position"]
+    ["rendered-rect", "rendered-safe", "direct-position"]
   );
+  assert.equal(harness.calls.some((call) => call.type === "rendered-ground"), false);
   assert.equal(harness.calls.some((call) => call.type === "state-safe"), false);
   assert.equal(harness.calls.some((call) => call.type === "state-position"), false);
 });

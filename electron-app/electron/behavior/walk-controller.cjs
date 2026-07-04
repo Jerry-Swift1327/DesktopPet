@@ -44,7 +44,6 @@ function createWalkController(context) {
     resetToTaskbarSurface,
     getGroundedWindowYForSurface,
     getWalkVisibleRectFromWindowX,
-    getRenderedGroundedWindowYForSurface,
     getRenderedWalkVisibleRectFromWindowX,
     getWindowXForVisibleEdge,
     getSafeWindowXForDirection,
@@ -359,12 +358,11 @@ function createWalkController(context) {
     }
     setLastWalkSurfaceSignature(nextSurfaceSignature);
     const useRenderedFrameGeometry = activeSurface?.type === "window"
-      && typeof getRenderedGroundedWindowYForSurface === "function"
       && typeof getRenderedWalkVisibleRectFromWindowX === "function"
       && typeof getRenderedSafeWindowXForDirection === "function";
-    const groundedY = useRenderedFrameGeometry
-      ? getRenderedGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection(), bounds.x)
-      : getGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection());
+    // window surface 的 groundY 不依赖可见区间（无 darwinBottomDock），用 state 级 stable bottom
+    // 计算 groundedY 可避免逐帧 bottom 抖动；X 方向仍用 rendered 帧精确贴边。
+    const groundedY = getGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection());
     if (activeSurface?.type !== "window") {
       return advanceTaskbarWalkStep({
         frameStep,
