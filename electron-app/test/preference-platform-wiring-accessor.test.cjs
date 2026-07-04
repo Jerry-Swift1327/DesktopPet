@@ -66,7 +66,8 @@ test("main.cjs 平台注册表读写函数委托 autoStartController", () => {
     { name: "readAutoStartEnabledSync", delegate: "autoStartController.readAutoStartEnabledSync" },
     { name: "readAutoStartEnabledAsync", delegate: "autoStartController.readAutoStartEnabledAsync" },
     { name: "setAutoStartEnabled", delegate: "autoStartController.setAutoStartEnabled" },
-    { name: "refreshAutoStartCacheAsync", delegate: "autoStartController.refreshAutoStartCacheAsync" }
+    { name: "refreshAutoStartCacheAsync", delegate: "autoStartController.refreshAutoStartCacheAsync" },
+    { name: "syncAutoStartPreferenceFromRegistrySync", delegate: "autoStartController.syncAutoStartPreferenceFromRegistrySync" }
   ];
   for (const { name, delegate } of pairs) {
     const re = new RegExp("function\\s+" + name + "\\s*\\([^)]*\\)\\s*\\{[^}]*" + delegate.replace(/\./g, "\\.") + "[^}]*\\}");

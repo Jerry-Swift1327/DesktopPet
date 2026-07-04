@@ -7,6 +7,8 @@ function createMockController({
   preferenceLoaded = true,
   execError = null,
   stdout = "1",
+  syncError = null,
+  syncStdout = "1",
   isPackaged = true,
   platform = "win32"
 } = {}) {
@@ -19,7 +21,12 @@ function createMockController({
     execFile: (_file, _args, _options, callback) => {
       callback(execError, stdout);
     },
-    execFileSync: () => "",
+    execFileSync: () => {
+      if (syncError) {
+        throw syncError;
+      }
+      return syncStdout;
+    },
     petRuntimeConfig: { autoStartRegistryKey: "ChongbanDesktopPet-test" },
     WINDOWS_STARTUP_RUN_KEY: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
     isAutoStartPreferenceLoaded: () => preferenceLoaded,
@@ -64,4 +71,29 @@ test("refreshAutoStartCacheAsync does not overwrite preferences when registry re
   assert.deepEqual(mock.preferenceSets, []);
   assert.deepEqual(mock.preferenceWrites, []);
   assert.equal(mock.getMenuConfigSends(), 1);
+});
+
+test("syncAutoStartPreferenceFromRegistrySync persists registry state before first menu config", () => {
+  const mock = createMockController({ syncStdout: "1" });
+
+  const didSync = mock.controller.syncAutoStartPreferenceFromRegistrySync();
+
+  assert.equal(didSync, true);
+  assert.deepEqual(mock.preferenceSets, [true]);
+  assert.deepEqual(mock.preferenceWrites, [true]);
+  assert.equal(mock.getMenuConfigSends(), 0);
+});
+
+test("syncAutoStartPreferenceFromRegistrySync does not overwrite preferences when registry read fails", () => {
+  const mock = createMockController({
+    syncError: new Error("registry read failed"),
+    syncStdout: ""
+  });
+
+  const didSync = mock.controller.syncAutoStartPreferenceFromRegistrySync();
+
+  assert.equal(didSync, false);
+  assert.deepEqual(mock.preferenceSets, []);
+  assert.deepEqual(mock.preferenceWrites, []);
+  assert.equal(mock.getMenuConfigSends(), 0);
 });

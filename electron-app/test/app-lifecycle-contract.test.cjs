@@ -41,6 +41,7 @@ test("main.cjs onReady handler 包含启动序列", () => {
   const expectedCalls = [
     "readPetStats",
     "readAutoStartPreference",
+    "syncAutoStartPreferenceFromRegistrySync",
     "readWindowRoamPreference",
     "readEyeTrackingPreference",
     "readPetScalePreference",
@@ -168,10 +169,16 @@ test("onReady handler 启动序列顺序正确", () => {
   assert.ok(onReadyBlock.length > 0, "应能提取 runAppReadyStartupSequence 函数体");
 
   const idxReadPetScalePreference = onReadyBlock.indexOf("readPetScalePreference");
+  const idxReadAutoStartPreference = onReadyBlock.indexOf("readAutoStartPreference");
+  const idxSyncAutoStartPreferenceFromRegistrySync = onReadyBlock.indexOf("syncAutoStartPreferenceFromRegistrySync");
   const idxCreatePetWindow = onReadyBlock.indexOf("createPetWindow");
   const idxRememberHomeDisplay = onReadyBlock.indexOf("rememberHomeDisplay");
   const idxStartHoverPolling = onReadyBlock.indexOf("startHoverPolling");
   const idxStartWindowSurfacePolling = onReadyBlock.indexOf("startWindowSurfacePolling");
+
+  assert.ok(idxReadAutoStartPreference >= 0 && idxSyncAutoStartPreferenceFromRegistrySync >= 0, "auto-start preference sync should exist");
+  assert.ok(idxReadAutoStartPreference < idxSyncAutoStartPreferenceFromRegistrySync, "readAutoStartPreference should run before syncAutoStartPreferenceFromRegistrySync");
+  assert.ok(idxSyncAutoStartPreferenceFromRegistrySync < idxCreatePetWindow, "syncAutoStartPreferenceFromRegistrySync should run before createPetWindow");
 
   assert.ok(idxReadPetScalePreference >= 0 && idxCreatePetWindow >= 0, "readPetScalePreference 和 createPetWindow 应存在");
   assert.ok(idxReadPetScalePreference < idxCreatePetWindow, "readPetScalePreference 应在 createPetWindow 之前");

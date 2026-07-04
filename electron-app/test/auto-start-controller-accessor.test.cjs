@@ -74,7 +74,7 @@ test("controller 不导出 buildAutoStartSummary/canToggleAutoStart", () => {
   assert.doesNotMatch(exportBlock, /canToggleAutoStart/, "不应导出 canToggleAutoStart");
 });
 
-test("controller 导出 6 个函数", () => {
+test("controller 导出 7 个函数", () => {
   const lastReturnIdx = controllerSource.lastIndexOf("return {");
   const exportBlock = lastReturnIdx >= 0 ? controllerSource.slice(lastReturnIdx) : "";
   const expectedExports = [
@@ -83,6 +83,7 @@ test("controller 导出 6 个函数", () => {
     "readAutoStartEnabledSync",
     "readAutoStartEnabledAsync",
     "refreshAutoStartCacheAsync",
+    "syncAutoStartPreferenceFromRegistrySync",
     "setAutoStartEnabled"
   ];
   for (const name of expectedExports) {
@@ -101,13 +102,14 @@ test("main.cjs 不再直接声明 autoStartEnabledCache/autoStartRefreshInFlight
   assert.doesNotMatch(mainStripped, /let\s+autoStartPreferenceLoaded\b/, "不应声明 autoStartPreferenceLoaded");
 });
 
-test("main.cjs 5 个 function 为薄包装委托 autoStartController", () => {
+test("main.cjs 6 个 function 为薄包装委托 autoStartController", () => {
   const pairs = [
     { name: "getAutoStartCommand", delegate: "autoStartController.getAutoStartCommand" },
     { name: "readAutoStartEnabledSync", delegate: "autoStartController.readAutoStartEnabledSync" },
     { name: "readAutoStartEnabledAsync", delegate: "autoStartController.readAutoStartEnabledAsync" },
     { name: "setAutoStartEnabled", delegate: "autoStartController.setAutoStartEnabled" },
-    { name: "refreshAutoStartCacheAsync", delegate: "autoStartController.refreshAutoStartCacheAsync" }
+    { name: "refreshAutoStartCacheAsync", delegate: "autoStartController.refreshAutoStartCacheAsync" },
+    { name: "syncAutoStartPreferenceFromRegistrySync", delegate: "autoStartController.syncAutoStartPreferenceFromRegistrySync" }
   ];
   for (const { name, delegate } of pairs) {
     const re = new RegExp("function\\s+" + name + "\\s*\\([^)]*\\)\\s*\\{[^}]*" + delegate.replace(/\./g, "\\.") + "[^}]*\\}");

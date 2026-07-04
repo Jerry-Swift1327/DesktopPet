@@ -1498,6 +1498,10 @@ function refreshAutoStartCacheAsync() {
   return autoStartController.refreshAutoStartCacheAsync();
 }
 
+function syncAutoStartPreferenceFromRegistrySync() {
+  return autoStartController.syncAutoStartPreferenceFromRegistrySync();
+}
+
 function setAutoStartEnabled(enabled) {
   return autoStartController.setAutoStartEnabled(enabled);
 }
@@ -3681,6 +3685,7 @@ function runAppReadyStartupSequence() {
   log("app ready");
   readPetStats();
   readAutoStartPreference();
+  syncAutoStartPreferenceFromRegistrySync();
   readWindowRoamPreference();
   readEyeTrackingPreference();
   readPetScalePreference();

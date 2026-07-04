@@ -33,9 +33,9 @@ function createAutoStartController(context) {
     return process.platform === "win32" && app.isPackaged;
   }
 
-  function readAutoStartEnabledSync() {
+  function readAutoStartRegistryStateSync() {
     if (!isAutoStartSupported() || !petRuntimeConfig.autoStartRegistryKey) {
-      return false;
+      return { enabled: false, error: null, supported: false };
     }
 
     try {
@@ -54,10 +54,14 @@ function createAutoStartController(context) {
         timeout: 1000,
         maxBuffer: 64 * 1024
       });
-      return output.trim() === "1";
-    } catch {
-      return false;
+      return { enabled: output.trim() === "1", error: null, supported: true };
+    } catch (error) {
+      return { enabled: false, error, supported: true };
     }
+  }
+
+  function readAutoStartEnabledSync() {
+    return readAutoStartRegistryStateSync().enabled;
   }
 
   function readAutoStartEnabledAsync(callback) {
@@ -106,6 +110,17 @@ function createAutoStartController(context) {
     });
   }
 
+  function syncAutoStartPreferenceFromRegistrySync() {
+    const { enabled, error, supported } = readAutoStartRegistryStateSync();
+    if (!supported || error) {
+      return false;
+    }
+
+    setAutoStartPreferenceEnabled(enabled);
+    writeAutoStartPreference(enabled);
+    return true;
+  }
+
   function setAutoStartEnabled(enabled) {
     if (enabled) {
       execFileSync("reg.exe", [
@@ -147,6 +162,7 @@ function createAutoStartController(context) {
     readAutoStartEnabledSync,
     readAutoStartEnabledAsync,
     refreshAutoStartCacheAsync,
+    syncAutoStartPreferenceFromRegistrySync,
     setAutoStartEnabled
   };
 }

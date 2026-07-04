@@ -109,6 +109,18 @@ test("pet scale preference is loaded before the pet window is created", () => {
   assert.ok(idxReadPetScalePreference < idxCreatePetWindow, "readPetScalePreference 应在 createPetWindow 之前");
 });
 
+test("auto start registry state is synced before the pet window is created", () => {
+  const startupFnBody = mainSource.match(/function runAppReadyStartupSequence\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.ok(startupFnBody.length > 0, "应能提取 runAppReadyStartupSequence 函数体");
+
+  const idxReadAutoStartPreference = startupFnBody.indexOf("readAutoStartPreference");
+  const idxSyncAutoStartPreferenceFromRegistrySync = startupFnBody.indexOf("syncAutoStartPreferenceFromRegistrySync");
+  const idxCreatePetWindow = startupFnBody.indexOf("createPetWindow");
+  assert.ok(idxReadAutoStartPreference >= 0 && idxSyncAutoStartPreferenceFromRegistrySync >= 0, "auto-start 启动同步应存在");
+  assert.ok(idxReadAutoStartPreference < idxSyncAutoStartPreferenceFromRegistrySync, "应先读偏好再用注册表真实状态同步");
+  assert.ok(idxSyncAutoStartPreferenceFromRegistrySync < idxCreatePetWindow, "auto-start 注册表状态应在 createPetWindow 前同步");
+});
+
 test("split legacy preference files can migrate into preferences", () => {
   const scalePreferenceBody = preferencesStoreSource.match(/function readPetScalePreference\(\) \{([\s\S]*?)function writePetScalePreference/)?.[1] || "";
 
