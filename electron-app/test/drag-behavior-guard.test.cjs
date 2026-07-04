@@ -363,13 +363,30 @@ test("dock-controller 导出 applyDockSurfaceAfterDrag", () => {
 test("main.cjs settlePetInPlaceAfterDrag keeps the drag release position", () => {
   const body = extractFunctionBody(mainSource, "settlePetInPlaceAfterDrag");
   assert.ok(body, "settlePetInPlaceAfterDrag function body should be extractable");
-  assert.match(body, /resetToTaskbarSurface\(/);
+  assert.match(body, /createFloatingSurfaceForBounds\(/);
+  assert.match(body, /setCurrentSurface\(/);
   assert.match(body, /setPetWindowPosition\(next\.x,\s*next\.y\)/);
   assert.match(body, /syncWalkTrackX\(next\.x\)/);
   assert.doesNotMatch(body, /groundPetToSurface\(/);
   assert.doesNotMatch(body, /restoreTaskbarRunwayFromPoint\(/);
+  assert.doesNotMatch(body, /resetToTaskbarSurface\(/);
 });
 
 test("dock-controller settles in place when drag release misses window surfaces", () => {
   assert.match(dockSource, /settlePetInPlaceAfterDrag\(bounds,\s*diagnostic\.reason \|\| "snap-missed"\)/);
+});
+
+test("main.cjs getCurrentSurface preserves floating surface", () => {
+  const body = extractFunctionBody(mainSource, "getCurrentSurface");
+  assert.ok(body, "getCurrentSurface function body should be extractable");
+  assert.match(body, /currentSurface\?\.type === "floating"/);
+  assert.match(body, /return currentSurface/);
+});
+
+test("main.cjs createFloatingSurfaceForBounds records floating ground", () => {
+  const body = extractFunctionBody(mainSource, "createFloatingSurfaceForBounds");
+  assert.ok(body, "createFloatingSurfaceForBounds function body should be extractable");
+  assert.match(body, /type:\s*"floating"/);
+  assert.match(body, /groundY:\s*Math\.round\(visibleRect\.y \+ visibleRect\.height\)/);
+  assert.doesNotMatch(body, /darwinBottomDock/);
 });

@@ -1751,6 +1751,9 @@ function validateWindowSurface(surface = currentSurface) {
 }
 
 function getCurrentSurface() {
+  if (currentSurface?.type === "floating") {
+    return currentSurface;
+  }
   const validWindowSurface = validateWindowSurface(currentSurface);
   if (validWindowSurface) {
     currentSurface = validWindowSurface;
@@ -1776,6 +1779,22 @@ function setCurrentSurface(surface) {
 function resetToTaskbarSurface(bounds = getPetWindow()?.getBounds()) {
   const surface = getTaskbarSurfaceForBounds(bounds);
   return setCurrentSurface(surface);
+}
+
+function createFloatingSurfaceForBounds(bounds, stateId = activeState, direction = walkDirection) {
+  if (!bounds) {
+    return null;
+  }
+  const baseSurface = getTaskbarSurfaceForBounds(bounds);
+  const visibleRect = getVisiblePetRectFromBounds(bounds, stateId, direction);
+  return {
+    type: "floating",
+    displayId: baseSurface.displayId,
+    left: baseSurface.left,
+    right: baseSurface.right,
+    groundY: Math.round(visibleRect.y + visibleRect.height),
+    workArea: baseSurface.workArea
+  };
 }
 
 function getSurfaceWorkArea(surface = getCurrentSurface()) {
@@ -3528,10 +3547,16 @@ function fallbackToTaskbarAfterDrag(bounds, reason = "fallback") {
 
 function settlePetInPlaceAfterDrag(bounds, reason = "fallback") {
   windowDockHoverSuppressedUntil = Date.now() + WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS;
-  const surface = resetToTaskbarSurface(bounds);
   taskbarWalkRunway = null;
   walkTrackX = null;
   const next = clampPetWindowPosition(bounds.x, bounds.y);
+  const nextBounds = {
+    x: next.x,
+    y: next.y,
+    width: getPetWindowWidth(),
+    height: getPetWindowHeight()
+  };
+  const surface = setCurrentSurface(createFloatingSurfaceForBounds(nextBounds));
   setPetWindowPosition(next.x, next.y);
   syncWalkTrackX(next.x);
   if (WINDOW_DOCK_DEBUG) {
