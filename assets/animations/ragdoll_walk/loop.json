@@ -11,13 +11,15 @@
     720,
     720
   ],
-  "frameCount": 168,
+  "frameCount": 125,
   "loopStart": 0,
-  "loopEnd": 167,
-  "sourceLoopStart": 0,
-  "sourceLoopEnd": 167,
-  "score": 0.0,
-  "loopSelection": "full",
+  "loopEnd": 124,
+  "sourceLoopStart": 2,
+  "sourceLoopEnd": 126,
+  "score": 0.006915,
+  "loopSelection": "long",
+  "qualityScore": 0.005844,
+  "targetLength": 126,
   "trimGroundAlpha": 128,
   "trimGroundPadding": 1
 }

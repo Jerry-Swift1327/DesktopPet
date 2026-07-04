@@ -11,6 +11,10 @@
     960,
     960
   ],
+  "alignReferenceAction": "ragdoll_squat",
+  "alignReferenceCenterX": false,
+  "alignReferenceBottom": true,
+  "alignReferenceMaxShift": 32,
   "frameCount": 167,
   "loopStart": 0,
   "loopEnd": 166,
@@ -18,6 +22,6 @@
   "sourceLoopEnd": 166,
   "score": 0.0,
   "loopSelection": "full",
-  "trimGroundAlpha": 128,
+  "trimGroundAlpha": 200,
   "trimGroundPadding": 1
 }
