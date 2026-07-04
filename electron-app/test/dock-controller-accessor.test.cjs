@@ -257,3 +257,9 @@ test("dock-controller 保留关键控制流标记确保逻辑未丢失", () => {
   assert.match(controllerSource, /empty-cache/);
   assert.match(controllerSource, /no-window-candidates/);
 });
+
+test("dock-controller injects and uses settlePetInPlaceAfterDrag", () => {
+  const contextBlock = controllerSource.match(/const \{([\s\S]*?)\} = context;/)?.[1] || "";
+  assert.match(contextBlock, /settlePetInPlaceAfterDrag/);
+  assert.match(controllerSource, /settlePetInPlaceAfterDrag\(bounds,/);
+});

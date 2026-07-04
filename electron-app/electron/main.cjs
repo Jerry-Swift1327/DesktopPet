@@ -1246,6 +1246,7 @@ const dockController = createDockController({
   parseWindowHwnd,
   diagnoseDockTargetFromCache,
   fallbackToTaskbarAfterDrag,
+  settlePetInPlaceAfterDrag,
   findCandidateByHwnd,
   buildWindowSurfaceFromItem,
   getVisiblePetRectFromBounds,
@@ -3520,6 +3521,19 @@ function fallbackToTaskbarAfterDrag(bounds, reason = "fallback") {
   }
   if (WINDOW_DOCK_DEBUG) {
     log(`dock-after-drag fallback reason=${reason} surface=${surface.type}`);
+  }
+}
+
+function settlePetInPlaceAfterDrag(bounds, reason = "fallback") {
+  windowDockHoverSuppressedUntil = Date.now() + WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS;
+  const surface = resetToTaskbarSurface(bounds);
+  taskbarWalkRunway = null;
+  walkTrackX = null;
+  const next = clampPetWindowPosition(bounds.x, bounds.y);
+  setPetWindowPosition(next.x, next.y);
+  syncWalkTrackX(next.x);
+  if (WINDOW_DOCK_DEBUG) {
+    log(`dock-after-drag settle-in-place reason=${reason} surface=${surface.type}`);
   }
 }
 

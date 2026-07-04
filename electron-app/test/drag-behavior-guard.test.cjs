@@ -359,3 +359,17 @@ test("dock-controller 导出 dockPetAfterDrag", () => {
 test("dock-controller 导出 applyDockSurfaceAfterDrag", () => {
   assert.match(dockSource, /applyDockSurfaceAfterDrag/);
 });
+
+test("main.cjs settlePetInPlaceAfterDrag keeps the drag release position", () => {
+  const body = extractFunctionBody(mainSource, "settlePetInPlaceAfterDrag");
+  assert.ok(body, "settlePetInPlaceAfterDrag function body should be extractable");
+  assert.match(body, /resetToTaskbarSurface\(/);
+  assert.match(body, /setPetWindowPosition\(next\.x,\s*next\.y\)/);
+  assert.match(body, /syncWalkTrackX\(next\.x\)/);
+  assert.doesNotMatch(body, /groundPetToSurface\(/);
+  assert.doesNotMatch(body, /restoreTaskbarRunwayFromPoint\(/);
+});
+
+test("dock-controller settles in place when drag release misses window surfaces", () => {
+  assert.match(dockSource, /settlePetInPlaceAfterDrag\(bounds,\s*diagnostic\.reason \|\| "snap-missed"\)/);
+});

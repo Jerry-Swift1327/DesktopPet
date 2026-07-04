@@ -30,6 +30,7 @@ function createDockController(context) {
     parseWindowHwnd,
     diagnoseDockTargetFromCache,
     fallbackToTaskbarAfterDrag,
+    settlePetInPlaceAfterDrag,
     findCandidateByHwnd,
     buildWindowSurfaceFromItem,
     getVisiblePetRectFromBounds,
@@ -158,7 +159,7 @@ function createDockController(context) {
           }
           clearWindowRoamSuppression();
         } else {
-          fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
+          settlePetInPlaceAfterDrag(bounds, diagnostic.reason || "snap-missed");
         }
       } else {
         if (getWindowRoamEnabled()) {
@@ -167,10 +168,10 @@ function createDockController(context) {
             : null;
           markManualTaskbarHold(previousSurface);
         }
-        fallbackToTaskbarAfterDrag(bounds, diagnostic.reason || "snap-missed");
+        settlePetInPlaceAfterDrag(bounds, diagnostic.reason || "snap-missed");
       }
     } catch (error) {
-      fallbackToTaskbarAfterDrag(bounds, `dock-exception:${error.message}`);
+      settlePetInPlaceAfterDrag(bounds, `dock-exception:${error.message}`);
       log(`dock-after-drag exception: ${error.stack || error.message}`);
     } finally {
       if (!retryScheduled) {
