@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld("desktopPet", {
   hoverPanelLeave: () => ipcRenderer.send("pet:hover-panel-leave"),
   triggerHoverAction: (state) => ipcRenderer.send("pet:hover-action", state),
   updateRenderedFrame: (info) => ipcRenderer.send("pet:rendered-frame", info),
-  setState: (state) => ipcRenderer.send("pet:set-state", state),
+  setState: (state, options) => ipcRenderer.send("pet:set-state", state, options),
   wakeSleepingPet: () => ipcRenderer.send("pet:wake-sleeping-pet"),
   completeOneShot: (state) => ipcRenderer.send("pet:complete-one-shot", state),
   advanceWalkStep: (frameStep, elapsedMs) => ipcRenderer.invoke("pet:advance-walk-step", frameStep, elapsedMs),

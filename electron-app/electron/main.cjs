@@ -128,6 +128,7 @@ const {
   HOVER_INTENT_DELAY_MS,
   TASKBAR_WALK_HOVER_INTENT_DELAY_MS,
   HOVER_POLL_INTERVAL_MS,
+  PET_CLICK_HOVER_SUPPRESS_MS,
   WINDOW_SURFACE_POLL_INTERVAL_MS,
   WINDOW_SURFACE_HEAVY_RECHECK_MS,
   WINDOW_SURFACE_CACHE_MS,
@@ -175,6 +176,7 @@ const {
   IDLE_GREETING_DELAY_MS,
   TABBY_YAWN_IDLE_MS,
   TABBY_SLEEP_POSE_MS,
+  RAGDOLL_YAWN_SLEEP_LOOP_MAX_MS,
   INTIMACY_DECAY_INTERVAL_MS,
   VISIBLE_ALPHA_THRESHOLD,
   PET_STAT_MAX,
@@ -381,6 +383,7 @@ let randomGreetingTimer = null;
 let tabbyIdlePollTimer = null;
 let tabbySleepPoseTimer = null;
 let tabbySleepPoseSwitchAt = 0;
+let ragdollYawnSleepLoopTimer = null;
 let idleGreetingPool = [];
 let lastUserOperationAt = Date.now();
 let lastTabbyUserOperationAt = Date.now();
@@ -393,6 +396,7 @@ let lastWalkScaleApplyAt = 0;
 let lastWalkSurfaceSignature = "";
 let windowDockInProgress = false;
 let windowDockHoverSuppressedUntil = 0;
+let petClickHoverSuppressedUntil = 0;
 const statsFile = path.join(variantDataRoot, "pet-stats.json");
 const legacyStatsFile = petRuntimeConfig.variant === basePetVariant ? path.join(userDataRoot, "pet-stats.json") : "";
 const logDir = path.join(userDataRoot, "logs");
@@ -2106,6 +2110,13 @@ function clearTabbySleepPoseTimer() {
   tabbySleepPoseSwitchAt = 0;
 }
 
+function clearRagdollYawnSleepLoopTimer() {
+  if (ragdollYawnSleepLoopTimer) {
+    clearTimeout(ragdollYawnSleepLoopTimer);
+    ragdollYawnSleepLoopTimer = null;
+  }
+}
+
 function scheduleTabbySleepPose(state) {
   if (!petRuntimeConfig.features.sleepPoseSwitch || activeState !== state || (state !== STATE_YAWN && state !== STATE_SLEEP) || tabbySleepPoseTimer) {
     return;
@@ -2117,6 +2128,18 @@ function scheduleTabbySleepPose(state) {
     tabbySleepPoseSwitchAt = 0;
     setState(activeState === STATE_SLEEP ? STATE_YAWN : STATE_SLEEP, false);
   }, TABBY_SLEEP_POSE_MS);
+}
+
+function scheduleRagdollYawnSleepLoopTimeout(state) {
+  if (petRuntimeConfig.variant !== "pet2609" || activeState !== state || state !== STATE_YAWN || ragdollYawnSleepLoopTimer) {
+    return;
+  }
+  ragdollYawnSleepLoopTimer = setTimeout(() => {
+    ragdollYawnSleepLoopTimer = null;
+    if (petRuntimeConfig.variant === "pet2609" && activeState === STATE_YAWN) {
+      setState(STATE_WALK, false);
+    }
+  }, RAGDOLL_YAWN_SLEEP_LOOP_MAX_MS);
 }
 
 function recordUserOperation({ scheduleGreeting = true } = {}) {
@@ -2698,11 +2721,23 @@ function getWindowDockHoverSuppressionMs() {
   return Math.max(0, windowDockHoverSuppressedUntil - Date.now());
 }
 
+function getPetClickHoverSuppressionMs() {
+  return Math.max(0, petClickHoverSuppressedUntil - Date.now());
+}
+
+function suppressHoverAfterPetClick() {
+  petClickHoverSuppressedUntil = Date.now() + PET_CLICK_HOVER_SUPPRESS_MS;
+  setIsPointerOverPet(false);
+  clearHoverIntent();
+  hideHoverPanel();
+}
+
 function shouldSuppressHoverPanel() {
   return isStartupBubbleVisible()
     || windowDockInProgress
     || getBubbleHoverSuppressionMs() > 0
     || getWindowDockHoverSuppressionMs() > 0
+    || getPetClickHoverSuppressionMs() > 0
     || (petRuntimeConfig.features.wakeHiss && activeState === STATE_HISS)
     || isCustomizationVisible()
     || activeState === STATE_SHAKE;
@@ -2838,7 +2873,10 @@ function updateRenderedFrame(info) {
     const tailLoopStart = readMetadata(getState(renderedFrameState).metadata).tailLoopStart;
     if (Number.isInteger(tailLoopStart) && renderedFrameIndex >= tailLoopStart) {
       scheduleTabbySleepPose(STATE_YAWN);
+      scheduleRagdollYawnSleepLoopTimeout(STATE_YAWN);
     }
+  } else {
+    clearRagdollYawnSleepLoopTimer();
   }
 }
 
@@ -2872,7 +2910,11 @@ function setWalkDirection(nextDirection) {
 }
 
 function setState(state, shouldRecordInteraction = true) {
-  return stateController.setState(state, shouldRecordInteraction);
+  const result = stateController.setState(state, shouldRecordInteraction);
+  if (activeState !== STATE_YAWN) {
+    clearRagdollYawnSleepLoopTimer();
+  }
+  return result;
 }
 
 function completeOneShotState(state) {
@@ -3556,6 +3598,7 @@ function runAppBeforeQuitCleanupSequence() {
   clearStartupBubbleTimer();
   clearHoverHideTimer();
   clearMenuHideTimer();
+  clearRagdollYawnSleepLoopTimer();
   if (randomGreetingTimer) {
     clearTimeout(randomGreetingTimer);
     randomGreetingTimer = null;
@@ -3681,8 +3724,11 @@ function handleRendererDiagnostic(_event, message) {
   }
 }
 
-function handleSetState(_event, state) {
+function handleSetState(_event, state, options = {}) {
   if (typeof state === "string") {
+    if (options && typeof options === "object" && options.suppressHover) {
+      suppressHoverAfterPetClick();
+    }
     setState(state);
   }
 }

@@ -218,23 +218,13 @@ async function renderPetWindow() {
       clientY: event.clientY,
       sleep: isSleepStage()
     };
-    if (pointerDown.sleep) {
-      return;
-    }
-    localDragging = true;
-    window.desktopPet.dragStart({
-      screenX: event.screenX,
-      screenY: event.screenY,
-      clientX: event.clientX,
-      clientY: event.clientY
-    });
   });
 
   window.addEventListener("mousemove", (event) => {
-    if (!localDragging && !pointerDown?.sleep) {
+    if (!localDragging && !pointerDown) {
       return;
     }
-    if (!localDragging && pointerDown?.sleep) {
+    if (!localDragging && pointerDown) {
       if (Math.hypot(event.screenX - pointerDown.screenX, event.screenY - pointerDown.screenY) <= SLEEP_WAKE_CLICK_MAX_DISTANCE) {
         return;
       }
@@ -260,6 +250,18 @@ async function renderPetWindow() {
       ) {
         event.preventDefault();
         window.desktopPet.wakeSleepingPet();
+      }
+      if (
+        !down?.sleep
+        && event.target.closest(".pet-sprite")
+        && performance.now() - down.at <= SLEEP_WAKE_CLICK_MAX_MS
+        && Math.hypot(event.screenX - down.screenX, event.screenY - down.screenY) <= SLEEP_WAKE_CLICK_MAX_DISTANCE
+      ) {
+        const nextState = pickRandomClickAction();
+        if (nextState) {
+          event.preventDefault();
+          window.desktopPet.setState(nextState, { suppressHover: true });
+        }
       }
       return;
     }
@@ -297,6 +299,18 @@ async function renderPetWindow() {
 
   function getStateById(stateId) {
     return config.states.find((state) => state.id === stateId) || config.states[0];
+  }
+
+  function pickRandomClickAction() {
+    const actionOrder = Array.isArray(config.actionOrder) && config.actionOrder.length
+      ? config.actionOrder
+      : config.states.map((state) => state.id);
+    const availableStates = new Set(config.states.map((state) => state.id));
+    const candidates = actionOrder.filter((stateId) => stateId && stateId !== activeState && availableStates.has(stateId));
+    if (candidates.length === 0) {
+      return "";
+    }
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
   function getFirstFrameForState(state) {
