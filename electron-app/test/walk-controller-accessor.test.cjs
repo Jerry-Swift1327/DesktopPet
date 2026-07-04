@@ -150,10 +150,14 @@ test("walk-controller 保留关键分支标记确保逻辑未丢失", () => {
   assert.match(controllerSource, /edgeFlip=/);
   assert.match(controllerSource, /left-threshold/);
   assert.match(controllerSource, /right-threshold/);
-  assert.match(controllerSource, /left-stuck/);
-  assert.match(controllerSource, /right-stuck/);
+  // left-stuck / right-stuck 原位于窗口分支 isTaskbarSurface 死分支内（该标志在窗口路径恒为
+  // false，非 window 表面已提前走 advanceTaskbarWalkStep），Phase 2 重构移除该死分支；
+  // 此处保留 left-center-stuck / right-center-stuck（taskbar 路径，可达）。
   assert.match(controllerSource, /left-center-stuck/);
   assert.match(controllerSource, /right-center-stuck/);
+  // 守护：窗口分支不得再引入 isTaskbarSurface / preserveRightEdgeX 死代码
+  assert.doesNotMatch(controllerSource, /isTaskbarSurface/);
+  assert.doesNotMatch(controllerSource, /preserveRightEdgeX/);
 });
 
 test("walk-controller 保留 6 个导出函数", () => {

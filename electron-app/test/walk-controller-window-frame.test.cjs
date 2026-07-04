@@ -3,8 +3,8 @@ const assert = require("node:assert/strict");
 
 const { createWalkController } = require("../electron/behavior/walk-controller.cjs");
 
-function createWindowWalkHarness() {
-  let bounds = { x: 90, y: 0, width: 180, height: 180 };
+function createWindowWalkHarness({ initialX = 90 } = {}) {
+  let bounds = { x: initialX, y: 0, width: 180, height: 180 };
   let walkTrackX = null;
   let walkDirection = 1;
   let lastWalkStepAt = 0;
@@ -71,29 +71,10 @@ function createWindowWalkHarness() {
       width: 80,
       height: 90
     }),
-    getRenderedWalkVisibleRectFromWindowX: (x, y) => {
-      calls.push({ type: "rendered-rect", x: Math.round(x), y: Math.round(y) });
-      return {
-        x: Math.round(x + 40),
-        y: Math.round(y + 50),
-        width: 60,
-        height: 80
-      };
-    },
     getWindowXForVisibleEdge: () => 0,
     getSafeWindowXForDirection: () => {
       calls.push({ type: "state-safe" });
       return 999;
-    },
-    getRenderedSafeWindowXForDirection: (x, _surface, _state, _direction, y) => {
-      calls.push({ type: "rendered-safe", x: Math.round(x), y: Math.round(y) });
-      return Math.round(x + 3);
-    },
-    setWalkWindowPositionDirect: (x, y) => {
-      calls.push({ type: "direct-position", x: Math.round(x), y: Math.round(y) });
-      walkTrackX = Math.round(x);
-      bounds = { ...bounds, x: Math.round(x), y: Math.round(y) };
-      return bounds.x;
     },
     setWalkWindowPosition: (x, y) => {
       calls.push({ type: "state-position", x: Math.round(x), y: Math.round(y) });
@@ -147,18 +128,33 @@ function createWindowWalkHarness() {
   return { controller, calls };
 }
 
-test("window-surface walk uses state-stable groundY with rendered frame for X clamping", () => {
+test("window-surface walk uses state-stable geometry for Y grounding and X clamping", () => {
   const harness = createWindowWalkHarness();
 
   const result = harness.controller.advanceWalkStep(3, 80);
 
   assert.equal(result.y, 90);
-  assert.equal(result.x, 103);
+  assert.equal(result.x, 100);
   assert.deepEqual(
     harness.calls.map((call) => call.type),
-    ["rendered-rect", "rendered-safe", "direct-position"]
+    ["state-position"]
   );
   assert.equal(harness.calls.some((call) => call.type === "rendered-ground"), false);
-  assert.equal(harness.calls.some((call) => call.type === "state-safe"), false);
-  assert.equal(harness.calls.some((call) => call.type === "state-position"), false);
+  assert.equal(harness.calls.some((call) => call.type === "rendered-rect"), false);
+  assert.equal(harness.calls.some((call) => call.type === "rendered-safe"), false);
+  assert.equal(harness.calls.some((call) => call.type === "direct-position"), false);
+});
+
+test("window-surface walk mirrors direction when reaching right edge threshold", () => {
+  const harness = createWindowWalkHarness({ initialX: 150 });
+
+  const result = harness.controller.advanceWalkStep(3, 80);
+
+  assert.equal(result.direction, -1);
+  assert.equal(result.y, 90);
+  assert.equal(result.x, 0);
+  assert.deepEqual(
+    harness.calls.map((call) => call.type),
+    ["state-position"]
+  );
 });
