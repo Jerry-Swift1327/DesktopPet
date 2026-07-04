@@ -17,6 +17,17 @@ test("sharedGreetings 是非空字符串数组", () => {
   }
 });
 
+test("buildPetStates supports variant-specific action label overrides", () => {
+  const states = buildPetStates(ACTION_IDS, "assets/animations", "ragdoll", sharedGreetings, {
+    belly: "听歌"
+  });
+  const belly = states.find((state) => state.id === ACTION_IDS.belly);
+  const stretch = states.find((state) => state.id === ACTION_IDS.stretch);
+
+  assert.equal(belly.label, "听歌");
+  assert.equal(stretch.label, EXPECTED_LABELS[EXPECTED_ORDER.indexOf("stretch")]);
+});
+
 // buildPetState：单个宠物状态工厂
 test("buildPetState 生成结构正确的状态对象", () => {
   const state = buildPetState({

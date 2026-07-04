@@ -337,7 +337,13 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 // 注意：assetsRoot 传 "animations"（相对路径），与 pet-states.cjs 中 getActionAssetFolder 返回的 "animations/${prefix}_${action}" 一致；
 // listFrames/listFramePaths/readMetadata 均通过 path.join(getAssetsRoot(), folder) 拼接，期望 folder 为相对路径。
 // 任务原指示使用 getAssetsRoot() 会导致生成绝对路径且缺少 "animations" 前缀，破坏路径拼接，故改用 "animations"。
-const states = buildPetStates(petActionIds, "animations", petAnimationPrefix, sharedGreetings);
+const states = buildPetStates(
+  petActionIds,
+  "animations",
+  petAnimationPrefix,
+  sharedGreetings,
+  petRuntimeConfig.actionLabelOverrides
+);
 
 const statMessages = {
   hungry: ["我饿了，碗碗发来提醒", "肚子在开会，主题是加餐"],
@@ -435,7 +441,8 @@ const petStatsController = createPetStatsController({
   TABBY_SLEEP_POSE_MS,
   WALK_LOOP_DURATION_MS,
   INTERACTION_INTIMACY_GAIN_MIN,
-  INTERACTION_INTIMACY_GAIN_MAX
+  INTERACTION_INTIMACY_GAIN_MAX,
+  actionStatEffects: petRuntimeConfig.actionStatEffects
 });
 
 // 接入 pet/frame-bounds-controller.cjs：帧缓存与读图控制器

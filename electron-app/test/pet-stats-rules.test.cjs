@@ -386,6 +386,23 @@ test("applyActionStatsRules belly 消耗 fullness", () => {
   assert.equal(stats.fullness, 49);
 });
 
+test("applyActionStatsRules supports state-specific stat effect overrides", () => {
+  const stats = makeBaseStats({ intimacy: 50, fullness: 50, health: 80, fullPrompted: true });
+  applyActionStatsRules(stats, STATE_CONSTANTS.belly, {
+    intimacyGainDelta: 5,
+    stateConstants: STATE_CONSTANTS,
+    actionStatEffects: {
+      belly: {
+        healthDelta: 1,
+        fullnessDelta: -1
+      }
+    }
+  });
+  assert.equal(stats.intimacy, 55);
+  assert.equal(stats.health, 81);
+  assert.equal(stats.fullness, 49);
+});
+
 test("applyActionStatsRules stretch 增加 health 并消耗 fullness", () => {
   const stats = makeBaseStats({ intimacy: 50, fullness: 50, health: 50, fullPrompted: true });
   applyActionStatsRules(stats, STATE_CONSTANTS.stretch, {

@@ -45,7 +45,6 @@ test("ragdoll assets cover the configured actions", () => {
     "ragdoll_lick",
     "ragdoll_stretch",
     "ragdoll_belly",
-    "ragdoll_shake",
     "ragdoll_yawn",
     "ragdoll_hiss"
   ];
@@ -74,14 +73,13 @@ test("ragdoll yawn keeps a stable sleeping tail loop", () => {
 
 test("ragdoll runtime frames use optimized source ranges", () => {
   const expectedRanges = {
-    ragdoll_walk: { frameCount: 103, sourceLoopStart: 27, sourceLoopEnd: 129 },
-    ragdoll_feed: { frameCount: 77, sourceLoopStart: 90, sourceLoopEnd: 166 },
-    ragdoll_shake: { frameCount: 90, sourceLoopStart: 56, sourceLoopEnd: 145 }
+    ragdoll_walk: { frameCount: 168, sourceLoopStart: 0, sourceLoopEnd: 167, loopSelection: "full" },
+    ragdoll_feed: { frameCount: 77, sourceLoopStart: 90, sourceLoopEnd: 166, loopSelection: "manual" }
   };
 
   for (const [action, expected] of Object.entries(expectedRanges)) {
     const loop = JSON.parse(fs.readFileSync(path.join(animationsRoot, action, "loop.json"), "utf8"));
-    assert.equal(loop.loopSelection, "manual");
+    assert.equal(loop.loopSelection, expected.loopSelection);
     assert.equal(loop.frameCount, expected.frameCount);
     assert.equal(loop.loopEnd, expected.frameCount - 1);
     assert.equal(loop.sourceLoopStart, expected.sourceLoopStart);
@@ -107,7 +105,6 @@ test("ragdoll runtime frames preserve source-canvas layout at 256px", () => {
     ragdoll_lick: [960, 960],
     ragdoll_stretch: [720, 720],
     ragdoll_belly: [960, 960],
-    ragdoll_shake: [960, 960],
     ragdoll_yawn: [720, 720],
     ragdoll_hiss: [720, 720]
   };

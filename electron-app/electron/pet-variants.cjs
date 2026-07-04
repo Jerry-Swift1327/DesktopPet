@@ -132,6 +132,48 @@ function assertKnownAction(action, variantId) {
   }
 }
 
+function normalizeActionLabelOverrides(rawProfile = {}, variantId = "") {
+  const overrides = rawProfile.actionLabelOverrides || {};
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    throw new Error(`Pet variant ${variantId} actionLabelOverrides must be an object.`);
+  }
+  const result = {};
+  for (const [action, label] of Object.entries(overrides)) {
+    assertKnownAction(action, variantId);
+    if (typeof label !== "string" || !label.trim()) {
+      throw new Error(`Pet variant ${variantId} action label override for ${action} must be a non-empty string.`);
+    }
+    result[action] = label;
+  }
+  return result;
+}
+
+function normalizeActionStatEffects(rawProfile = {}, variantId = "") {
+  const effects = rawProfile.actionStatEffects || {};
+  if (!effects || typeof effects !== "object" || Array.isArray(effects)) {
+    throw new Error(`Pet variant ${variantId} actionStatEffects must be an object.`);
+  }
+  const result = {};
+  for (const [action, effect] of Object.entries(effects)) {
+    assertKnownAction(action, variantId);
+    if (!effect || typeof effect !== "object" || Array.isArray(effect)) {
+      throw new Error(`Pet variant ${variantId} action stat effect for ${action} must be an object.`);
+    }
+    const normalized = {};
+    for (const key of ["intimacyDelta", "healthDelta", "fullnessDelta"]) {
+      if (effect[key] !== undefined) {
+        const value = Number(effect[key]);
+        if (!Number.isFinite(value)) {
+          throw new Error(`Pet variant ${variantId} action stat effect ${action}.${key} must be numeric.`);
+        }
+        normalized[key] = value;
+      }
+    }
+    result[PET_ACTIONS[action].id] = normalized;
+  }
+  return result;
+}
+
 function getVariantAliases(rawProfile = {}) {
   if (rawProfile.aliases === undefined || rawProfile.aliases === null || rawProfile.aliases === "-") {
     return [];
@@ -230,6 +272,8 @@ function resolvePetVariantProfile(rawProfile) {
   const actions = PET_ACTION_ORDER.concat(extraActions);
   const extraAssets = (rawProfile.extraAssets || rawProfile.extraAnimationAssets || []).slice();
   const features = Object.assign({}, DEFAULT_FEATURES, rawProfile.features || {});
+  const actionLabelOverrides = normalizeActionLabelOverrides(rawProfile, id);
+  const actionStatEffects = normalizeActionStatEffects(rawProfile, id);
   const version = rawProfile.version || rawProfile.deliveryVersion || "1.0";
   const scale = Number(rawProfile.scale ?? rawProfile.defaultScale ?? 1.1);
   const deliveryPathSegments = rawProfile.deliveryPathSegments || [scope, id];
@@ -255,6 +299,8 @@ function resolvePetVariantProfile(rawProfile) {
     extraActions,
     extraAnimationAssets: extraAssets,
     extraAssets,
+    actionLabelOverrides,
+    actionStatEffects,
     defaultScale: scale,
     scale,
     installerGuid: rawProfile.installerGuid || createVariantInstallerGuid(id),
@@ -393,6 +439,8 @@ function buildPetRuntimeConfig(config = {}) {
     features: variantProfile.features,
     actions: getPetActionIds(),
     actionOrder,
+    actionLabelOverrides: variantProfile.actionLabelOverrides,
+    actionStatEffects: variantProfile.actionStatEffects,
     channelConfig: {
       showDebugTimers: channelProfile.showDebugTimers,
       showYawnTimer: channelProfile.showDebugTimers && Boolean(variantProfile.features.idleYawn),

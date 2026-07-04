@@ -112,8 +112,18 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
   assert.equal(ragdollConfig.features.autoStart, true);
   assert.equal(ragdollConfig.features.windowRoam, true);
   assert.equal(ragdollConfig.features.eyeTracking, undefined);
+  assert.equal(ragdollConfig.features.dockShake, undefined);
   assert.equal(ragdollConfig.channelConfig.showYawnTimer, true);
   assert.equal(ragdollConfig.channelConfig.showSleepPoseTimer, false);
+  assert.deepEqual(ragdollConfig.actionLabelOverrides, {
+    belly: "听歌"
+  });
+  assert.deepEqual(ragdollConfig.actionStatEffects, {
+    petBelly: {
+      healthDelta: 1,
+      fullnessDelta: -1
+    }
+  });
   assert.deepEqual(ragdollConfig.actionOrder, [
     "petSquat",
     "petWalk",
@@ -187,6 +197,7 @@ test("variant metadata resolves pet ids, breeds and delivery fields", () => {
   assert.deepEqual(getPetVariantProfile("pet2605").actions, ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
   assert.deepEqual(getPetVariantProfile("pet2609").deliveryPathSegments, ["internal", "pet2609"]);
   assert.deepEqual(getPetVariantProfile("pet2609").actions, ["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "belly"]);
+  assert.deepEqual(getPetVariantProfile("pet2609").extraAnimationAssets, ["yawn", "hiss"]);
   assert.deepEqual(getPetVariantProfile("pet2610").deliveryPathSegments, ["custom", "pet2610"]);
   assert.deepEqual(getPetVariantProfile("pet2610").actions, ["squat", "walk", "feed", "ball"]);
   assert.deepEqual(getPetVariantProfile("pet2610").extraAnimationAssets, ["shake", "yawn"]);
@@ -453,7 +464,6 @@ test("existing variants keep the current animation folder convention", () => {
     "ragdoll_lick",
     "ragdoll_stretch",
     "ragdoll_belly",
-    "ragdoll_shake",
     "ragdoll_yawn",
     "ragdoll_hiss"
   ]);

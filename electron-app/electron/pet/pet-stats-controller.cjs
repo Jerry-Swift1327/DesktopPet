@@ -27,7 +27,8 @@ function createPetStatsController(context) {
     TABBY_SLEEP_POSE_MS,
     WALK_LOOP_DURATION_MS,
     INTERACTION_INTIMACY_GAIN_MIN,
-    INTERACTION_INTIMACY_GAIN_MAX
+    INTERACTION_INTIMACY_GAIN_MAX,
+    actionStatEffects = {}
   } = context;
 
   let petStats = null;
@@ -248,7 +249,8 @@ function createPetStatsController(context) {
       : 0;
     const result = petStatsRules.applyActionStatsRules(petStats, stateId, {
       intimacyGainDelta,
-      stateConstants: petStatsStateConstants
+      stateConstants: petStatsStateConstants,
+      actionStatEffects
     });
     const messages = result.prompts.map(key => pickStatMessage(key)).filter(Boolean);
     writePetStats();

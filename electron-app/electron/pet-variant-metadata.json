@@ -158,14 +158,21 @@
         "belly"
       ],
       "extraAssets": [
-        "shake",
         "yawn",
         "hiss"
       ],
+      "actionLabelOverrides": {
+        "belly": "听歌"
+      },
+      "actionStatEffects": {
+        "belly": {
+          "healthDelta": 1,
+          "fullnessDelta": -1
+        }
+      },
       "features": {
         "idleYawn": true,
-        "wakeHiss": true,
-        "dockShake": true
+        "wakeHiss": true
       }
     },
     "pet2610": {

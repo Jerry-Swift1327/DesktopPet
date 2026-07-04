@@ -10,7 +10,7 @@
 | `cat` | `cat_squat`、`cat_walk`、`cat_feed`、`cat_ball` |
 | `shorthair` | `shorthair_squat`、`shorthair_walk`、`shorthair_feed`、`shorthair_ball` |
 | `tabby` | 中华狸花猫历史 ID：`tabby_squat`、`tabby_walk`、`tabby_feed`、`tabby_ball`、`tabby_lie`、`tabby_lick`、`tabby_belly`、`tabby_stretch`、`tabby_look`、`tabby_shake`、`tabby_yawn`、`tabby_sleep`、`tabby_hiss` |
-| `ragdoll` | `ragdoll_squat`、`ragdoll_walk`、`ragdoll_feed`、`ragdoll_ball`、`ragdoll_spin`、`ragdoll_lick`、`ragdoll_stretch`、`ragdoll_belly`、`ragdoll_shake`、`ragdoll_yawn`、`ragdoll_hiss` |
+| `ragdoll` | `ragdoll_squat`、`ragdoll_walk`、`ragdoll_feed`、`ragdoll_ball`、`ragdoll_spin`、`ragdoll_lick`、`ragdoll_stretch`、`ragdoll_belly`、`ragdoll_yawn`、`ragdoll_hiss` |
 | `brit` | `brit_squat`、`brit_walk`、`brit_feed`、`brit_ball` |
 | `bshmitted` | `bshmitted_squat`、`bshmitted_walk`、`bshmitted_feed`、`bshmitted_ball` |
 | `van` | `van_squat`、`van_walk`、`van_feed`、`van_ball` |

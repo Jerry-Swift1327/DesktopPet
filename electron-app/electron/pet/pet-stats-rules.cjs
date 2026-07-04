@@ -236,27 +236,62 @@ function applyNaturalStatsTickRules(stats, now, decayRefs) {
 // options = { intimacyGainDelta, stateConstants }
 // stateConstants = { squat, feed, lie, lick, belly, stretch }
 // STATE_* 常量来自运行时 petActionIds，不在本模块定义，由调用方传入以便做相等比较。
+function getActionStatEffect(stateId, stateConstants, actionStatEffects) {
+  if (!actionStatEffects || typeof actionStatEffects !== "object") {
+    return null;
+  }
+  if (actionStatEffects[stateId]) {
+    return actionStatEffects[stateId];
+  }
+  for (const [action, id] of Object.entries(stateConstants || {})) {
+    if (id === stateId && actionStatEffects[action]) {
+      return actionStatEffects[action];
+    }
+  }
+  return null;
+}
+
+function applyStatEffect(stats, effect) {
+  if (!effect || typeof effect !== "object") {
+    return;
+  }
+  if (Number.isFinite(effect.intimacyDelta)) {
+    stats.intimacy = clampStat(stats.intimacy + effect.intimacyDelta);
+  }
+  if (Number.isFinite(effect.fullnessDelta)) {
+    stats.fullness = clampStat(stats.fullness + effect.fullnessDelta);
+  }
+  if (Number.isFinite(effect.healthDelta)) {
+    stats.health = clampStat(stats.health + effect.healthDelta);
+  }
+}
+
 function applyActionStatsRules(stats, stateId, options) {
   const opts = options || {};
   const stateConstants = opts.stateConstants || {};
   if (stateId !== stateConstants.squat) {
     stats.intimacy = clampStat(stats.intimacy + opts.intimacyGainDelta);
   }
-  if (stateId === stateConstants.feed) {
-    stats.fullness = PET_STAT_MAX;
-  }
-  if (stateId === stateConstants.lie) {
-    stats.health = clampStat(stats.health + LIE_HEALTH_GAIN);
-  }
-  if (stateId === stateConstants.lick) {
-    stats.health = clampStat(stats.health + LICK_HEALTH_GAIN);
-  }
-  if (stateId === stateConstants.belly) {
-    stats.fullness = clampStat(stats.fullness - BELLY_FULLNESS_COST);
-  }
-  if (stateId === stateConstants.stretch) {
-    stats.health = clampStat(stats.health + STRETCH_HEALTH_GAIN);
-    stats.fullness = clampStat(stats.fullness - STRETCH_FULLNESS_COST);
+  const overrideEffect = getActionStatEffect(stateId, stateConstants, opts.actionStatEffects);
+  if (overrideEffect) {
+    applyStatEffect(stats, overrideEffect);
+  } else {
+    if (stateId === stateConstants.feed) {
+      stats.fullness = PET_STAT_MAX;
+    }
+    if (stateId === stateConstants.lie) {
+      stats.health = clampStat(stats.health + LIE_HEALTH_GAIN);
+    }
+    if (stateId === stateConstants.lick) {
+      stats.health = clampStat(stats.health + LICK_HEALTH_GAIN);
+    }
+    if (stateId === stateConstants.belly) {
+      stats.fullness = clampStat(stats.fullness - BELLY_FULLNESS_COST);
+    }
+    if (stateId === stateConstants.stretch) {
+      stats.health = clampStat(stats.health + STRETCH_HEALTH_GAIN);
+      stats.fullness = clampStat(stats.fullness - STRETCH_FULLNESS_COST);
+    }
   }
 
   const prompts = [];

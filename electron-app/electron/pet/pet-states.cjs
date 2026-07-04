@@ -95,10 +95,10 @@ const PET_ACTION_DEFS = [
 ];
 
 // 根据 actionIds 映射构建完整 states 数组，顺序与原 main.cjs 一致
-function buildPetStates(actionIds, assetsRoot, animationPrefix, greetings = sharedGreetings) {
+function buildPetStates(actionIds, assetsRoot, animationPrefix, greetings = sharedGreetings, labelOverrides = {}) {
   return PET_ACTION_DEFS.map(def => buildPetState({
     id: actionIds[def.action],
-    label: def.label,
+    label: labelOverrides[def.action] || def.label,
     action: def.action,
     assetsRoot,
     animationPrefix,
