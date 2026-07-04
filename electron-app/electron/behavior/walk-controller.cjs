@@ -44,8 +44,11 @@ function createWalkController(context) {
     resetToTaskbarSurface,
     getGroundedWindowYForSurface,
     getWalkVisibleRectFromWindowX,
+    getRenderedGroundedWindowYForSurface,
+    getRenderedWalkVisibleRectFromWindowX,
     getWindowXForVisibleEdge,
     getSafeWindowXForDirection,
+    getRenderedSafeWindowXForDirection,
     setWalkWindowPositionDirect,
     setWalkWindowPosition,
     // 外部状态访问器（读取 main.cjs 实时状态）
@@ -355,7 +358,13 @@ function createWalkController(context) {
       setLastWalkScaleApplyAt(nowForScale);
     }
     setLastWalkSurfaceSignature(nextSurfaceSignature);
-    const groundedY = getGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection());
+    const useRenderedFrameGeometry = activeSurface?.type === "window"
+      && typeof getRenderedGroundedWindowYForSurface === "function"
+      && typeof getRenderedWalkVisibleRectFromWindowX === "function"
+      && typeof getRenderedSafeWindowXForDirection === "function";
+    const groundedY = useRenderedFrameGeometry
+      ? getRenderedGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection(), bounds.x)
+      : getGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection());
     if (activeSurface?.type !== "window") {
       return advanceTaskbarWalkStep({
         frameStep,
@@ -374,7 +383,9 @@ function createWalkController(context) {
     const stepDistance = WALK_STEP;
     let nextX = previousX + nextDirection * stepDistance;
     const limits = getWalkVisibleLimits(activeSurface);
-    const nextVisibleRect = getWalkVisibleRectFromWindowX(nextX, groundedY, getActiveState(), nextDirection);
+    const nextVisibleRect = useRenderedFrameGeometry
+      ? getRenderedWalkVisibleRectFromWindowX(nextX, groundedY, getActiveState(), nextDirection)
+      : getWalkVisibleRectFromWindowX(nextX, groundedY, getActiveState(), nextDirection);
     const leftMirrorThreshold = limits.left + WALK_MIRROR_HYSTERESIS_PX;
     const rightMirrorThreshold = limits.right - WALK_MIRROR_HYSTERESIS_PX;
     const cooldownActive = getWalkMirrorCooldownSteps() > 0;
@@ -435,9 +446,11 @@ function createWalkController(context) {
 
     nextX = preserveRightEdgeX
       ? Math.max(previousX, Math.round(nextX))
-      : getSafeWindowXForDirection(nextX, activeSurface, getActiveState(), nextDirection);
+      : useRenderedFrameGeometry
+        ? getRenderedSafeWindowXForDirection(nextX, activeSurface, getActiveState(), nextDirection, groundedY)
+        : getSafeWindowXForDirection(nextX, activeSurface, getActiveState(), nextDirection);
     setWalkDirection(nextDirection);
-    const actualX = preserveRightEdgeX
+    const actualX = preserveRightEdgeX || useRenderedFrameGeometry
       ? setWalkWindowPositionDirect(nextX, groundedY)
       : setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection());
     if (actualX === previousX) {

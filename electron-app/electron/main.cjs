@@ -1180,8 +1180,11 @@ const walkController = createWalkController({
   resetToTaskbarSurface,
   getGroundedWindowYForSurface,
   getWalkVisibleRectFromWindowX,
+  getRenderedGroundedWindowYForSurface,
+  getRenderedWalkVisibleRectFromWindowX,
   getWindowXForVisibleEdge,
   getSafeWindowXForDirection,
+  getRenderedSafeWindowXForDirection,
   setWalkWindowPositionDirect,
   setWalkWindowPosition,
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
@@ -3140,6 +3143,30 @@ function getWalkVisibleRectFromWindowX(x, y, stateId = activeState, direction = 
   }, stateId, direction);
 }
 
+function getRenderedWalkVisibleRectFromWindowX(x, y, stateId = activeState, direction = walkDirection) {
+  const bounds = {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: getPetWindowWidth(),
+    height: getPetWindowHeight()
+  };
+  return getRenderedFrameVisibleRectFromBounds(bounds, stateId, direction)
+    || getVisiblePetRectFromBounds(bounds, stateId, direction);
+}
+
+function getRenderedGroundedWindowYForSurface(surface = getCurrentSurface(), stateId = activeState, direction = walkDirection, x = getPetWindow()?.getBounds()?.x ?? 0) {
+  const probe = {
+    x: Math.round(Number.isFinite(x) ? x : 0),
+    y: 0,
+    width: getPetWindowWidth(),
+    height: getPetWindowHeight()
+  };
+  const visibleRect = getRenderedFrameVisibleRectFromBounds(probe, stateId, direction)
+    || getVisiblePetRectFromBounds(probe, stateId, direction);
+  const groundY = getSurfaceGroundY(surface, visibleRect.x, visibleRect.x + visibleRect.width);
+  return Math.round(groundY - (visibleRect.y + visibleRect.height - probe.y));
+}
+
 function getWalkVisibleCenterFromWindowX(x, y, stateId = activeState, direction = walkDirection) {
   const visibleRect = getWalkVisibleRectFromWindowX(x, y, stateId, direction);
   return Math.round(visibleRect.x + visibleRect.width / 2);
@@ -3473,6 +3500,12 @@ function setTaskbarWalkRunwayForEdge(edge, value, y, direction = walkDirection, 
 function getSafeWindowXForDirection(x, surface = getCurrentSurface(), stateId = activeState, direction = walkDirection) {
   const limits = getWalkVisibleLimits(surface);
   const visibleRect = getWalkVisibleRectFromWindowX(x, 0, stateId, direction);
+  return surfaceFitRules.getSafeWindowXForDirection(x, limits, visibleRect);
+}
+
+function getRenderedSafeWindowXForDirection(x, surface = getCurrentSurface(), stateId = activeState, direction = walkDirection, y = 0) {
+  const limits = getWalkVisibleLimits(surface);
+  const visibleRect = getRenderedWalkVisibleRectFromWindowX(x, y, stateId, direction);
   return surfaceFitRules.getSafeWindowXForDirection(x, limits, visibleRect);
 }
 

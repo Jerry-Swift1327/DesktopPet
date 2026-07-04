@@ -132,6 +132,11 @@ test("installer no longer writes split auto start preference json", () => {
   assert.doesNotMatch(installerSource, /Function WriteAutoStartPreference/);
 });
 
+test("installer finish page writes auto start for the actual packaged executable", () => {
+  assert.match(installerSource, /WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Run" "\$\{PET_AUTO_START_REGISTRY_KEY\}" `"\$INSTDIR\\\$\{PET_EXE_DISPLAY_NAME\}\.exe"`/);
+  assert.doesNotMatch(installerSource, /WriteRegStr[\s\S]*\$INSTDIR\\\$\{PRODUCT_FILENAME\}\.exe/);
+});
+
 test("auto start registry state is persisted into preferences", () => {
   const refreshBody = autoStartControllerSource.match(/function refreshAutoStartCacheAsync\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 

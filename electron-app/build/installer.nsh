@@ -38,7 +38,7 @@ Var mui.FinishPage.ShowReadme
 !define MUI_FINISHPAGE_SHOWREADME_VARIABLES
 
 Function EnableAutoStartAfterFinish
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PET_AUTO_START_REGISTRY_KEY}" `"$INSTDIR\${PRODUCT_FILENAME}.exe"`
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PET_AUTO_START_REGISTRY_KEY}" `"$INSTDIR\${PET_EXE_DISPLAY_NAME}.exe"`
 FunctionEnd
 
 Function DisableAutoStartAfterFinish
