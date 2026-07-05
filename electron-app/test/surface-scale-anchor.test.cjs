@@ -452,6 +452,7 @@ test("setPetScale preserves the window-surface walk center track while walking",
       workArea: { x: 0, y: 0, width: 1000, height: 900 }
     };
     let walkTrackX = 360;
+    let taskbarRunway = null;
     let controller = null;
     const walkPositionCalls = [];
     const syncCalls = [];
@@ -565,8 +566,8 @@ test("setPetScale preserves the window-surface walk center track while walking",
       }),
       getActiveState: () => "petWalk",
       getWalkDirection: () => direction,
-      getTaskbarWalkRunway: () => null,
-      setTaskbarWalkRunway: () => {},
+      getTaskbarWalkRunway: () => taskbarRunway,
+      setTaskbarWalkRunway: (value) => { taskbarRunway = value; },
       getWalkTrackX: () => walkTrackX,
       setWalkTrackX: (value) => { walkTrackX = value; },
       log: () => {},
@@ -587,6 +588,22 @@ test("setPetScale preserves the window-surface walk center track while walking",
     assert.equal(walkTrackX, 360);
     assert.equal(walkPositionCalls.length, 1);
     assert.equal(walkPositionCalls[0].trackCenterX, 360);
+    assert.equal(syncCalls.some((value) => Number.isFinite(value)), false);
+
+    walkPositionCalls.length = 0;
+    syncCalls.length = 0;
+    walkTrackX = 420;
+    taskbarRunway = { centerX: 999 };
+    bounds = { x: -198, y: 500, width: 900, height: 260 };
+
+    controller.applySurfaceScale(currentSurface, "petWalk", direction);
+
+    const resizedVisible = visibleRectFromBounds(bounds);
+    assert.equal(Math.round(resizedVisible.x + resizedVisible.width / 2), 420);
+    assert.equal(walkTrackX, 420);
+    assert.equal(taskbarRunway, null);
+    assert.equal(walkPositionCalls.length, 1);
+    assert.equal(walkPositionCalls[0].trackCenterX, 420);
     assert.equal(syncCalls.some((value) => Number.isFinite(value)), false);
   }
 });

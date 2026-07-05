@@ -146,7 +146,10 @@ function createSurfaceScaleController(context) {
         clearPetWindowHitRegion();
       }
       if (needsResize) {
-        const anchorX = getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
+        const trackCenterX = surface?.type === "window" && isWalkingState() ? getWalkTrackX() : null;
+        const anchorX = Number.isFinite(trackCenterX)
+          ? Math.round(trackCenterX)
+          : getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
           ?? bounds.x + Math.round(bounds.width / 2);
         const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
         const next = clampPetWindowPositionToSurface(
@@ -162,6 +165,11 @@ function createSurfaceScaleController(context) {
           width: getPetWindowWidth(),
           height: getPetWindowHeight()
         }, false);
+        if (Number.isFinite(trackCenterX)) {
+          setWalkWindowPosition(next.x, groundedY, surface, direction, {
+            trackCenterX: Math.round(trackCenterX)
+          });
+        }
       }
       if (wasRunwayActive || needsResize) {
         sendScaleChanged(buildScaleSummary());
@@ -209,7 +217,10 @@ function createSurfaceScaleController(context) {
     }
     setTaskbarWalkRunway(null);
     clearPetWindowHitRegion();
-    const anchorX = getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
+    const trackCenterX = surface?.type === "window" && isWalkingState() ? getWalkTrackX() : null;
+    const anchorX = Number.isFinite(trackCenterX)
+      ? Math.round(trackCenterX)
+      : getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
       ?? bounds.x + Math.round(bounds.width / 2);
     const newWidth = getPetWindowWidth();
     const newHeight = getPetWindowHeight();
@@ -227,6 +238,11 @@ function createSurfaceScaleController(context) {
       width: newWidth,
       height: newHeight
     }, false);
+    if (Number.isFinite(trackCenterX)) {
+      setWalkWindowPosition(next.x, groundedY, surface, direction, {
+        trackCenterX: Math.round(trackCenterX)
+      });
+    }
     sendScaleChanged(buildScaleSummary());
     refreshMenuAnchorAfterScale();
     refreshHoverAnchorAfterScale();
