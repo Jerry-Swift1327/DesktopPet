@@ -43,8 +43,9 @@ function createWalkController(context) {
     applySurfaceScale,
     resetToTaskbarSurface,
     getGroundedWindowYForSurface,
-    getWindowXForVisibleCenter,
-    getWindowWalkCenterLimits,
+    getWalkVisibleRectFromWindowX,
+    getWindowXForVisibleEdge,
+    getSafeWindowXForDirection,
     setWalkWindowPosition,
     // 外部状态访问器（读取 main.cjs 实时状态）
     getPetWindow,
@@ -369,48 +370,43 @@ function createWalkController(context) {
       syncWalkTrackX(bounds.x);
     }
 
-    const previousCenterX = getWalkTrackX()
-      ?? getWalkVisibleCenterFromWindowX(bounds.x, groundedY, getActiveState(), getWalkDirection());
+    const previousX = getWalkTrackX() ?? bounds.x;
     let nextDirection = getWalkDirection() >= 0 ? 1 : -1;
-    const centerLimits = getWindowWalkCenterLimits(activeSurface, getActiveState());
-    let nextCenterX = previousCenterX + nextDirection * WALK_STEP;
-    const leftMirrorThreshold = centerLimits.left + WALK_MIRROR_HYSTERESIS_PX;
-    const rightMirrorThreshold = centerLimits.right - WALK_MIRROR_HYSTERESIS_PX;
+    let nextX = previousX + nextDirection * WALK_STEP;
+    const limits = getWalkVisibleLimits(activeSurface);
+    const nextVisibleRect = getWalkVisibleRectFromWindowX(nextX, groundedY, getActiveState(), nextDirection);
+    const leftMirrorThreshold = limits.left + WALK_MIRROR_HYSTERESIS_PX;
+    const rightMirrorThreshold = limits.right - WALK_MIRROR_HYSTERESIS_PX;
     const cooldownActive = getWalkMirrorCooldownSteps() > 0;
     let mirroredThisStep = false;
     let edgeFlipReason = "";
 
-    if (!cooldownActive && nextDirection < 0 && nextCenterX <= leftMirrorThreshold) {
-      nextCenterX = centerLimits.left;
+    if (!cooldownActive && nextDirection < 0 && nextVisibleRect.x <= leftMirrorThreshold) {
       nextDirection = 1;
+      nextX = getWindowXForVisibleEdge("left", limits.left, getActiveState(), nextDirection);
       mirroredThisStep = true;
-      edgeFlipReason = "left-center";
-    } else if (!cooldownActive && nextDirection > 0 && nextCenterX >= rightMirrorThreshold) {
-      nextCenterX = centerLimits.right;
+      edgeFlipReason = "left-threshold";
+    } else if (!cooldownActive && nextDirection > 0 && nextVisibleRect.x + nextVisibleRect.width >= rightMirrorThreshold) {
       nextDirection = -1;
+      nextX = getWindowXForVisibleEdge("right", limits.right, getActiveState(), nextDirection);
       mirroredThisStep = true;
-      edgeFlipReason = "right-center";
+      edgeFlipReason = "right-threshold";
     }
 
     if (cooldownActive && !mirroredThisStep) {
       setWalkMirrorCooldownSteps(getWalkMirrorCooldownSteps() - 1);
     }
 
-    nextCenterX = clamp(Math.round(nextCenterX), centerLimits.left, centerLimits.right);
+    nextX = getSafeWindowXForDirection(nextX, activeSurface, getActiveState(), nextDirection);
     if (!mirroredThisStep && nextDirection < 0) {
-      nextCenterX = Math.min(previousCenterX, nextCenterX);
+      nextX = Math.min(previousX, nextX);
     } else if (!mirroredThisStep && nextDirection > 0) {
-      nextCenterX = Math.max(previousCenterX, nextCenterX);
+      nextX = Math.max(previousX, nextX);
     }
 
     setWalkDirection(nextDirection);
-    const nextX = getWindowXForVisibleCenter(nextCenterX, getActiveState(), getWalkDirection());
-    const actualX = setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection(), {
-      trackCenterX: nextCenterX
-    });
-    const actualCenterX = getWalkTrackX()
-      ?? getWalkVisibleCenterFromWindowX(actualX, groundedY, getActiveState(), getWalkDirection());
-    if (actualCenterX === previousCenterX) {
+    const actualX = setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection());
+    if (actualX === previousX) {
       setStalledWalkSteps(getStalledWalkSteps() + 1);
     } else {
       setStalledWalkSteps(0);
@@ -434,10 +430,10 @@ function createWalkController(context) {
       x: actualX,
       y: Math.round(groundedY),
       frameStep: Number.isFinite(frameStep) ? Math.round(frameStep) : 0,
-      moved: actualCenterX !== previousCenterX,
+      moved: actualX !== previousX,
       scale: buildScaleSummary()
     };
-    logWalkStepDiagnostic(stepStartedAt, result, edgeFlipReason ? `edgeFlip=${edgeFlipReason} previousCenterX=${previousCenterX} centerX=${actualCenterX} actualX=${actualX}` : `centerX=${actualCenterX}`);
+    logWalkStepDiagnostic(stepStartedAt, result, edgeFlipReason ? `edgeFlip=${edgeFlipReason} previousX=${previousX} actualX=${actualX}` : `previousX=${previousX} actualX=${actualX}`);
     return result;
   }
 

@@ -6,8 +6,9 @@ const { createWalkController } = require("../electron/behavior/walk-controller.c
 function createWindowWalkHarness({
   initialX = 90,
   initialDirection = 1,
-  centerLimits = { left: 140, right: 220 },
-  centerOffsetForDirection = () => 60
+  visibleLimits = { left: 100, right: 260 },
+  visibleOffsetForDirection = () => 20,
+  visibleWidthForDirection = () => 80
 } = {}) {
   let bounds = { x: initialX, y: 0, width: 180, height: 180 };
   let walkTrackX = null;
@@ -23,10 +24,46 @@ function createWindowWalkHarness({
   const surface = {
     type: "window",
     displayId: 1,
-    left: 100,
-    right: 260,
+    left: visibleLimits.left,
+    right: visibleLimits.right,
     groundY: 200
   };
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function visibleRectForX(x, y, direction = walkDirection) {
+    const offset = visibleOffsetForDirection(direction);
+    const width = visibleWidthForDirection(direction);
+    return {
+      x: Math.round(x + offset),
+      y: Math.round(y + 40),
+      width,
+      height: 90
+    };
+  }
+
+  function windowXForVisibleEdge(edge, value, direction = walkDirection) {
+    const offset = visibleOffsetForDirection(direction);
+    const width = visibleWidthForDirection(direction);
+    return edge === "right"
+      ? Math.round(value - width - offset)
+      : Math.round(value - offset);
+  }
+
+  function safeWindowX(x, direction = walkDirection) {
+    const rawX = Math.round(x);
+    const visible = visibleRectForX(rawX, 0, direction);
+    let nextX = rawX;
+    if (visible.x < visibleLimits.left) {
+      nextX += visibleLimits.left - visible.x;
+    }
+    if (visible.x + visible.width > visibleLimits.right) {
+      nextX -= visible.x + visible.width - visibleLimits.right;
+    }
+    return Math.round(nextX);
+  }
 
   const controller = createWalkController({
     clearWalkLoopTimer: () => {},
@@ -37,13 +74,8 @@ function createWindowWalkHarness({
     sendStats: () => {},
     isWalkingState: () => true,
     getCurrentSurface: () => surface,
-    getWalkVisibleLimits: () => ({ left: 100, right: 260 }),
-    getVisiblePetRectFromBounds: (nextBounds) => ({
-      x: nextBounds.x + 20,
-      y: nextBounds.y + 40,
-      width: 80,
-      height: 90
-    }),
+    getWalkVisibleLimits: () => visibleLimits,
+    getVisiblePetRectFromBounds: (nextBounds) => visibleRectForX(nextBounds.x, nextBounds.y, walkDirection),
     applyCompletedWalkStats: () => [],
     getDefaultDirectionForState: () => -1,
     materializeTaskbarWalkRunwayForState: () => {},
@@ -54,16 +86,14 @@ function createWindowWalkHarness({
     showStatMessages: () => {},
     syncWalkTrackX: (x) => {
       const sourceX = Number.isFinite(x) ? Math.round(x) : bounds.x;
-      walkTrackX = Math.min(Math.max(
-        sourceX + centerOffsetForDirection(walkDirection),
-        centerLimits.left
-      ), centerLimits.right);
+      walkTrackX = safeWindowX(sourceX, walkDirection);
     },
-    getWalkVisibleCenterFromWindowX: (x, _y, _state, direction = walkDirection) => (
-      x + centerOffsetForDirection(direction)
-    ),
-    getTaskbarWalkCenterLimits: () => ({ left: 100, right: 260 }),
-    clamp: (value, min, max) => Math.min(Math.max(value, min), max),
+    getWalkVisibleCenterFromWindowX: (x, y, _state, direction = walkDirection) => {
+      const visible = visibleRectForX(x, y, direction);
+      return Math.round(visible.x + visible.width / 2);
+    },
+    getTaskbarWalkCenterLimits: () => visibleLimits,
+    clamp,
     setWalkDirection: (direction) => {
       walkDirection = direction >= 0 ? 1 : -1;
     },
@@ -82,35 +112,22 @@ function createWindowWalkHarness({
     applySurfaceScale: () => true,
     resetToTaskbarSurface: () => surface,
     getGroundedWindowYForSurface: () => 90,
-    getWindowXForVisibleCenter: (centerX, _state, direction = walkDirection) => (
-      Math.round(centerX - centerOffsetForDirection(direction))
-    ),
-    getWindowWalkCenterLimits: () => centerLimits,
-    getSafeWindowXForDirection: () => {
-      calls.push({ type: "state-safe" });
-      return 999;
-    },
-    setWalkWindowPosition: (x, y, _surface, direction = walkDirection, options = {}) => {
-      const rawX = Math.round(x);
-      const centerOffset = centerOffsetForDirection(direction);
-      const requestedCenterX = Number.isFinite(options.trackCenterX)
-        ? Math.round(options.trackCenterX)
-        : rawX + centerOffset;
-      const safeCenterX = Math.min(Math.max(requestedCenterX, centerLimits.left), centerLimits.right);
-      const nextX = Number.isFinite(options.trackCenterX)
-        ? Math.round(rawX + safeCenterX - requestedCenterX)
-        : safeCenterX === requestedCenterX
-        ? rawX
-        : Math.round(safeCenterX - centerOffset);
+    getWalkVisibleRectFromWindowX: (x, y, _state, direction = walkDirection) => visibleRectForX(x, y, direction),
+    getWindowXForVisibleEdge: (edge, value, _state, direction = walkDirection) => windowXForVisibleEdge(edge, value, direction),
+    getSafeWindowXForDirection: (x, _surface, _state, direction = walkDirection) => safeWindowX(x, direction),
+    setWalkWindowPosition: (x, y, _surface, direction = walkDirection) => {
+      const nextX = safeWindowX(x, direction);
+      const nextY = Math.round(y);
       calls.push({
         type: "state-position",
+        requestedX: Math.round(x),
         x: nextX,
-        y: Math.round(y),
-        centerX: safeCenterX,
-        trackCenterX: Number.isFinite(options.trackCenterX) ? Math.round(options.trackCenterX) : null
+        y: nextY,
+        direction,
+        visible: visibleRectForX(nextX, nextY, direction)
       });
-      walkTrackX = safeCenterX;
-      bounds = { ...bounds, x: nextX, y: Math.round(y) };
+      walkTrackX = nextX;
+      bounds = { ...bounds, x: nextX, y: nextY };
       return bounds.x;
     },
     getPetWindow: () => ({
@@ -156,10 +173,10 @@ function createWindowWalkHarness({
     WALK_MIRROR_COOLDOWN_STEPS: 2
   });
 
-  return { controller, calls };
+  return { controller, calls, getTrackX: () => walkTrackX };
 }
 
-test("window-surface walk uses state-stable geometry for Y grounding and X clamping", () => {
+test("window-surface walk uses state-stable Y and stores real window X as the track", () => {
   const harness = createWindowWalkHarness();
 
   const result = harness.controller.advanceWalkStep(3, 80);
@@ -168,31 +185,25 @@ test("window-surface walk uses state-stable geometry for Y grounding and X clamp
   assert.equal(result.x, 100);
   assert.equal(result.moved, true);
   assert.deepEqual(result.scale, { value: 1 });
-  assert.equal(harness.calls[0].centerX, 160);
-  assert.equal(harness.calls[0].trackCenterX, 160);
+  assert.equal(harness.getTrackX(), 100);
   assert.deepEqual(
     harness.calls.map((call) => call.type),
     ["state-position"]
   );
-  assert.equal(harness.calls.some((call) => call.type === "rendered-ground"), false);
-  assert.equal(harness.calls.some((call) => call.type === "rendered-rect"), false);
-  assert.equal(harness.calls.some((call) => call.type === "rendered-safe"), false);
-  assert.equal(harness.calls.some((call) => call.type === "direct-position"), false);
+  assert.equal(harness.calls[0].visible.x, 120);
 });
 
-test("window-surface walk keeps center speed stable when visible insets differ by direction", () => {
-  const centerOffsetForDirection = (direction) => direction < 0 ? 72 : 48;
+test("window-surface walk keeps real window speed stable when visible insets differ by direction", () => {
+  const visibleOffsetForDirection = (direction) => direction < 0 ? 72 : 48;
   const leftHarness = createWindowWalkHarness({
     initialX: 150,
     initialDirection: -1,
-    centerLimits: { left: 140, right: 260 },
-    centerOffsetForDirection
+    visibleOffsetForDirection
   });
   const rightHarness = createWindowWalkHarness({
     initialX: 100,
     initialDirection: 1,
-    centerLimits: { left: 140, right: 260 },
-    centerOffsetForDirection
+    visibleOffsetForDirection
   });
 
   const leftResults = [
@@ -204,32 +215,16 @@ test("window-surface walk keeps center speed stable when visible insets differ b
     rightHarness.controller.advanceWalkStep(22, 80)
   ];
 
-  assert.deepEqual(
-    leftHarness.calls.map((call) => call.centerX),
-    [212, 202]
-  );
-  assert.deepEqual(
-    rightHarness.calls.map((call) => call.centerX),
-    [158, 168]
-  );
-  assert.deepEqual(
-    leftHarness.calls.map((call) => call.trackCenterX),
-    [212, 202]
-  );
-  assert.deepEqual(
-    rightHarness.calls.map((call) => call.trackCenterX),
-    [158, 168]
-  );
-  assert.deepEqual(leftResults.map((result) => result.moved), [true, true]);
-  assert.deepEqual(rightResults.map((result) => result.moved), [true, true]);
+  assert.deepEqual(leftResults.map((result) => result.x), [98, 88]);
+  assert.deepEqual(rightResults.map((result) => result.x), [110, 120]);
+  assert.deepEqual(leftHarness.calls.map((call) => call.x), [98, 88]);
+  assert.deepEqual(rightHarness.calls.map((call) => call.x), [110, 120]);
 });
 
-test("window-surface walk mirrors from the left edge with direction-specific visible insets", () => {
+test("window-surface walk mirrors at the left edge and continues with a stable X track", () => {
   const harness = createWindowWalkHarness({
-    initialX: 80,
-    initialDirection: -1,
-    centerLimits: { left: 140, right: 260 },
-    centerOffsetForDirection: (direction) => direction < 0 ? 72 : 48
+    initialX: 70,
+    initialDirection: -1
   });
 
   const first = harness.controller.advanceWalkStep(3, 80);
@@ -237,47 +232,28 @@ test("window-surface walk mirrors from the left edge with direction-specific vis
 
   assert.equal(first.direction, 1);
   assert.equal(second.direction, 1);
-  assert.equal(first.moved, true);
-  assert.equal(second.moved, true);
-  assert.deepEqual(
-    harness.calls.map((call) => call.centerX),
-    [140, 150]
-  );
+  assert.equal(first.x, 80);
+  assert.equal(second.x, 90);
+  assert.deepEqual(harness.calls.map((call) => call.x), [80, 90]);
 });
 
-test("window-surface walk keeps a narrow center interval moving instead of collapsing", () => {
+test("window-surface walk mirrors at the right edge without visible-center back solving", () => {
   const harness = createWindowWalkHarness({
-    initialX: 80,
-    centerLimits: { left: 140, right: 145 }
+    initialX: 150,
+    initialDirection: 1
   });
 
   const first = harness.controller.advanceWalkStep(3, 80);
   const second = harness.controller.advanceWalkStep(4, 80);
 
-  assert.equal(first.moved, true);
-  assert.equal(second.moved, true);
-  assert.deepEqual(
-    harness.calls.map((call) => call.centerX),
-    [145, 140]
-  );
+  assert.equal(first.direction, -1);
+  assert.equal(second.direction, -1);
+  assert.equal(first.x, 160);
+  assert.equal(second.x, 150);
+  assert.deepEqual(harness.calls.map((call) => call.x), [160, 150]);
 });
 
-test("window-surface walk mirrors direction when reaching right edge threshold", () => {
-  const harness = createWindowWalkHarness({ initialX: 150 });
-
-  const result = harness.controller.advanceWalkStep(3, 80);
-
-  assert.equal(result.direction, -1);
-  assert.equal(result.y, 90);
-  assert.equal(result.x, 160);
-  assert.equal(harness.calls[0].centerX, 220);
-  assert.deepEqual(
-    harness.calls.map((call) => call.type),
-    ["state-position"]
-  );
-});
-
-test("window-surface walk advances from the previous visible-center track", () => {
+test("window-surface walk advances from the previous real window X track", () => {
   const harness = createWindowWalkHarness();
 
   const first = harness.controller.advanceWalkStep(3, 80);
@@ -285,11 +261,7 @@ test("window-surface walk advances from the previous visible-center track", () =
 
   assert.equal(first.x, 100);
   assert.equal(second.x, 110);
-  assert.equal(second.direction, 1);
-  assert.deepEqual(
-    harness.calls.map((call) => call.centerX),
-    [160, 170]
-  );
+  assert.equal(harness.getTrackX(), 110);
 });
 
 test("window-surface walk keeps real window speed independent from frameStep", () => {
@@ -300,10 +272,6 @@ test("window-surface walk keeps real window speed independent from frameStep", (
   assert.deepEqual(
     results.map((result) => result.x),
     [100, 110, 120, 130]
-  );
-  assert.deepEqual(
-    harness.calls.map((call) => call.centerX),
-    [160, 170, 180, 190]
   );
   assert.equal(results.every((result) => result.moved), true);
 });
@@ -321,54 +289,18 @@ test("window-surface walk keeps left-facing speed independent from frameStep", (
     results.map((result) => result.x),
     [150, 140, 130]
   );
-  assert.deepEqual(
-    harness.calls.map((call) => call.centerX),
-    [210, 200, 190]
-  );
 });
 
-test("window-surface walk moves left from the right edge with the default left-facing direction", () => {
-  const harness = createWindowWalkHarness({ initialX: 160, initialDirection: -1 });
-
-  const result = harness.controller.advanceWalkStep(3, 80);
-
-  assert.equal(result.direction, -1);
-  assert.equal(result.x, 150);
-  assert.equal(result.moved, true);
-  assert.equal(harness.calls[0].centerX, 210);
-});
-
-test("window-surface walk keeps moving when the visible sprite is wider than the surface", () => {
+test("window-surface walk syncs an out-of-bounds start to a safe real window X", () => {
   const harness = createWindowWalkHarness({
-    initialX: 70,
-    centerLimits: { left: 100, right: 160 }
+    initialX: 0,
+    initialDirection: 1
   });
 
   const first = harness.controller.advanceWalkStep(3, 80);
   const second = harness.controller.advanceWalkStep(4, 80);
 
-  assert.equal(first.x, 80);
-  assert.equal(second.x, 90);
   assert.equal(first.moved, true);
   assert.equal(second.moved, true);
-  assert.deepEqual(
-    harness.calls.map((call) => call.centerX),
-    [140, 150]
-  );
-});
-
-test("window-surface walk mirrors at the left edge and continues moving right", () => {
-  const harness = createWindowWalkHarness({ initialX: 80, initialDirection: -1 });
-
-  const first = harness.controller.advanceWalkStep(3, 80);
-  const second = harness.controller.advanceWalkStep(4, 80);
-
-  assert.equal(first.direction, 1);
-  assert.equal(first.x, 80);
-  assert.equal(second.direction, 1);
-  assert.equal(second.x, 90);
-  assert.deepEqual(
-    harness.calls.map((call) => call.centerX),
-    [140, 150]
-  );
+  assert.deepEqual(harness.calls.map((call) => call.x), [90, 100]);
 });

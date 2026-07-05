@@ -441,7 +441,7 @@ test("setPetScale keeps the visible bottom on the surface through repeated scale
   }
 });
 
-test("setPetScale preserves the window-surface walk center track while walking", () => {
+test("setPetScale preserves the window-surface walk visual center then syncs the real X track", () => {
   for (const direction of [-1, 1]) {
     let bounds = { x: 260, y: 0, width: 180, height: 180 };
     let currentSurface = {
@@ -520,7 +520,9 @@ test("setPetScale preserves the window-surface walk center track while walking",
         bounds = { x: Math.round(x), y: Math.round(y), width: windowWidth(), height: windowHeight() };
       },
       syncWalkTrackX: (x) => {
-        syncCalls.push(x);
+        const nextX = Number.isFinite(x) ? Math.round(x) : bounds.x;
+        syncCalls.push(nextX);
+        walkTrackX = nextX;
       },
       updatePetWindowMousePassthrough: () => {},
       scheduleWalkLoopTimeout: () => {},
@@ -532,14 +534,13 @@ test("setPetScale preserves the window-surface walk center track while walking",
       getCurrentSurface: () => currentSurface,
       getVisiblePetRectFromBounds: visibleRectFromBounds,
       getWindowXForVisibleCenter: windowXForVisibleCenter,
-      setWalkWindowPosition: (x, y, _surface, nextDirection, options = {}) => {
+      setWalkWindowPosition: (x, y, _surface, nextDirection) => {
         walkPositionCalls.push({
           x: Math.round(x),
           y: Math.round(y),
-          direction: nextDirection,
-          trackCenterX: options.trackCenterX
+          direction: nextDirection
         });
-        walkTrackX = options.trackCenterX;
+        walkTrackX = Math.round(x);
         bounds = { x: Math.round(x), y: Math.round(y), width: windowWidth(), height: windowHeight() };
         return bounds.x;
       },
@@ -581,29 +582,258 @@ test("setPetScale preserves the window-surface walk center track while walking",
       WINDOW_DOCK_FINE_CORRECTION_LIMIT: 2
     });
 
+    const beforeScaleVisible = visibleRectFromBounds(bounds);
+    const beforeScaleCenter = Math.round(beforeScaleVisible.x + beforeScaleVisible.width / 2);
+
     controller.setPetScale(1.24);
 
     const visible = visibleRectFromBounds(bounds);
-    assert.equal(Math.round(visible.x + visible.width / 2), 360);
-    assert.equal(walkTrackX, 360);
-    assert.equal(walkPositionCalls.length, 1);
-    assert.equal(walkPositionCalls[0].trackCenterX, 360);
-    assert.equal(syncCalls.some((value) => Number.isFinite(value)), false);
+    assert.equal(Math.round(visible.x + visible.width / 2), beforeScaleCenter);
+    assert.equal(walkTrackX, bounds.x);
+    assert.equal(walkPositionCalls.length, 0);
+    assert.equal(syncCalls.length >= 1, true);
+    assert.equal(syncCalls.at(-1), bounds.x);
 
     walkPositionCalls.length = 0;
     syncCalls.length = 0;
     walkTrackX = 420;
     taskbarRunway = { centerX: 999 };
     bounds = { x: -198, y: 500, width: 900, height: 260 };
+    const beforeApplyVisible = visibleRectFromBounds(bounds);
+    const beforeApplyCenter = Math.round(beforeApplyVisible.x + beforeApplyVisible.width / 2);
 
     controller.applySurfaceScale(currentSurface, "petWalk", direction);
 
     const resizedVisible = visibleRectFromBounds(bounds);
-    assert.equal(Math.round(resizedVisible.x + resizedVisible.width / 2), 420);
-    assert.equal(walkTrackX, 420);
+    assert.equal(Math.round(resizedVisible.x + resizedVisible.width / 2), beforeApplyCenter);
+    assert.equal(walkTrackX, bounds.x);
     assert.equal(taskbarRunway, null);
-    assert.equal(walkPositionCalls.length, 1);
-    assert.equal(walkPositionCalls[0].trackCenterX, 420);
-    assert.equal(syncCalls.some((value) => Number.isFinite(value)), false);
+    assert.equal(walkPositionCalls.length, 0);
+    assert.equal(syncCalls.length, 1);
+    assert.equal(syncCalls[0], bounds.x);
   }
+});
+
+test("groundPetToSurface does not schedule fine correction while window-surface walking", () => {
+  let bounds = { x: 100, y: 200, width: 180, height: 180 };
+  let currentSurface = {
+    type: "window",
+    left: 80,
+    right: 420,
+    groundY: 320,
+    workArea: { x: 0, y: 0, width: 800, height: 600 }
+  };
+  let walkTrackX = null;
+  let immediateCalls = 0;
+  const syncCalls = [];
+  const originalSetImmediate = global.setImmediate;
+
+  function visibleRectFromBounds(nextBounds) {
+    return {
+      x: Math.round(nextBounds.x + 20),
+      y: Math.round(nextBounds.y + 30),
+      width: 80,
+      height: 90
+    };
+  }
+
+  global.setImmediate = (callback, ...args) => {
+    immediateCalls += 1;
+    return originalSetImmediate(callback, ...args);
+  };
+
+  try {
+    const controller = createSurfaceScaleController({
+      clampPetScale: (value) => Math.round(Math.min(Math.max(Number(value) || 1, 0.75), 1.6) * 100) / 100,
+      getPetWindowWidth: () => 180,
+      getPetWindowHeight: () => 180,
+      getPetSpriteSize: () => 128,
+      getSpriteLocalXForWindowWidth: () => 26,
+      getSurfaceWorkArea: () => currentSurface.workArea,
+      getVisibleSpriteInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }),
+      getGroundedWindowYForSurface: () => 200,
+      clampPetWindowPositionToSurface: (x, y) => ({ x: Math.round(x), y: Math.round(y) }),
+      getTaskbarWalkCenterLimits: () => ({ left: 0, right: 800 }),
+      ensureTaskbarWalkRunwayForCenter: () => null,
+      isTaskbarWalkActive: () => false,
+      clearPetWindowHitRegion: () => {},
+      getWalkVisibleCenterFromWindowX: (x) => x,
+      getTaskbarWalkRunwayWindowWidth: () => 800,
+      setPetWindowPosition: (x, y) => {
+        bounds = { ...bounds, x: Math.round(x), y: Math.round(y) };
+      },
+      syncWalkTrackX: (x) => {
+        syncCalls.push(x);
+        if (Number.isFinite(x)) {
+          walkTrackX = Math.round(x);
+        }
+      },
+      updatePetWindowMousePassthrough: () => {},
+      scheduleWalkLoopTimeout: () => {},
+      resetToTaskbarSurface: () => currentSurface,
+      setCurrentSurface: (surface) => {
+        currentSurface = surface;
+        return currentSurface;
+      },
+      getCurrentSurface: () => currentSurface,
+      getVisiblePetRectFromBounds: visibleRectFromBounds,
+      getWindowXForVisibleCenter: (centerX) => Math.round(centerX - 60),
+      setWalkWindowPosition: (x, y) => {
+        bounds = { ...bounds, x: Math.round(x), y: Math.round(y) };
+        walkTrackX = Math.round(x);
+        return bounds.x;
+      },
+      setTaskbarWalkWindowPositionForCenter: () => null,
+      isWalkingState: () => true,
+      refreshMenuAnchorAfterScale: () => {},
+      refreshHoverAnchorAfterScale: () => {},
+      refreshCustomizationAnchorAfterScale: () => {},
+      repositionStartupBubbleWindow: () => {},
+      sendScaleChanged: () => {},
+      preferencesStore: {
+        readPetScalePreference: () => {},
+        getPetScale: () => 1,
+        getPreferredPetScale: () => 1,
+        setPreferredPetScale: () => {},
+        writePetScalePreference: () => {}
+      },
+      getPetWindow: () => ({
+        isDestroyed: () => false,
+        getBounds: () => ({ ...bounds }),
+        setBounds: (nextBounds) => {
+          bounds = { ...bounds, ...nextBounds };
+        }
+      }),
+      getActiveState: () => "petWalk",
+      getWalkDirection: () => 1,
+      getTaskbarWalkRunway: () => null,
+      setTaskbarWalkRunway: () => {},
+      getWalkTrackX: () => walkTrackX,
+      setWalkTrackX: (value) => { walkTrackX = value; },
+      log: () => {},
+      DEFAULT_PET_SCALE: 1,
+      PET_SCALE_MIN: 0.75,
+      PET_SCALE_MAX: 1.6,
+      PET_SCALE_STEP: 0.08,
+      VISIBLE_TOP_GAP: 0,
+      WINDOW_DOCK_DEBUG: false,
+      WINDOW_DOCK_COARSE_CORRECTION_LIMIT: 28,
+      WINDOW_DOCK_FINE_CORRECTION_LIMIT: 2
+    });
+
+    controller.groundPetToSurface("petWalk", 1, currentSurface);
+
+    assert.equal(immediateCalls, 0);
+    assert.deepEqual(syncCalls, [100]);
+    assert.equal(walkTrackX, 100);
+  } finally {
+    global.setImmediate = originalSetImmediate;
+  }
+});
+
+test("groundPetToSurface preserves the current window walk X track when bounds lag behind", () => {
+  let bounds = { x: 216, y: 200, width: 180, height: 180 };
+  let currentSurface = {
+    type: "window",
+    left: 80,
+    right: 520,
+    groundY: 320,
+    workArea: { x: 0, y: 0, width: 800, height: 600 }
+  };
+  let walkTrackX = 220;
+  const positionCalls = [];
+  const syncCalls = [];
+
+  function visibleRectFromBounds(nextBounds) {
+    return {
+      x: Math.round(nextBounds.x + 20),
+      y: Math.round(nextBounds.y + 30),
+      width: 80,
+      height: 90
+    };
+  }
+
+  const controller = createSurfaceScaleController({
+    clampPetScale: (value) => Math.round(Math.min(Math.max(Number(value) || 1, 0.75), 1.6) * 100) / 100,
+    getPetWindowWidth: () => 180,
+    getPetWindowHeight: () => 180,
+    getPetSpriteSize: () => 128,
+    getSpriteLocalXForWindowWidth: () => 26,
+    getSurfaceWorkArea: () => currentSurface.workArea,
+    getVisibleSpriteInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }),
+    getGroundedWindowYForSurface: () => 200,
+    clampPetWindowPositionToSurface: (x, y) => ({ x: Math.round(x), y: Math.round(y) }),
+    getTaskbarWalkCenterLimits: () => ({ left: 0, right: 800 }),
+    ensureTaskbarWalkRunwayForCenter: () => null,
+    isTaskbarWalkActive: () => false,
+    clearPetWindowHitRegion: () => {},
+    getWalkVisibleCenterFromWindowX: (x) => x,
+    getTaskbarWalkRunwayWindowWidth: () => 800,
+    setPetWindowPosition: (x, y) => {
+      positionCalls.push({ x: Math.round(x), y: Math.round(y) });
+      bounds = { ...bounds, x: Math.round(x), y: Math.round(y) };
+    },
+    syncWalkTrackX: (x) => {
+      syncCalls.push(Math.round(x));
+      walkTrackX = Math.round(x);
+    },
+    updatePetWindowMousePassthrough: () => {},
+    scheduleWalkLoopTimeout: () => {},
+    resetToTaskbarSurface: () => currentSurface,
+    setCurrentSurface: (surface) => {
+      currentSurface = surface;
+      return currentSurface;
+    },
+    getCurrentSurface: () => currentSurface,
+    getVisiblePetRectFromBounds: visibleRectFromBounds,
+    getWindowXForVisibleCenter: (centerX) => Math.round(centerX - 60),
+    setWalkWindowPosition: (x, y) => {
+      bounds = { ...bounds, x: Math.round(x), y: Math.round(y) };
+      walkTrackX = Math.round(x);
+      return bounds.x;
+    },
+    setTaskbarWalkWindowPositionForCenter: () => null,
+    isWalkingState: () => true,
+    refreshMenuAnchorAfterScale: () => {},
+    refreshHoverAnchorAfterScale: () => {},
+    refreshCustomizationAnchorAfterScale: () => {},
+    repositionStartupBubbleWindow: () => {},
+    sendScaleChanged: () => {},
+    preferencesStore: {
+      readPetScalePreference: () => {},
+      getPetScale: () => 1,
+      getPreferredPetScale: () => 1,
+      setPreferredPetScale: () => {},
+      writePetScalePreference: () => {}
+    },
+    getPetWindow: () => ({
+      isDestroyed: () => false,
+      getBounds: () => ({ ...bounds }),
+      setBounds: (nextBounds) => {
+        bounds = { ...bounds, ...nextBounds };
+      }
+    }),
+    getActiveState: () => "petWalk",
+    getWalkDirection: () => -1,
+    getTaskbarWalkRunway: () => null,
+    setTaskbarWalkRunway: () => {},
+    getWalkTrackX: () => walkTrackX,
+    setWalkTrackX: (value) => { walkTrackX = value; },
+    log: () => {},
+    DEFAULT_PET_SCALE: 1,
+    PET_SCALE_MIN: 0.75,
+    PET_SCALE_MAX: 1.6,
+    PET_SCALE_STEP: 0.08,
+    VISIBLE_TOP_GAP: 0,
+    WINDOW_DOCK_DEBUG: false,
+    WINDOW_DOCK_COARSE_CORRECTION_LIMIT: 28,
+    WINDOW_DOCK_FINE_CORRECTION_LIMIT: 2
+  });
+
+  controller.groundPetToSurface("petWalk", -1, currentSurface);
+
+  assert.deepEqual(positionCalls, [{ x: 220, y: 200 }]);
+  assert.deepEqual(syncCalls, [220]);
+  assert.equal(bounds.x, 220);
+  assert.equal(walkTrackX, 220);
 });

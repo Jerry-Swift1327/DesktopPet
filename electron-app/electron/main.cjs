@@ -1179,8 +1179,9 @@ const walkController = createWalkController({
   applySurfaceScale,
   resetToTaskbarSurface,
   getGroundedWindowYForSurface,
-  getWindowXForVisibleCenter,
-  getWindowWalkCenterLimits,
+  getWalkVisibleRectFromWindowX,
+  getWindowXForVisibleEdge,
+  getSafeWindowXForDirection,
   setWalkWindowPosition,
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
   getPetWindow: () => petWindowController.getPetWindow(),
@@ -3075,12 +3076,8 @@ function alignWalkLoopToSurface(fallbackDirection = -1) {
     const centerX = Number.isFinite(visualCenterX)
       ? visualCenterX
       : getWalkVisibleCenterFromWindowX(bounds.x, groundedY, activeState, walkDirection);
-    const centerLimits = getWindowWalkCenterLimits(activeSurface, activeState);
-    const safeCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
-    const targetX = getWindowXForVisibleCenter(safeCenterX, activeState, walkDirection);
-    setWalkWindowPosition(targetX, groundedY, activeSurface, walkDirection, {
-      trackCenterX: safeCenterX
-    });
+    const targetX = getWindowXForVisibleCenter(centerX, activeState, walkDirection);
+    setWalkWindowPosition(targetX, groundedY, activeSurface, walkDirection);
   } else {
     const safeX = getSafeWindowXForDirection(bounds.x, activeSurface, activeState, walkDirection);
     setWalkWindowPosition(safeX, groundedY, activeSurface, walkDirection);
@@ -3508,7 +3505,11 @@ function syncWalkTrackX(x = null) {
 
   const bounds = getPetWindow().getBounds();
   const surface = getCurrentSurface();
-  const sourceX = Number.isFinite(x) ? x : bounds.x;
+  const sourceX = Number.isFinite(x)
+    ? x
+    : surface?.type === "window" && isWalkingState() && Number.isFinite(walkTrackX)
+      ? walkTrackX
+      : bounds.x;
   if (isTaskbarWalkActive(surface)) {
     const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
     const centerLimits = getTaskbarWalkCenterLimits(surface, activeState);
@@ -3521,10 +3522,7 @@ function syncWalkTrackX(x = null) {
     return;
   }
   if (surface?.type === "window") {
-    const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
-    const centerLimits = getWindowWalkCenterLimits(surface, activeState);
-    const centerX = getWalkVisibleCenterFromWindowX(sourceX, groundedY, activeState, walkDirection);
-    walkTrackX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
+    walkTrackX = getSafeWindowXForDirection(sourceX, surface, activeState, walkDirection);
     taskbarWalkRunway = null;
     clearPetWindowHitRegion();
     return;
@@ -3534,28 +3532,11 @@ function syncWalkTrackX(x = null) {
   walkTrackX = getSafeWindowXForDirection(sourceX, surface, activeState, walkDirection);
 }
 
-function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection, options = {}) {
+function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection) {
   if (surface?.type === "window") {
-    const rawX = Math.round(x);
+    const nextX = getSafeWindowXForDirection(x, surface, activeState, direction);
     const nextY = Math.round(y);
-    const centerLimits = getWindowWalkCenterLimits(surface, activeState);
-    if (Number.isFinite(options.trackCenterX)) {
-      const requestedCenterX = Math.round(options.trackCenterX);
-      const safeCenterX = clamp(requestedCenterX, centerLimits.left, centerLimits.right);
-      const nextX = Math.round(rawX + safeCenterX - requestedCenterX);
-      walkTrackX = safeCenterX;
-      const bounds = getPetWindow().getBounds();
-      if (bounds.x !== nextX || bounds.y !== nextY) {
-        getPetWindow().setPosition(nextX, nextY, false);
-      }
-      return nextX;
-    }
-    const centerX = getWalkVisibleCenterFromWindowX(rawX, y, activeState, direction);
-    const safeCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
-    const nextX = safeCenterX === Math.round(centerX)
-      ? rawX
-      : getWindowXForVisibleCenter(safeCenterX, activeState, direction);
-    walkTrackX = safeCenterX;
+    walkTrackX = nextX;
     const bounds = getPetWindow().getBounds();
     if (bounds.x !== nextX || bounds.y !== nextY) {
       getPetWindow().setPosition(nextX, nextY, false);

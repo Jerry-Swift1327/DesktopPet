@@ -146,10 +146,8 @@ function createSurfaceScaleController(context) {
         clearPetWindowHitRegion();
       }
       if (needsResize) {
-        const trackCenterX = surface?.type === "window" && isWalkingState() ? getWalkTrackX() : null;
-        const anchorX = Number.isFinite(trackCenterX)
-          ? Math.round(trackCenterX)
-          : getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
+        const shouldSyncWindowTrack = surface?.type === "window" && isWalkingState();
+        const anchorX = getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
           ?? bounds.x + Math.round(bounds.width / 2);
         const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
         const next = clampPetWindowPositionToSurface(
@@ -165,10 +163,8 @@ function createSurfaceScaleController(context) {
           width: getPetWindowWidth(),
           height: getPetWindowHeight()
         }, false);
-        if (Number.isFinite(trackCenterX)) {
-          setWalkWindowPosition(next.x, groundedY, surface, direction, {
-            trackCenterX: Math.round(trackCenterX)
-          });
+        if (shouldSyncWindowTrack) {
+          syncWalkTrackX(next.x);
         }
       }
       if (wasRunwayActive || needsResize) {
@@ -217,10 +213,8 @@ function createSurfaceScaleController(context) {
     }
     setTaskbarWalkRunway(null);
     clearPetWindowHitRegion();
-    const trackCenterX = surface?.type === "window" && isWalkingState() ? getWalkTrackX() : null;
-    const anchorX = Number.isFinite(trackCenterX)
-      ? Math.round(trackCenterX)
-      : getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
+    const shouldSyncWindowTrack = surface?.type === "window" && isWalkingState();
+    const anchorX = getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
       ?? bounds.x + Math.round(bounds.width / 2);
     const newWidth = getPetWindowWidth();
     const newHeight = getPetWindowHeight();
@@ -238,10 +232,8 @@ function createSurfaceScaleController(context) {
       width: newWidth,
       height: newHeight
     }, false);
-    if (Number.isFinite(trackCenterX)) {
-      setWalkWindowPosition(next.x, groundedY, surface, direction, {
-        trackCenterX: Math.round(trackCenterX)
-      });
+    if (shouldSyncWindowTrack) {
+      syncWalkTrackX(next.x);
     }
     sendScaleChanged(buildScaleSummary());
     refreshMenuAnchorAfterScale();
@@ -284,19 +276,14 @@ function createSurfaceScaleController(context) {
     let syncTrackX = bounds.x;
     let shouldSyncTrack = true;
     if (activeSurface.type === "window") {
-      const trackCenterX = isWalkingState() ? getWalkTrackX() : null;
-      if (Number.isFinite(trackCenterX)) {
-        const targetX = getWindowXForVisibleCenterAnchor(trackCenterX, stateId, direction);
-        syncTrackX = setWalkWindowPosition(targetX, groundedY, activeSurface, direction, {
-          trackCenterX
-        });
-        shouldSyncTrack = false;
-      } else {
-        const next = clampPetWindowPositionToSurface(bounds.x, groundedY, activeSurface, stateId, direction);
-        syncTrackX = next.x;
-        if (next.x !== bounds.x || next.y !== bounds.y) {
-          setPetWindowPosition(next.x, next.y);
-        }
+      const walkingTrackX = isWalkingState() && Number.isFinite(getWalkTrackX())
+        ? Math.round(getWalkTrackX())
+        : null;
+      const sourceX = Number.isFinite(walkingTrackX) ? walkingTrackX : bounds.x;
+      const next = clampPetWindowPositionToSurface(sourceX, groundedY, activeSurface, stateId, direction);
+      syncTrackX = next.x;
+      if (next.x !== bounds.x || next.y !== bounds.y) {
+        setPetWindowPosition(next.x, next.y);
       }
       const applyWindowDockCorrection = (limit, label = "coarse") => {
         const correctionWin = getPetWindow();
@@ -313,13 +300,15 @@ function createSurfaceScaleController(context) {
         return false;
       };
       applyWindowDockCorrection(WINDOW_DOCK_COARSE_CORRECTION_LIMIT, "coarse");
-      setImmediate(() => {
-        const currentWin = getPetWindow();
-        if (!currentWin || currentWin.isDestroyed() || getCurrentSurface().type !== "window") {
-          return;
-        }
-        applyWindowDockCorrection(WINDOW_DOCK_FINE_CORRECTION_LIMIT, "fine");
-      });
+      if (!isWalkingState()) {
+        setImmediate(() => {
+          const currentWin = getPetWindow();
+          if (!currentWin || currentWin.isDestroyed() || getCurrentSurface().type !== "window") {
+            return;
+          }
+          applyWindowDockCorrection(WINDOW_DOCK_FINE_CORRECTION_LIMIT, "fine");
+        });
+      }
     } else {
       const next = clampPetWindowPositionToSurface(bounds.x, groundedY, activeSurface, stateId, direction);
       syncTrackX = next.x;
@@ -426,7 +415,10 @@ function createSurfaceScaleController(context) {
       height: newHeight
     }, false);
     const surfaceAfterResize = getCurrentSurface();
-    if (isWalkingState() && surfaceAfterResize?.type !== "window") {
+    const walkingAfterResize = isWalkingState();
+    if (walkingAfterResize && surfaceAfterResize?.type === "window") {
+      syncWalkTrackX(next.x);
+    } else if (walkingAfterResize) {
       if (!restoreWalkTrackAnchorAfterScale(walkScaleAnchor, surfaceAfterResize)) {
         groundPetToSurface(getActiveState(), getWalkDirection(), surfaceAfterResize);
       }
@@ -438,8 +430,10 @@ function createSurfaceScaleController(context) {
     refreshHoverAnchorAfterScale();
     refreshCustomizationAnchorAfterScale();
     repositionStartupBubbleWindow({ refreshAnchor: true });
-    if (isWalkingState()) {
-      syncWalkTrackX();
+    if (walkingAfterResize) {
+      if (surfaceAfterResize?.type !== "window") {
+        syncWalkTrackX();
+      }
       scheduleWalkLoopTimeout();
     }
   }
@@ -464,8 +458,7 @@ function createSurfaceScaleController(context) {
     }
     return {
       type: "window-center",
-      value: getWalkTrackX()
-        ?? getVisibleCenterAnchorFromBounds(bounds, getActiveState(), getWalkDirection())
+      value: getVisibleCenterAnchorFromBounds(bounds, getActiveState(), getWalkDirection())
         ?? bounds.x + Math.round(bounds.width / 2)
     };
   }
@@ -510,12 +503,6 @@ function createSurfaceScaleController(context) {
       return true;
     }
     const targetX = getWindowXForVisibleCenterAnchor(anchor.value, getActiveState(), getWalkDirection());
-    if (anchor.type === "window-center" && surface?.type === "window") {
-      setWalkWindowPosition(targetX, groundedY, surface, getWalkDirection(), {
-        trackCenterX: Math.round(anchor.value)
-      });
-      return true;
-    }
     setWalkWindowPosition(targetX, groundedY, surface, getWalkDirection());
     return true;
   }

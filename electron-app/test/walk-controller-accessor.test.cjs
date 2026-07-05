@@ -85,7 +85,9 @@ test("walk-controller context 包含全部 getter/setter 访问器", () => {
   // setWalkDirection 和 syncWalkTrackX 应作为依赖函数存在（不在 getter/setter 区，但在 context 中）
   assert.match(contextBlock, /setWalkDirection/);
   assert.match(contextBlock, /syncWalkTrackX/);
-  assert.match(contextBlock, /getWindowXForVisibleCenter/);
+  assert.match(contextBlock, /getWalkVisibleRectFromWindowX/);
+  assert.match(contextBlock, /getWindowXForVisibleEdge/);
+  assert.match(contextBlock, /getSafeWindowXForDirection/);
   assert.doesNotMatch(contextBlock, /getWindowXForWalkFrameVisibleCenter/);
 });
 
@@ -152,6 +154,8 @@ test("walk-controller 保留关键分支标记确保逻辑未丢失", () => {
   assert.match(controllerSource, /edgeFlip=/);
   assert.match(controllerSource, /left-center/);
   assert.match(controllerSource, /right-center/);
+  assert.match(controllerSource, /left-threshold/);
+  assert.match(controllerSource, /right-threshold/);
   // left-stuck / right-stuck 原位于窗口分支 isTaskbarSurface 死分支内（该标志在窗口路径恒为
   // false，非 window 表面已提前走 advanceTaskbarWalkStep），Phase 2 重构移除该死分支；
   // 此处保留 left-center-stuck / right-center-stuck（taskbar 路径，可达）。
@@ -165,17 +169,34 @@ test("walk-controller 保留关键分支标记确保逻辑未丢失", () => {
 test("window surface walk 使用 state 级可见中心而非逐帧 X 补偿", () => {
   assert.match(
     controllerSource,
-    /const nextX = getWindowXForVisibleCenter\(nextCenterX, getActiveState\(\), getWalkDirection\(\)\);/
+    /const previousX = getWalkTrackX\(\) \?\? bounds\.x;/
   );
+  assert.match(
+    controllerSource,
+    /const actualX = setWalkWindowPosition\(nextX, groundedY, activeSurface, getWalkDirection\(\)\);/
+  );
+  assert.doesNotMatch(controllerSource, /trackCenterX/);
   assert.doesNotMatch(controllerSource, /getWindowXForWalkFrameVisibleCenter/);
   assert.doesNotMatch(mainSource, /getWindowXForWalkFrameVisibleCenter/);
   assert.doesNotMatch(mainSource, /getWalkFrameIndexForStep/);
 });
 
-test("main.cjs window surface walk alignment passes the center track explicitly", () => {
+test("main.cjs window surface walk alignment writes a plain window X target", () => {
   assert.match(
     mainSource,
-    /setWalkWindowPosition\(targetX,\s*groundedY,\s*activeSurface,\s*walkDirection,\s*\{\s*trackCenterX:\s*safeCenterX\s*\}\);/
+    /setWalkWindowPosition\(targetX,\s*groundedY,\s*activeSurface,\s*walkDirection\);/
+  );
+  assert.doesNotMatch(mainSource, /trackCenterX/);
+});
+
+test("main.cjs window walk sync keeps an existing real X track instead of reading stale bounds", () => {
+  assert.match(
+    mainSource,
+    /surface\?\.type === "window" && isWalkingState\(\) && Number\.isFinite\(walkTrackX\)/
+  );
+  assert.match(
+    mainSource,
+    /\? walkTrackX\s*:\s*bounds\.x;/
   );
 });
 
