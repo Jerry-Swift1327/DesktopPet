@@ -3078,7 +3078,9 @@ function alignWalkLoopToSurface(fallbackDirection = -1) {
     const centerLimits = getWindowWalkCenterLimits(activeSurface, activeState);
     const safeCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
     const targetX = getWindowXForVisibleCenter(safeCenterX, activeState, walkDirection);
-    setWalkWindowPosition(targetX, groundedY, activeSurface, walkDirection);
+    setWalkWindowPosition(targetX, groundedY, activeSurface, walkDirection, {
+      trackCenterX: safeCenterX
+    });
   } else {
     const safeX = getSafeWindowXForDirection(bounds.x, activeSurface, activeState, walkDirection);
     setWalkWindowPosition(safeX, groundedY, activeSurface, walkDirection);
@@ -3535,13 +3537,17 @@ function syncWalkTrackX(x = null) {
 function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection, options = {}) {
   if (surface?.type === "window") {
     const rawX = Math.round(x);
+    const nextY = Math.round(y);
     const centerLimits = getWindowWalkCenterLimits(surface, activeState);
     if (Number.isFinite(options.trackCenterX)) {
       const requestedCenterX = Math.round(options.trackCenterX);
       const safeCenterX = clamp(requestedCenterX, centerLimits.left, centerLimits.right);
       const nextX = Math.round(rawX + safeCenterX - requestedCenterX);
       walkTrackX = safeCenterX;
-      getPetWindow().setPosition(nextX, Math.round(y), false);
+      const bounds = getPetWindow().getBounds();
+      if (bounds.x !== nextX || bounds.y !== nextY) {
+        getPetWindow().setPosition(nextX, nextY, false);
+      }
       return nextX;
     }
     const centerX = getWalkVisibleCenterFromWindowX(rawX, y, activeState, direction);
@@ -3550,7 +3556,10 @@ function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = 
       ? rawX
       : getWindowXForVisibleCenter(safeCenterX, activeState, direction);
     walkTrackX = safeCenterX;
-    getPetWindow().setPosition(nextX, Math.round(y), false);
+    const bounds = getPetWindow().getBounds();
+    if (bounds.x !== nextX || bounds.y !== nextY) {
+      getPetWindow().setPosition(nextX, nextY, false);
+    }
     return nextX;
   }
 

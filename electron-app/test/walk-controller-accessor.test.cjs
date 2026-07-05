@@ -172,6 +172,13 @@ test("window surface walk 使用 state 级可见中心而非逐帧 X 补偿", ()
   assert.doesNotMatch(mainSource, /getWalkFrameIndexForStep/);
 });
 
+test("main.cjs window surface walk alignment passes the center track explicitly", () => {
+  assert.match(
+    mainSource,
+    /setWalkWindowPosition\(targetX,\s*groundedY,\s*activeSurface,\s*walkDirection,\s*\{\s*trackCenterX:\s*safeCenterX\s*\}\);/
+  );
+});
+
 test("walk-controller 保留 6 个导出函数", () => {
   assert.match(controllerSource, /function scheduleWalkLoopTimeout\(\)/);
   assert.match(controllerSource, /function startWalkLoop\(\)/);

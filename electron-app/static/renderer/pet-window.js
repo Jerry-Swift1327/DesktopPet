@@ -578,15 +578,12 @@ async function renderPetWindow() {
         }
 
         if (state?.moving) {
-          if (currentEpoch === animationEpoch) {
-            frameStep += 1;
-            renderFrame();
-          }
           if (!walkStepInFlight) {
             walkStepInFlight = true;
+            const nextFrameStep = frameStep + 1;
             const stepStartedAt = performance.now();
             const requestEpoch = currentEpoch;
-            requestWalkStep(frameStep, elapsedMs).then((result) => {
+            requestWalkStep(nextFrameStep, elapsedMs).then((result) => {
               logWalkStepDiagnostic(stepStartedAt, result, direction);
               if (requestEpoch !== animationEpoch) {
                 return;
@@ -596,6 +593,7 @@ async function renderPetWindow() {
               }
               walkFailureCount = 0;
               if (result && result.state === activeState && Number.isFinite(result.direction)) {
+                frameStep = nextFrameStep;
                 direction = result.direction;
                 if (result.scale) {
                   applyScale(result.scale);

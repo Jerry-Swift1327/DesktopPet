@@ -116,3 +116,22 @@ test("renderer wires the frame cache before pet-window, gates state changes, and
   assert.doesNotMatch(petWindowSource, /predictScaleSummary/);
   assert.doesNotMatch(petWindowSource, /applyScale\(predictedScale\)/);
 });
+
+test("renderer commits moving walk frames only after advanceWalkStep resolves", () => {
+  const petWindowSource = fs.readFileSync(petWindowPath, "utf8");
+  const nextFrameStepIndex = petWindowSource.indexOf("const nextFrameStep = frameStep + 1;");
+  const requestIndex = petWindowSource.indexOf("requestWalkStep(nextFrameStep, elapsedMs)");
+  const commitIndex = petWindowSource.indexOf("frameStep = nextFrameStep;");
+
+  assert.ok(nextFrameStepIndex >= 0);
+  assert.ok(requestIndex > nextFrameStepIndex);
+  assert.ok(commitIndex > requestIndex);
+  assert.match(
+    petWindowSource,
+    /if \(!walkStepInFlight\) \{\s*walkStepInFlight = true;\s*const nextFrameStep = frameStep \+ 1;/
+  );
+  assert.doesNotMatch(
+    petWindowSource,
+    /frameStep \+= 1;\s*renderFrame\(\);\s*\}\s*if \(!walkStepInFlight\)/
+  );
+});

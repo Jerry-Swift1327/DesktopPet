@@ -434,7 +434,8 @@ function createWalkController(context) {
       x: actualX,
       y: Math.round(groundedY),
       frameStep: Number.isFinite(frameStep) ? Math.round(frameStep) : 0,
-      moved: actualCenterX !== previousCenterX
+      moved: actualCenterX !== previousCenterX,
+      scale: buildScaleSummary()
     };
     logWalkStepDiagnostic(stepStartedAt, result, edgeFlipReason ? `edgeFlip=${edgeFlipReason} previousCenterX=${previousCenterX} centerX=${actualCenterX} actualX=${actualX}` : `centerX=${actualCenterX}`);
     return result;

@@ -265,11 +265,23 @@ function createSurfaceScaleController(context) {
     }
     setTaskbarWalkRunway(null);
     clearPetWindowHitRegion();
-    const next = clampPetWindowPositionToSurface(bounds.x, groundedY, activeSurface, stateId, direction);
-    if (next.x !== bounds.x || next.y !== bounds.y) {
-      setPetWindowPosition(next.x, next.y);
-    }
+    let syncTrackX = bounds.x;
+    let shouldSyncTrack = true;
     if (activeSurface.type === "window") {
+      const trackCenterX = isWalkingState() ? getWalkTrackX() : null;
+      if (Number.isFinite(trackCenterX)) {
+        const targetX = getWindowXForVisibleCenterAnchor(trackCenterX, stateId, direction);
+        syncTrackX = setWalkWindowPosition(targetX, groundedY, activeSurface, direction, {
+          trackCenterX
+        });
+        shouldSyncTrack = false;
+      } else {
+        const next = clampPetWindowPositionToSurface(bounds.x, groundedY, activeSurface, stateId, direction);
+        syncTrackX = next.x;
+        if (next.x !== bounds.x || next.y !== bounds.y) {
+          setPetWindowPosition(next.x, next.y);
+        }
+      }
       const applyWindowDockCorrection = (limit, label = "coarse") => {
         const correctionWin = getPetWindow();
         const correctedBounds = correctionWin.getBounds();
@@ -293,13 +305,20 @@ function createSurfaceScaleController(context) {
         applyWindowDockCorrection(WINDOW_DOCK_FINE_CORRECTION_LIMIT, "fine");
       });
     } else {
+      const next = clampPetWindowPositionToSurface(bounds.x, groundedY, activeSurface, stateId, direction);
+      syncTrackX = next.x;
+      if (next.x !== bounds.x || next.y !== bounds.y) {
+        setPetWindowPosition(next.x, next.y);
+      }
       const correctedBounds = win.getBounds();
       const fallback = clampPetWindowPositionToSurface(correctedBounds.x, correctedBounds.y, activeSurface, stateId, direction);
       if (fallback.y !== correctedBounds.y || fallback.x !== correctedBounds.x) {
         setPetWindowPosition(fallback.x, fallback.y);
       }
     }
-    syncWalkTrackX(next.x);
+    if (shouldSyncTrack) {
+      syncWalkTrackX(syncTrackX);
+    }
   }
 
   function buildScaleSummary() {
@@ -369,7 +388,9 @@ function createSurfaceScaleController(context) {
       scheduleWalkLoopTimeout();
       return;
     }
-    const anchorX = getVisibleCenterAnchorFromBounds(bounds, getActiveState(), getWalkDirection())
+    const anchorX = isWalkingState() && surface?.type === "window" && walkScaleAnchor?.type === "window-center"
+      ? walkScaleAnchor.value
+      : getVisibleCenterAnchorFromBounds(bounds, getActiveState(), getWalkDirection())
       ?? bounds.x + Math.round(bounds.width / 2);
     petScale = clampedScale;
     const newWidth = getPetWindowWidth();
@@ -473,6 +494,12 @@ function createSurfaceScaleController(context) {
       return true;
     }
     const targetX = getWindowXForVisibleCenterAnchor(anchor.value, getActiveState(), getWalkDirection());
+    if (anchor.type === "window-center" && surface?.type === "window") {
+      setWalkWindowPosition(targetX, groundedY, surface, getWalkDirection(), {
+        trackCenterX: Math.round(anchor.value)
+      });
+      return true;
+    }
     setWalkWindowPosition(targetX, groundedY, surface, getWalkDirection());
     return true;
   }
