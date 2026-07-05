@@ -85,6 +85,8 @@ test("walk-controller context 包含全部 getter/setter 访问器", () => {
   // setWalkDirection 和 syncWalkTrackX 应作为依赖函数存在（不在 getter/setter 区，但在 context 中）
   assert.match(contextBlock, /setWalkDirection/);
   assert.match(contextBlock, /syncWalkTrackX/);
+  assert.match(contextBlock, /getWindowXForVisibleCenter/);
+  assert.doesNotMatch(contextBlock, /getWindowXForWalkFrameVisibleCenter/);
 });
 
 test("walk-controller 内部使用 getter 调用而非裸变量读取", () => {
@@ -158,6 +160,16 @@ test("walk-controller 保留关键分支标记确保逻辑未丢失", () => {
   // 守护：窗口分支不得再引入 isTaskbarSurface / preserveRightEdgeX 死代码
   assert.doesNotMatch(controllerSource, /isTaskbarSurface/);
   assert.doesNotMatch(controllerSource, /preserveRightEdgeX/);
+});
+
+test("window surface walk 使用 state 级可见中心而非逐帧 X 补偿", () => {
+  assert.match(
+    controllerSource,
+    /const nextX = getWindowXForVisibleCenter\(nextCenterX, getActiveState\(\), getWalkDirection\(\)\);/
+  );
+  assert.doesNotMatch(controllerSource, /getWindowXForWalkFrameVisibleCenter/);
+  assert.doesNotMatch(mainSource, /getWindowXForWalkFrameVisibleCenter/);
+  assert.doesNotMatch(mainSource, /getWalkFrameIndexForStep/);
 });
 
 test("walk-controller 保留 6 个导出函数", () => {

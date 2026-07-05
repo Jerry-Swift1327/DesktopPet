@@ -43,7 +43,7 @@ function createWalkController(context) {
     applySurfaceScale,
     resetToTaskbarSurface,
     getGroundedWindowYForSurface,
-    getWindowXForWalkFrameVisibleCenter,
+    getWindowXForVisibleCenter,
     getWindowWalkCenterLimits,
     setWalkWindowPosition,
     // 外部状态访问器（读取 main.cjs 实时状态）
@@ -404,7 +404,7 @@ function createWalkController(context) {
     }
 
     setWalkDirection(nextDirection);
-    const nextX = getWindowXForWalkFrameVisibleCenter(nextCenterX, frameStep, getActiveState(), getWalkDirection());
+    const nextX = getWindowXForVisibleCenter(nextCenterX, getActiveState(), getWalkDirection());
     const actualX = setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection(), {
       trackCenterX: nextCenterX
     });
