@@ -148,8 +148,8 @@ test("walk-controller 保留关键分支标记确保逻辑未丢失", () => {
   assert.match(controllerSource, /reason=paused/);
   assert.match(controllerSource, /reason=not-walking/);
   assert.match(controllerSource, /edgeFlip=/);
-  assert.match(controllerSource, /left-threshold/);
-  assert.match(controllerSource, /right-threshold/);
+  assert.match(controllerSource, /left-center/);
+  assert.match(controllerSource, /right-center/);
   // left-stuck / right-stuck 原位于窗口分支 isTaskbarSurface 死分支内（该标志在窗口路径恒为
   // false，非 window 表面已提前走 advanceTaskbarWalkStep），Phase 2 重构移除该死分支；
   // 此处保留 left-center-stuck / right-center-stuck（taskbar 路径，可达）。

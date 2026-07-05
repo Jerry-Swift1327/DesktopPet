@@ -427,7 +427,9 @@ function createSurfaceScaleController(context) {
     }
     return {
       type: "window-center",
-      value: bounds.x + Math.round(bounds.width / 2)
+      value: getWalkTrackX()
+        ?? getVisibleCenterAnchorFromBounds(bounds, getActiveState(), getWalkDirection())
+        ?? bounds.x + Math.round(bounds.width / 2)
     };
   }
 
@@ -470,7 +472,7 @@ function createSurfaceScaleController(context) {
       setTaskbarWalkWindowPositionForCenter(centerX, groundedY, getWalkDirection());
       return true;
     }
-    const targetX = Math.round(anchor.value - getPetWindowWidth() / 2);
+    const targetX = getWindowXForVisibleCenterAnchor(anchor.value, getActiveState(), getWalkDirection());
     setWalkWindowPosition(targetX, groundedY, surface, getWalkDirection());
     return true;
   }

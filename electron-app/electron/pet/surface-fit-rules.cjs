@@ -98,6 +98,22 @@ function getTaskbarWalkCenterLimits(limits, spriteSize, leftInsets, rightInsets)
   return { left, right };
 }
 
+function getWindowSurfaceWalkCenterLimits(limits, spriteSize, leftInsets, rightInsets) {
+  const fullVisibleLimits = getTaskbarWalkCenterLimits(limits, spriteSize, leftInsets, rightInsets);
+  if (fullVisibleLimits.left < fullVisibleLimits.right) {
+    return fullVisibleLimits;
+  }
+
+  const left = Math.ceil(Math.min(limits.left, limits.right));
+  const right = Math.floor(Math.max(limits.left, limits.right));
+  if (left <= right) {
+    return { left, right };
+  }
+
+  const center = Math.round((limits.left + limits.right) / 2);
+  return { left: center, right: center };
+}
+
 // 将窗口 x 钳制到行走可见区间内
 function getSafeWindowXForDirection(x, limits, visibleRect) {
   let nextX = Math.round(x);
@@ -215,6 +231,7 @@ module.exports = {
   getWindowXForVisibleCenter,
   getVisibleRectFromSpriteLeft,
   getTaskbarWalkCenterLimits,
+  getWindowSurfaceWalkCenterLimits,
   getSafeWindowXForDirection,
   validateWindowSurfaceBounds,
   stabilizeWindowSurfaceGeometry,

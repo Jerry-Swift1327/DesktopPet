@@ -37,7 +37,7 @@ test("surface-fit-rules 不引用 nativeImage/窗口/screen/IPC/bubble/运行态
   assert.doesNotMatch(sourceCode, /\bscreen\b/);
 });
 
-test("surface-fit-rules 导出 12 个函数", () => {
+test("surface-fit-rules 导出 13 个函数", () => {
   const expected = [
     "getSurfaceVisibleTopFromGroundY",
     "getGroundedWindowYFromSurface",
@@ -47,6 +47,7 @@ test("surface-fit-rules 导出 12 个函数", () => {
     "getWindowXForVisibleCenter",
     "getVisibleRectFromSpriteLeft",
     "getTaskbarWalkCenterLimits",
+    "getWindowSurfaceWalkCenterLimits",
     "getSafeWindowXForDirection",
     "validateWindowSurfaceBounds",
     "stabilizeWindowSurfaceGeometry",
@@ -55,7 +56,7 @@ test("surface-fit-rules 导出 12 个函数", () => {
   for (const fn of expected) {
     assert.equal(typeof surfaceFit[fn], "function", `应导出 ${fn}`);
   }
-  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 12");
+  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 13");
 });
 
 // getSurfaceVisibleTopFromGroundY
@@ -250,6 +251,25 @@ test("getTaskbarWalkCenterLimits left>right 返回中心点", () => {
     { left: 0, right: 0 }
   );
   assert.deepEqual(result, { left: 50, right: 50 });
+});
+
+// getWindowSurfaceWalkCenterLimits
+test("getWindowSurfaceWalkCenterLimits 宽 surface 沿用完整可见中心区间", () => {
+  const result = surfaceFit.getWindowSurfaceWalkCenterLimits(
+    { left: 0, right: 1000 }, 200,
+    { left: 10, top: 0, right: 20, bottom: 0 },
+    { left: 15, top: 0, right: 25, bottom: 0 }
+  );
+  assert.deepEqual(result, { left: 85, right: 915 });
+});
+
+test("getWindowSurfaceWalkCenterLimits 窄 surface 不退化为单点", () => {
+  const result = surfaceFit.getWindowSurfaceWalkCenterLimits(
+    { left: 100, right: 160 }, 200,
+    { left: 0, right: 0, top: 0, bottom: 0 },
+    { left: 0, right: 0, top: 0, bottom: 0 }
+  );
+  assert.deepEqual(result, { left: 100, right: 160 });
 });
 
 // getSafeWindowXForDirection

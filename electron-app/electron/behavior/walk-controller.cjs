@@ -43,9 +43,8 @@ function createWalkController(context) {
     applySurfaceScale,
     resetToTaskbarSurface,
     getGroundedWindowYForSurface,
-    getWalkVisibleRectFromWindowX,
-    getWindowXForVisibleEdge,
-    getSafeWindowXForDirection,
+    getWindowXForVisibleCenter,
+    getWindowWalkCenterLimits,
     setWalkWindowPosition,
     // 外部状态访问器（读取 main.cjs 实时状态）
     getPetWindow,
@@ -370,40 +369,46 @@ function createWalkController(context) {
       syncWalkTrackX(bounds.x);
     }
 
-    const previousX = getWalkTrackX() ?? bounds.x;
+    const previousCenterX = getWalkTrackX()
+      ?? getWalkVisibleCenterFromWindowX(bounds.x, groundedY, getActiveState(), getWalkDirection());
     let nextDirection = getWalkDirection() >= 0 ? 1 : -1;
-    const stepDistance = WALK_STEP;
-    let nextX = previousX + nextDirection * stepDistance;
-    const limits = getWalkVisibleLimits(activeSurface);
-    // window surface walk 全程基于 state 级稳定几何（与 taskbar/悬空一致），不依赖渲染帧
-    // visibleRect，避免 renderedFrameIndex 异步上报导致的逐帧 X 抖动。
-    const nextVisibleRect = getWalkVisibleRectFromWindowX(nextX, groundedY, getActiveState(), nextDirection);
-    const leftMirrorThreshold = limits.left + WALK_MIRROR_HYSTERESIS_PX;
-    const rightMirrorThreshold = limits.right - WALK_MIRROR_HYSTERESIS_PX;
+    const centerLimits = getWindowWalkCenterLimits(activeSurface, getActiveState());
+    let nextCenterX = previousCenterX + nextDirection * WALK_STEP;
+    const leftMirrorThreshold = centerLimits.left + WALK_MIRROR_HYSTERESIS_PX;
+    const rightMirrorThreshold = centerLimits.right - WALK_MIRROR_HYSTERESIS_PX;
     const cooldownActive = getWalkMirrorCooldownSteps() > 0;
     let mirroredThisStep = false;
     let edgeFlipReason = "";
 
-    if (!cooldownActive && nextDirection < 0 && nextVisibleRect.x <= leftMirrorThreshold) {
+    if (!cooldownActive && nextDirection < 0 && nextCenterX <= leftMirrorThreshold) {
+      nextCenterX = centerLimits.left;
       nextDirection = 1;
-      nextX = getWindowXForVisibleEdge("left", limits.left, getActiveState(), nextDirection);
       mirroredThisStep = true;
-      edgeFlipReason = "left-threshold";
-    } else if (!cooldownActive && nextDirection > 0 && nextVisibleRect.x + nextVisibleRect.width >= rightMirrorThreshold) {
+      edgeFlipReason = "left-center";
+    } else if (!cooldownActive && nextDirection > 0 && nextCenterX >= rightMirrorThreshold) {
+      nextCenterX = centerLimits.right;
       nextDirection = -1;
-      nextX = getWindowXForVisibleEdge("right", limits.right, getActiveState(), nextDirection);
       mirroredThisStep = true;
-      edgeFlipReason = "right-threshold";
+      edgeFlipReason = "right-center";
     }
 
     if (cooldownActive && !mirroredThisStep) {
       setWalkMirrorCooldownSteps(getWalkMirrorCooldownSteps() - 1);
     }
 
+    nextCenterX = clamp(Math.round(nextCenterX), centerLimits.left, centerLimits.right);
+    if (!mirroredThisStep && nextDirection < 0) {
+      nextCenterX = Math.min(previousCenterX, nextCenterX);
+    } else if (!mirroredThisStep && nextDirection > 0) {
+      nextCenterX = Math.max(previousCenterX, nextCenterX);
+    }
+
     setWalkDirection(nextDirection);
-    // setWalkWindowPosition 内部用 state insets 将 nextX 钳制到 surface 可见区间，确保 X 稳定
+    const nextX = getWindowXForVisibleCenter(nextCenterX, getActiveState(), getWalkDirection());
     const actualX = setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection());
-    if (actualX === previousX) {
+    const actualCenterX = getWalkTrackX()
+      ?? getWalkVisibleCenterFromWindowX(actualX, groundedY, getActiveState(), getWalkDirection());
+    if (actualCenterX === previousCenterX) {
       setStalledWalkSteps(getStalledWalkSteps() + 1);
     } else {
       setStalledWalkSteps(0);
@@ -427,9 +432,9 @@ function createWalkController(context) {
       x: actualX,
       y: Math.round(groundedY),
       frameStep: Number.isFinite(frameStep) ? Math.round(frameStep) : 0,
-      moved: actualX !== previousX
+      moved: actualCenterX !== previousCenterX
     };
-    logWalkStepDiagnostic(stepStartedAt, result, edgeFlipReason ? `edgeFlip=${edgeFlipReason} previousX=${previousX} actualX=${actualX}` : "");
+    logWalkStepDiagnostic(stepStartedAt, result, edgeFlipReason ? `edgeFlip=${edgeFlipReason} previousCenterX=${previousCenterX} centerX=${actualCenterX} actualX=${actualX}` : `centerX=${actualCenterX}`);
     return result;
   }
 

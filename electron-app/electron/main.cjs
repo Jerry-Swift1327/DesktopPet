@@ -1179,9 +1179,8 @@ const walkController = createWalkController({
   applySurfaceScale,
   resetToTaskbarSurface,
   getGroundedWindowYForSurface,
-  getWalkVisibleRectFromWindowX,
-  getWindowXForVisibleEdge,
-  getSafeWindowXForDirection,
+  getWindowXForVisibleCenter,
+  getWindowWalkCenterLimits,
   setWalkWindowPosition,
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
   getPetWindow: () => petWindowController.getPetWindow(),
@@ -3072,6 +3071,14 @@ function alignWalkLoopToSurface(fallbackDirection = -1) {
     const centerLimits = getTaskbarWalkCenterLimits(activeSurface, activeState);
     const safeCenterX = clamp(centerX, centerLimits.left, centerLimits.right);
     setTaskbarWalkWindowPositionForCenter(safeCenterX, groundedY, walkDirection);
+  } else if (activeSurface?.type === "window") {
+    const centerX = Number.isFinite(visualCenterX)
+      ? visualCenterX
+      : getWalkVisibleCenterFromWindowX(bounds.x, groundedY, activeState, walkDirection);
+    const centerLimits = getWindowWalkCenterLimits(activeSurface, activeState);
+    const safeCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
+    const targetX = getWindowXForVisibleCenter(safeCenterX, activeState, walkDirection);
+    setWalkWindowPosition(targetX, groundedY, activeSurface, walkDirection);
   } else {
     const safeX = getSafeWindowXForDirection(bounds.x, activeSurface, activeState, walkDirection);
     setWalkWindowPosition(safeX, groundedY, activeSurface, walkDirection);
@@ -3153,7 +3160,9 @@ function getWindowXForVisibleCenter(centerX, stateId = activeState, direction = 
   const windowHeight = getPetWindowHeight();
   const probe = { x: 0, y: 0, width: windowWidth, height: windowHeight };
   const visibleRect = getVisiblePetRectFromBounds(probe, stateId, direction);
-  return surfaceFitRules.getWindowXForVisibleCenter(centerX, visibleRect, probe);
+  const rawX = surfaceFitRules.getWindowXForVisibleCenter(centerX, visibleRect, probe);
+  const actualCenterX = getWalkVisibleCenterFromWindowX(rawX, 0, stateId, direction);
+  return Math.round(rawX + (Math.round(centerX) - actualCenterX));
 }
 
 function getTaskbarWalkCenterLimits(surface = getCurrentSurface(), stateId = activeState) {
@@ -3162,6 +3171,14 @@ function getTaskbarWalkCenterLimits(surface = getCurrentSurface(), stateId = act
   const leftInsets = getVisibleSpriteInsets(stateId, -1);
   const rightInsets = getVisibleSpriteInsets(stateId, 1);
   return surfaceFitRules.getTaskbarWalkCenterLimits(limits, spriteSize, leftInsets, rightInsets);
+}
+
+function getWindowWalkCenterLimits(surface = getCurrentSurface(), stateId = activeState) {
+  const limits = getWalkVisibleLimits(surface);
+  const spriteSize = getPetSpriteSize();
+  const leftInsets = getVisibleSpriteInsets(stateId, -1);
+  const rightInsets = getVisibleSpriteInsets(stateId, 1);
+  return surfaceFitRules.getWindowSurfaceWalkCenterLimits(limits, spriteSize, leftInsets, rightInsets);
 }
 
 function buildTaskbarRunwayLayout(centerX, y, direction = walkDirection, surface = getCurrentSurface()) {
@@ -3501,12 +3518,34 @@ function syncWalkTrackX(x = null) {
     walkTrackX = clamp(centerX, centerLimits.left, centerLimits.right);
     return;
   }
+  if (surface?.type === "window") {
+    const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
+    const centerLimits = getWindowWalkCenterLimits(surface, activeState);
+    const centerX = getWalkVisibleCenterFromWindowX(sourceX, groundedY, activeState, walkDirection);
+    walkTrackX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
+    taskbarWalkRunway = null;
+    clearPetWindowHitRegion();
+    return;
+  }
   taskbarWalkRunway = null;
   clearPetWindowHitRegion();
   walkTrackX = getSafeWindowXForDirection(sourceX, surface, activeState, walkDirection);
 }
 
 function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection) {
+  if (surface?.type === "window") {
+    const rawX = Math.round(x);
+    const centerLimits = getWindowWalkCenterLimits(surface, activeState);
+    const centerX = getWalkVisibleCenterFromWindowX(rawX, y, activeState, direction);
+    const safeCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
+    const nextX = safeCenterX === Math.round(centerX)
+      ? rawX
+      : getWindowXForVisibleCenter(safeCenterX, activeState, direction);
+    walkTrackX = safeCenterX;
+    getPetWindow().setPosition(nextX, Math.round(y), false);
+    return nextX;
+  }
+
   const nextX = getSafeWindowXForDirection(x, surface, activeState, direction);
   walkTrackX = nextX;
   getPetWindow().setPosition(nextX, Math.round(y), false);
