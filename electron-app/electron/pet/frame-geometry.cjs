@@ -51,6 +51,107 @@ function applyStableGroundBottomCorrection(combined, frameBoundsList, moving) {
   return combined;
 }
 
+function getStateFrameCount(state) {
+  if (!state) {
+    return 0;
+  }
+  if (Array.isArray(state.frames)) {
+    return state.frames.length;
+  }
+  return Number.isInteger(state.frameCount) ? Math.max(0, state.frameCount) : 0;
+}
+
+function buildFrameSequence(state) {
+  if (!state) {
+    return [];
+  }
+
+  const frameCount = getStateFrameCount(state);
+  if (frameCount <= 0) {
+    return [];
+  }
+
+  const maxFrame = Math.max(0, frameCount - 1);
+  const rawLoopStart = Number.isInteger(state.loopStart) ? state.loopStart : 0;
+  const rawLoopEnd = Number.isInteger(state.loopEnd) ? state.loopEnd : maxFrame;
+  const loopStart = Math.min(Math.max(0, rawLoopStart), maxFrame);
+  const loopEnd = Math.min(Math.max(loopStart, rawLoopEnd), maxFrame);
+  const sequence = [];
+
+  function appendRange(start, end, times = 1) {
+    const repeatTimes = Math.max(1, Number.isInteger(times) ? times : 1);
+    const from = Math.min(Math.max(0, start), maxFrame);
+    const to = Math.min(Math.max(0, end), maxFrame);
+    const direction = to >= from ? 1 : -1;
+    for (let pass = 0; pass < repeatTimes; pass += 1) {
+      for (let frameIndex = from; ; frameIndex += direction) {
+        sequence.push(frameIndex);
+        if (frameIndex === to) {
+          break;
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(state.frameSequence)) {
+    for (const segment of state.frameSequence) {
+      if (!segment || !Number.isInteger(segment.start) || !Number.isInteger(segment.end)) {
+        continue;
+      }
+      appendRange(segment.start, segment.end, segment.times);
+    }
+    const repeatCount = Number.isInteger(state.sequenceRepeatCount) ? Math.max(1, state.sequenceRepeatCount) : 1;
+    if (repeatCount > 1 && sequence.length > 0) {
+      const baseSequence = sequence.slice();
+      sequence.push(...baseSequence);
+    }
+    return sequence.length > 0 ? sequence : [0];
+  }
+
+  for (let index = loopStart; index <= loopEnd; index += 1) {
+    sequence.push(index);
+  }
+
+  const repeat = state.frameSequence || {};
+  const repeatCount = Number.isInteger(repeat.repeatCount) ? repeat.repeatCount : 1;
+  const repeatStart = Number.isInteger(repeat.repeatRangeStart) ? repeat.repeatRangeStart : null;
+  const repeatEnd = Number.isInteger(repeat.repeatRangeEnd) ? repeat.repeatRangeEnd : null;
+  if (repeatCount > 1 && repeatStart !== null && repeatEnd !== null) {
+    const start = Math.min(Math.max(loopStart, repeatStart), loopEnd);
+    const end = Math.min(Math.max(start, repeatEnd), loopEnd);
+    const tailIndex = sequence.findLastIndex((frameIndex) => frameIndex === end);
+    const extra = [];
+    for (let pass = 1; pass < repeatCount; pass += 1) {
+      for (let frameIndex = start; frameIndex <= end; frameIndex += 1) {
+        extra.push(frameIndex);
+      }
+    }
+    if (tailIndex >= 0 && extra.length > 0) {
+      sequence.splice(tailIndex + 1, 0, ...extra);
+    }
+  }
+
+  return sequence.length > 0 ? sequence : [0];
+}
+
+function getFrameIndexForStep(state, frameStep = 0) {
+  if (!state || getStateFrameCount(state) === 0) {
+    return 0;
+  }
+
+  const frameSequence = buildFrameSequence(state);
+  const stepCount = Math.max(1, frameSequence.length);
+  const tailLoopStart = Number.isInteger(state.tailLoopStart) ? state.tailLoopStart : null;
+  const shouldLoopFrames = !state.oneShot || state.moving;
+  const safeFrameStep = Number.isFinite(frameStep) ? Math.round(frameStep) : 0;
+  const step = tailLoopStart !== null && safeFrameStep >= stepCount
+    ? tailLoopStart + ((safeFrameStep - tailLoopStart) % Math.max(1, stepCount - tailLoopStart))
+    : shouldLoopFrames
+      ? safeFrameStep % stepCount
+      : Math.min(safeFrameStep, stepCount - 1);
+  return frameSequence[step] ?? 0;
+}
+
 function getSpriteRectFromBounds(bounds, ctx) {
   const { spriteSize, runwayInfo, isTaskbarWalkActive, getSpriteLocalXForWindowWidth } = ctx;
   const canUseRunwayOffset = runwayInfo
@@ -139,6 +240,8 @@ module.exports = {
   getStableGroundBottom,
   combineFrameBoundsList,
   applyStableGroundBottomCorrection,
+  buildFrameSequence,
+  getFrameIndexForStep,
   getSpriteRectFromBounds,
   getVisibleSpriteInsetsFromBounds,
   getVisiblePetRectFromBounds,

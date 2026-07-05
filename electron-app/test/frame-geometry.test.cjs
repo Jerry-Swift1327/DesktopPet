@@ -24,11 +24,68 @@ test("frame-geometry 不引用 nativeImage/窗口/缓存/IPC/bubble", () => {
   }
 });
 
-test("frame-geometry 导出 10 个函数", () => {
-  const expected = ["getStableGroundBottom", "combineFrameBoundsList", "applyStableGroundBottomCorrection", "getSpriteRectFromBounds", "getVisibleSpriteInsetsFromBounds", "getVisiblePetRectFromBounds", "getFrameVisibleRectFromBounds", "getBottomAnchorFromVisibleRect", "getFrameVisibleCenterWindowX", "getWindowPositionForVisibleRect"];
+test("frame-geometry 导出 12 个函数", () => {
+  const expected = ["getStableGroundBottom", "combineFrameBoundsList", "applyStableGroundBottomCorrection", "buildFrameSequence", "getFrameIndexForStep", "getSpriteRectFromBounds", "getVisibleSpriteInsetsFromBounds", "getVisiblePetRectFromBounds", "getFrameVisibleRectFromBounds", "getBottomAnchorFromVisibleRect", "getFrameVisibleCenterWindowX", "getWindowPositionForVisibleRect"];
   for (const fn of expected) {
     assert.equal(typeof frameGeometry[fn], "function", `应导出 ${fn}`);
   }
+});
+
+test("buildFrameSequence uses loop range when no custom sequence exists", () => {
+  assert.deepEqual(
+    frameGeometry.buildFrameSequence({ frameCount: 5, loopStart: 1, loopEnd: 3 }),
+    [1, 2, 3]
+  );
+});
+
+test("buildFrameSequence supports renderer-style range segments", () => {
+  assert.deepEqual(
+    frameGeometry.buildFrameSequence({
+      frameCount: 6,
+      frameSequence: [
+        { start: 1, end: 3, times: 2 },
+        { start: 5, end: 4 }
+      ]
+    }),
+    [1, 2, 3, 1, 2, 3, 5, 4]
+  );
+});
+
+test("buildFrameSequence inserts object repeat range before the tail", () => {
+  assert.deepEqual(
+    frameGeometry.buildFrameSequence({
+      frameCount: 5,
+      loopStart: 0,
+      loopEnd: 4,
+      frameSequence: { repeatRangeStart: 1, repeatRangeEnd: 2, repeatCount: 3 }
+    }),
+    [0, 1, 2, 1, 2, 1, 2, 3, 4]
+  );
+});
+
+test("getFrameIndexForStep loops moving states by frameStep", () => {
+  const state = { frameCount: 4, loopStart: 1, loopEnd: 3, moving: true, oneShot: false };
+
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 0), 1);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 1), 2);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 2), 3);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 3), 1);
+});
+
+test("getFrameIndexForStep clamps one-shot states at the final step", () => {
+  const state = { frameCount: 4, loopStart: 0, loopEnd: 3, moving: false, oneShot: true };
+
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 2), 2);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 9), 3);
+});
+
+test("getFrameIndexForStep loops from tailLoopStart after first sequence pass", () => {
+  const state = { frameCount: 5, loopStart: 0, loopEnd: 4, moving: false, oneShot: true, tailLoopStart: 2 };
+
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 5), 2);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 6), 3);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 7), 4);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 8), 2);
 });
 
 // getStableGroundBottom

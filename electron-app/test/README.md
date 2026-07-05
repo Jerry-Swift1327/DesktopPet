@@ -19,7 +19,7 @@ node --test "test/**/*.test.cjs"
 
 | 文件 | 覆盖内容 | 相关源码 |
 | --- | --- | --- |
-| `walk-controller-window-frame.test.cjs` | Window surface walk regression: keep a stable visible-center track while using state-level geometry for grounding and clamping. | `../electron/behavior/walk-controller.cjs` |
+| `walk-controller-window-frame.test.cjs` | Window surface walk regression: keep a stable visible-center track while applying deterministic frameStep compensation for moving walk frames. | `../electron/behavior/walk-controller.cjs` |
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名 | `../electron/pet-variants.cjs` |
 | `variant-cli.test.cjs` | 变体 CLI 的新建、校验和动作源视频复制重命名 | `../scripts/variant-cli.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |
@@ -43,7 +43,7 @@ node --test "test/**/*.test.cjs"
 | `pet-stats-rules.test.cjs` | pet stats 纯规则（clampStat/daysBetween/createDefaultPetStats/normalizePetStats/applyDailyDecay/applyPromptStateRules/applyNaturalStatsTickRules/applyActionStatsRules/applyCompletedWalkStatsRules/recordInteractionRules） | `../electron/pet/pet-stats-rules.cjs` |
 | `pet-stats-store.test.cjs` | pet stats 读写边界（encode/decode 往返、readPetStatsFile 主文件与 legacy fallback、读取异常、writePetStatsFile 写入内容） | `../electron/pet/pet-stats-store.cjs` |
 | `pet-stats-controller-accessor.test.cjs` | pet-stats-controller 控制器访问器护栏与 main.cjs 薄包装接线结构断言（不直接 require electron/fs/path、不直接访问窗口/IPC/bubble、不使用 Math.random/new Date、context 注入完整、调用 rules/store 不重写、timer 所有权在控制器、main 不再持有 stats 运行态） | `../electron/pet/pet-stats-controller.cjs`、`../electron/main.cjs` |
-| `frame-geometry.test.cjs` | 帧纯几何计算（spriteRect、visibleInsets、frameVisibleRect、stableGroundBottom、bottomAnchor、centerWindowX） | `../electron/pet/frame-geometry.cjs` |
+| `frame-geometry.test.cjs` | 帧纯几何计算（spriteRect、visibleInsets、frameVisibleRect、stableGroundBottom、bottomAnchor、centerWindowX、frameStep 序列索引） | `../electron/pet/frame-geometry.cjs` |
 | `frame-visible-bounds.test.cjs` | 帧可见区域 bitmap 扫描纯规则（scanVisibleBounds、scanHeadBounds） | `../electron/pet/frame-visible-bounds.cjs` |
 | `frame-bounds-controller.test.cjs` | frame-bounds 控制器缓存命中、无效图片 fallback、state bounds 合并、moving stable bottom 修正、结构断言 | `../electron/pet/frame-bounds-controller.cjs` |
 | `frame-hit-test.test.cjs` | 透明像素命中检测纯规则（命中/不命中/镜像/hitPadding 半径/边界 clamp） | `../electron/pet/frame-hit-test.cjs` |

@@ -302,6 +302,7 @@ const {
   clampFrameIndex,
   sanitizeFrameSequence
 } = assetLoader;
+const stateFramePlaybackInfoCache = new Map();
 const STATE_SQUAT = petActionIds.squat;
 const STATE_WALK = petActionIds.walk;
 const STATE_FEED = petActionIds.feed;
@@ -1179,7 +1180,7 @@ const walkController = createWalkController({
   applySurfaceScale,
   resetToTaskbarSurface,
   getGroundedWindowYForSurface,
-  getWindowXForVisibleCenter,
+  getWindowXForWalkFrameVisibleCenter,
   getWindowWalkCenterLimits,
   setWalkWindowPosition,
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
@@ -2361,6 +2362,60 @@ function getFrameVisibleCenterWindowX(centerX, stateId = activeState, frameIndex
   return frameGeometry.getFrameVisibleCenterWindowX(centerX, probe, visibleRect);
 }
 
+function getStateFramePlaybackInfo(stateId = activeState) {
+  const state = getState(stateId);
+  if (!state) {
+    return { frameCount: 0 };
+  }
+  const cacheKey = state.id;
+  if (stateFramePlaybackInfoCache.has(cacheKey)) {
+    return stateFramePlaybackInfoCache.get(cacheKey);
+  }
+
+  const frameCount = listFramePaths(state.folder).length;
+  const maxFrame = Math.max(0, frameCount - 1);
+  const metadata = readMetadata(state.metadata);
+  const rawLoopStart = Number.isInteger(metadata.loopStart)
+    ? metadata.loopStart
+    : Number.isInteger(state.loopStart)
+    ? state.loopStart
+    : 0;
+  const rawLoopEnd = Number.isInteger(metadata.loopEnd)
+    ? metadata.loopEnd
+    : Number.isInteger(state.loopEnd)
+    ? state.loopEnd
+    : maxFrame;
+  const loopStart = clampFrameIndex(rawLoopStart, maxFrame);
+  const loopEnd = Math.min(Math.max(loopStart, rawLoopEnd), maxFrame);
+  const playbackInfo = {
+    id: state.id,
+    frameCount,
+    loopStart,
+    loopEnd,
+    defaultFacing: state.defaultFacing,
+    moving: Boolean(state.moving),
+    oneShot: ONE_SHOT_STATES.has(state.id),
+    tailLoopStart: Number.isInteger(metadata.tailLoopStart)
+      ? clampFrameIndex(metadata.tailLoopStart, maxFrame)
+      : null,
+    frameSequence: sanitizeFrameSequence(state.frameSequence, maxFrame),
+    sequenceRepeatCount: Number.isInteger(state.sequenceRepeatCount)
+      ? Math.max(1, state.sequenceRepeatCount)
+      : 1
+  };
+  stateFramePlaybackInfoCache.set(cacheKey, playbackInfo);
+  return playbackInfo;
+}
+
+function getWalkFrameIndexForStep(stateId = activeState, frameStep = 0) {
+  return frameGeometry.getFrameIndexForStep(getStateFramePlaybackInfo(stateId), frameStep);
+}
+
+function getWindowXForWalkFrameVisibleCenter(centerX, frameStep = 0, stateId = activeState, direction = walkDirection) {
+  const frameIndex = getWalkFrameIndexForStep(stateId, frameStep);
+  return getFrameVisibleCenterWindowX(centerX, stateId, frameIndex, direction);
+}
+
 function syncDailyStats() {
   return petStatsController.syncDailyStats();
 }
@@ -3532,10 +3587,18 @@ function syncWalkTrackX(x = null) {
   walkTrackX = getSafeWindowXForDirection(sourceX, surface, activeState, walkDirection);
 }
 
-function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection) {
+function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection, options = {}) {
   if (surface?.type === "window") {
     const rawX = Math.round(x);
     const centerLimits = getWindowWalkCenterLimits(surface, activeState);
+    if (Number.isFinite(options.trackCenterX)) {
+      const requestedCenterX = Math.round(options.trackCenterX);
+      const safeCenterX = clamp(requestedCenterX, centerLimits.left, centerLimits.right);
+      const nextX = Math.round(rawX + safeCenterX - requestedCenterX);
+      walkTrackX = safeCenterX;
+      getPetWindow().setPosition(nextX, Math.round(y), false);
+      return nextX;
+    }
     const centerX = getWalkVisibleCenterFromWindowX(rawX, y, activeState, direction);
     const safeCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
     const nextX = safeCenterX === Math.round(centerX)

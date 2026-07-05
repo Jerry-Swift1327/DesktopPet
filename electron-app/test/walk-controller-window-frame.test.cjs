@@ -6,7 +6,8 @@ const { createWalkController } = require("../electron/behavior/walk-controller.c
 function createWindowWalkHarness({
   initialX = 90,
   initialDirection = 1,
-  centerLimits = { left: 140, right: 220 }
+  centerLimits = { left: 140, right: 220 },
+  getWindowXForWalkFrameVisibleCenter = (centerX) => Math.round(centerX - 60)
 } = {}) {
   let bounds = { x: initialX, y: 0, width: 180, height: 180 };
   let walkTrackX = null;
@@ -71,16 +72,21 @@ function createWindowWalkHarness({
     resetToTaskbarSurface: () => surface,
     getGroundedWindowYForSurface: () => 90,
     getWindowXForVisibleCenter: (centerX) => Math.round(centerX - 60),
+    getWindowXForWalkFrameVisibleCenter,
     getWindowWalkCenterLimits: () => centerLimits,
     getSafeWindowXForDirection: () => {
       calls.push({ type: "state-safe" });
       return 999;
     },
-    setWalkWindowPosition: (x, y) => {
+    setWalkWindowPosition: (x, y, _surface, _direction, options = {}) => {
       const rawX = Math.round(x);
-      const centerX = rawX + 60;
-      const safeCenterX = Math.min(Math.max(centerX, centerLimits.left), centerLimits.right);
-      const nextX = safeCenterX === centerX
+      const requestedCenterX = Number.isFinite(options.trackCenterX)
+        ? Math.round(options.trackCenterX)
+        : rawX + 60;
+      const safeCenterX = Math.min(Math.max(requestedCenterX, centerLimits.left), centerLimits.right);
+      const nextX = Number.isFinite(options.trackCenterX)
+        ? Math.round(rawX + safeCenterX - requestedCenterX)
+        : safeCenterX === requestedCenterX
         ? rawX
         : Math.round(safeCenterX - 60);
       calls.push({ type: "state-position", x: nextX, y: Math.round(y), centerX: safeCenterX });
@@ -180,6 +186,60 @@ test("window-surface walk advances from the previous visible-center track", () =
   assert.deepEqual(
     harness.calls.map((call) => call.centerX),
     [160, 170]
+  );
+});
+
+test("window-surface walk applies frame compensation without corrupting center track", () => {
+  const frameCalls = [];
+  const harness = createWindowWalkHarness({
+    getWindowXForWalkFrameVisibleCenter: (centerX, frameStep, state, direction) => {
+      frameCalls.push({ centerX, frameStep, state, direction });
+      const frameCenterOffset = frameStep === 3 ? 66 : 56;
+      return Math.round(centerX - frameCenterOffset);
+    }
+  });
+
+  const first = harness.controller.advanceWalkStep(3, 80);
+  const second = harness.controller.advanceWalkStep(4, 80);
+
+  assert.equal(first.moved, true);
+  assert.equal(second.moved, true);
+  assert.deepEqual(frameCalls, [
+    { centerX: 160, frameStep: 3, state: "petWalk", direction: 1 },
+    { centerX: 170, frameStep: 4, state: "petWalk", direction: 1 }
+  ]);
+  assert.deepEqual(
+    harness.calls.map((call) => call.x),
+    [94, 114]
+  );
+  assert.deepEqual(
+    harness.calls.map((call) => call.centerX),
+    [160, 170]
+  );
+});
+
+test("window-surface walk applies frame compensation for left-facing movement", () => {
+  const frameCalls = [];
+  const harness = createWindowWalkHarness({
+    initialX: 160,
+    initialDirection: -1,
+    getWindowXForWalkFrameVisibleCenter: (centerX, frameStep, state, direction) => {
+      frameCalls.push({ centerX, frameStep, state, direction });
+      const frameCenterOffset = direction < 0 ? 68 : 52;
+      return Math.round(centerX - frameCenterOffset);
+    }
+  });
+
+  const result = harness.controller.advanceWalkStep(7, 80);
+
+  assert.equal(result.direction, -1);
+  assert.equal(result.x, 142);
+  assert.deepEqual(frameCalls, [
+    { centerX: 210, frameStep: 7, state: "petWalk", direction: -1 }
+  ]);
+  assert.deepEqual(
+    harness.calls.map((call) => call.centerX),
+    [210]
   );
 });
 
