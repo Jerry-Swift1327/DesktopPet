@@ -254,7 +254,7 @@ function createDockController(context) {
       if (!getPetWindow() || getPetWindow().isDestroyed()) {
         return;
       }
-      if (getDragState()) {
+      if (getDragState() || getWindowDockInProgress()) {
         return;
       }
       if (!getCurrentSurface() || getCurrentSurface().type !== "window") {

@@ -304,6 +304,122 @@ test("invalid window replacement attaches directly to adjacent candidate", () =>
   assert.match(invalidBranch, /markWindowInvalidTaskbarSettleUntil\(Date\.now\(\) \+ WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS\);/);
 });
 
+test("window surface polling waits while dock settlement is in progress", () => {
+  let currentSurface = createSurface("window-a", { left: 300, right: 700, groundY: 520 });
+  let petBounds = { x: 820, y: 760, width: 120, height: 120 };
+  let dockInProgress = true;
+  let pollTimer = null;
+  let pollCallback = null;
+  const calls = [];
+  const taskbarSurface = { type: "taskbar", left: 0, right: 1200, groundY: 900 };
+  const originalSetInterval = global.setInterval;
+  const originalClearInterval = global.clearInterval;
+
+  global.setInterval = (callback) => {
+    pollCallback = callback;
+    return { fake: true };
+  };
+  global.clearInterval = () => {};
+
+  try {
+    const controller = createDockController({
+      process: { platform: "win32" },
+      log: () => {},
+      setCurrentSurface: (surface) => {
+        currentSurface = surface;
+        return surface;
+      },
+      getCurrentSurface: () => currentSurface,
+      applySurfaceScale: () => true,
+      groundPetToSurface: () => calls.push({ type: "ground" }),
+      clampPetWindowPositionToSurface: (x, y) => ({ x: Math.round(x), y: Math.round(y) }),
+      setPetWindowPosition: (x, y) => {
+        petBounds = { ...petBounds, x: Math.round(x), y: Math.round(y) };
+        calls.push({ type: "setPosition", x: Math.round(x), y: Math.round(y) });
+      },
+      syncWalkTrackX: (x) => calls.push({ type: "syncWalk", x }),
+      isWalkingState: () => true,
+      refreshWalkLoopAfterSurfaceChange: () => calls.push({ type: "refreshWalk" }),
+      clearDragState: () => {},
+      refreshWindowSurfaceCandidatesAsync: () => calls.push({ type: "refreshCandidates" }),
+      setState: () => {},
+      parseWindowHwnd: (value) => String(value || ""),
+      diagnoseDockTargetFromCache: () => ({ ok: false, reason: "none", elapsedMs: 0, surface: null }),
+      fallbackToTaskbarAfterDrag: () => {},
+      findCandidateByHwnd: () => null,
+      buildWindowSurfaceFromItem: () => ({ surface: null }),
+      getVisiblePetRectFromBounds: (bounds) => ({ x: bounds.x + 11, y: bounds.y + 24, width: 58, height: 82 }),
+      resetToTaskbarSurface: () => {
+        currentSurface = taskbarSurface;
+        return taskbarSurface;
+      },
+      getGroundedWindowYForSurface: (surface) => surface.groundY - 24 - 82,
+      getVisibleSpriteInsets: () => ({ left: 11, right: 51 }),
+      getPetSpriteSize: () => 120,
+      getPetWindowPositionForVisibleRect: (x, y) => ({ x: x - 11, y: y - 24 }),
+      getSurfaceVisibleTop: (surface) => surface.groundY - 82,
+      maybeRefreshWindowSurfaceCandidatesBackground: () => calls.push({ type: "maybeRefresh" }),
+      refreshCurrentWindowSurfaceBoundsFromCache: () => true,
+      getTopWindowRoamSurface: () => null,
+      attachPetToWindowRoamSurface: () => false,
+      logWalkDiagnostic: () => {},
+      isInteractionPaused: () => false,
+      getInteractionPauseSummary: () => "",
+      rememberDockedWindowRoamTarget: () => {},
+      clearWindowRoamSuppression: () => {},
+      markManualTaskbarHold: () => {},
+      markWindowInvalidTaskbarSettleUntil: () => {},
+      markWindowRoamAttached: () => {},
+      retryDockPetAfterDrag: () => {},
+      getPetWindow: () => ({
+        isDestroyed: () => false,
+        getBounds: () => ({ ...petBounds })
+      }),
+      getActiveState: () => "petWalk",
+      getWalkDirection: () => 1,
+      getDragState: () => false,
+      getPetRuntimeConfig: () => ({ features: { dockShake: false } }),
+      getPetScale: () => 1,
+      getPreferredPetScale: () => 1,
+      getWindowRoamEnabled: () => false,
+      getWindowSurfacePollTimer: () => pollTimer,
+      setWindowSurfacePollTimer: (value) => { pollTimer = value; },
+      getLastWindowSurfaceHeavyCheckAt: () => 0,
+      setLastWindowSurfaceHeavyCheckAt: () => {},
+      getWindowSurfaceMissingTicks: () => 0,
+      setWindowSurfaceMissingTicks: () => {},
+      getWindowDockInProgress: () => dockInProgress,
+      setWindowDockInProgress: (value) => { dockInProgress = value; },
+      getWindowDockHoverSuppressedUntil: () => 0,
+      setWindowDockHoverSuppressedUntil: () => {},
+      STATE_SHAKE: "petShake",
+      ENABLE_WINDOW_DOCKING: true,
+      WINDOW_DOCK_DEBUG: false,
+      WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS: 1250,
+      WINDOW_DOCK_DRAG_RETRY_DELAY_MS: 260,
+      WINDOW_DOCK_COARSE_CORRECTION_LIMIT: 28,
+      WINDOW_SURFACE_HEAVY_RECHECK_MS: 500,
+      WINDOW_SURFACE_POLL_INTERVAL_MS: 250,
+      WINDOW_ROAM_INVALID_FALLBACK_SUPPRESS_MS: 700
+    });
+
+    controller.startWindowSurfacePolling();
+    assert.equal(typeof pollCallback, "function");
+
+    pollCallback();
+    assert.equal(currentSurface.type, "window");
+    assert.equal(calls.length, 0);
+
+    dockInProgress = false;
+    pollCallback();
+    assert.equal(currentSurface.type, "taskbar");
+    assert.equal(calls.some((call) => call.type === "setPosition"), true);
+  } finally {
+    global.setInterval = originalSetInterval;
+    global.clearInterval = originalClearInterval;
+  }
+});
+
 test("window fallback to taskbar sets the final position directly", () => {
   let currentSurface = createSurface("window-a", { left: 300, right: 700, groundY: 520 });
   let petBounds = { x: 410, y: 380, width: 120, height: 120 };
