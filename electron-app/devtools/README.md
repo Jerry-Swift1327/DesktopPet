@@ -19,9 +19,9 @@ npm.cmd run devtools
 
 1. 选择 `scope`、`tier`、`species`、`platforms` 和 `date`。
 2. 选择源视频文件夹，或在每个动作卡片上手动选择 `.mp4` 文件。
-3. 点击 Generate Preview 生成预览。
+3. 点击“生成预览”生成预览。
 4. 检查元数据草稿、视频复制目标、处理命令、预检命令和警告。
-5. 二次确认后点击 Start Generate 执行生成。
+5. 二次确认后点击“开始生成”执行生成。
 
 工具会把选中的视频暂存到 `electron-app/.devtools-staging/`，再把暂存目录交给现有的 `variant:bootstrap` 流程处理。该暂存目录已被 `.gitignore` 忽略。
 

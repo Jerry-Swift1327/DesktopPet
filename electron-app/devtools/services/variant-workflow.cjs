@@ -52,7 +52,7 @@ function getRequiredActions(tier) {
   const tiers = getTierProfiles();
   const profile = tiers[tier];
   if (!profile) {
-    throw new Error(`Unknown tier: ${tier}`);
+    throw new Error(`未知套餐 tier：${tier}`);
   }
   return Array.from(new Set((profile.actionButtons || []).concat(profile.actionAssets || [])));
 }
@@ -61,7 +61,7 @@ function getEffectiveRequiredActions(formState) {
   const tiers = getTierProfiles();
   const profile = tiers[formState.tier];
   if (!profile) {
-    throw new Error(`Unknown tier: ${formState.tier}`);
+    throw new Error(`未知套餐 tier：${formState.tier}`);
   }
 
   const buttons = formState.advanced.actionButtons.length > 0
@@ -76,20 +76,20 @@ function getEffectiveRequiredActions(formState) {
 function assertKnownFormValues(formState) {
   const options = getCatalogOptions();
   if (!options.species[formState.species]) {
-    throw new Error(`Unknown species: ${formState.species}`);
+    throw new Error(`未知物种 species：${formState.species}`);
   }
   if (!options.tiers[formState.tier]) {
-    throw new Error(`Unknown tier: ${formState.tier}`);
+    throw new Error(`未知套餐 tier：${formState.tier}`);
   }
   if (!options.notes[formState.scope]) {
-    throw new Error(`Unknown scope: ${formState.scope}`);
+    throw new Error(`未知范围 scope：${formState.scope}`);
   }
 }
 
 function scanSourceFolder(sourceDir, requiredActions) {
   const resolvedSourceDir = path.resolve(sourceDir || "");
   if (!sourceDir || !fs.existsSync(resolvedSourceDir) || !fs.statSync(resolvedSourceDir).isDirectory()) {
-    throw new Error(`Source folder was not found: ${resolvedSourceDir}`);
+    throw new Error(`未找到源视频文件夹：${resolvedSourceDir}`);
   }
 
   const requiredSet = new Set(requiredActions);
@@ -107,16 +107,16 @@ function scanSourceFolder(sourceDir, requiredActions) {
     }
     const action = resolveSourceActionName(entry.name);
     if (!action) {
-      warnings.push(`Unrecognized source video: ${entry.name}`);
+      warnings.push(`无法识别的源视频：${entry.name}`);
       continue;
     }
     if (!requiredSet.has(action)) {
-      warnings.push(`Source video is not required by this tier: ${entry.name}`);
+      warnings.push(`当前套餐不需要这个源视频：${entry.name}`);
       continue;
     }
     if (matches[action]) {
       duplicateActions.add(action);
-      warnings.push(`Multiple source videos found for action ${action}; choose one manually.`);
+      warnings.push(`动作 ${action} 匹配到多个源视频，请手动选择一个。`);
       delete matches[action];
       continue;
     }
@@ -159,13 +159,13 @@ function resolveActionVideos(formState, requiredActions) {
   for (const action of requiredActions) {
     const selectedPath = selections[action];
     if (!selectedPath) {
-      throw new Error(`Missing source video for action ${action}`);
+      throw new Error(`缺少动作 ${action} 的源视频`);
     }
     if (!/\.mp4$/i.test(selectedPath)) {
-      throw new Error(`Source video for action ${action} must be an .mp4 file: ${selectedPath}`);
+      throw new Error(`动作 ${action} 的源视频必须是 .mp4 文件：${selectedPath}`);
     }
     if (!fs.existsSync(selectedPath) || !fs.statSync(selectedPath).isFile()) {
-      throw new Error(`Source video for action ${action} was not found: ${selectedPath}`);
+      throw new Error(`未找到动作 ${action} 的源视频：${selectedPath}`);
     }
   }
 
@@ -317,13 +317,13 @@ function createVariantWorkflow(options = {}) {
   async function runNewVariant(previewId, hooks = {}) {
     const entry = plans.get(previewId);
     if (!entry) {
-      throw new Error(`Preview plan was not found: ${previewId}`);
+      throw new Error(`未找到预览方案：${previewId}`);
     }
     emitHook(hooks, "onStage", { stage: "prepareStaging", status: "running" });
     try {
       for (const [action, stagedPath] of Object.entries(entry.stagedVideos)) {
         if (!fs.existsSync(stagedPath)) {
-          throw new Error(`Staged source video for action ${action} was not found: ${stagedPath}`);
+          throw new Error(`未找到动作 ${action} 的暂存源视频：${stagedPath}`);
         }
       }
       emitHook(hooks, "onStage", { stage: "prepareStaging", status: "done" });

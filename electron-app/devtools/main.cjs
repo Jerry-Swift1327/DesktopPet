@@ -6,6 +6,7 @@ const { createVariantWorkflow } = require("./services/variant-workflow.cjs");
 
 const indexFile = path.join(__dirname, "index.html");
 const indexUrl = pathToFileURL(indexFile).toString();
+const appIconPath = path.resolve(__dirname, "..", "..", "app_icon.ico");
 const workflow = createVariantWorkflow();
 let mainWindow = null;
 let activeRun = null;
@@ -18,7 +19,7 @@ function sendToRenderer(channel, payload) {
 
 function assertDevtoolsSender(event) {
   if (!event.senderFrame || event.senderFrame.url !== indexUrl) {
-    throw new Error("Unauthorized devtools IPC sender.");
+    throw new Error("未授权的 devtools IPC 来源。");
   }
 }
 
@@ -29,7 +30,7 @@ function loadDevtoolsWindow() {
   return mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Chongban Devtools</title></head>
-<body><main style="font-family: sans-serif; padding: 24px;"><h1>Chongban Devtools</h1><p>Devtools UI files have not been generated yet.</p></main></body>
+<body><main style="font-family: sans-serif; padding: 24px;"><h1>Chongban Devtools</h1><p>Devtools UI 文件尚未生成。</p></main></body>
 </html>`)}`);
 }
 
@@ -40,6 +41,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 680,
     title: "Chongban Devtools",
+    icon: fs.existsSync(appIconPath) ? appIconPath : undefined,
     backgroundColor: "#f6f7f9",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -58,14 +60,14 @@ function createWindow() {
     sendToRenderer("devtools:taskLog", {
       stage: "window",
       stream: "info",
-      message: "Variant generation is still running. Close this window after the task finishes."
+      message: "宠物变体生成仍在执行，任务结束后再关闭窗口。"
     });
     dialog.showMessageBox(mainWindow, {
       type: "info",
-      buttons: ["OK"],
-      title: "Generation in progress",
-      message: "Variant generation is still running.",
-      detail: "Close the devtools window after the task finishes."
+      buttons: ["确定"],
+      title: "生成进行中",
+      message: "宠物变体生成仍在执行。",
+      detail: "请等任务结束后再关闭 devtools 窗口。"
     }).catch(() => {});
   });
   mainWindow.on("closed", () => {
@@ -87,7 +89,7 @@ ipcMain.handle("devtools:chooseSourceFolder", async (event) => {
   assertDevtoolsSender(event);
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"],
-    title: "Choose source video folder"
+    title: "选择源视频文件夹"
   });
   if (result.canceled || result.filePaths.length === 0) {
     return null;
@@ -99,8 +101,8 @@ ipcMain.handle("devtools:chooseActionVideo", async (event) => {
   assertDevtoolsSender(event);
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openFile"],
-    filters: [{ name: "MP4 video", extensions: ["mp4"] }],
-    title: "Choose action video"
+    filters: [{ name: "MP4 视频", extensions: ["mp4"] }],
+    title: "选择动作视频"
   });
   if (result.canceled || result.filePaths.length === 0) {
     return null;
@@ -116,7 +118,7 @@ ipcMain.handle("devtools:buildNewVariantPreview", (event, formState) => {
 ipcMain.handle("devtools:runNewVariant", async (event, previewId) => {
   assertDevtoolsSender(event);
   if (activeRun) {
-    throw new Error("A variant generation task is already running.");
+    throw new Error("已有宠物变体生成任务正在执行。");
   }
 
   activeRun = workflow.runNewVariant(previewId, {
@@ -138,6 +140,9 @@ ipcMain.handle("devtools:runNewVariant", async (event, previewId) => {
 });
 
 app.setName("Chongban Devtools");
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.chongban.devtools");
+}
 
 app.whenReady().then(() => {
   createWindow();

@@ -194,7 +194,7 @@ test("devtools preview rejects missing required basic action videos", () => {
       date: "2026-07-06",
       actionVideos: {}
     }),
-    /Missing source video for action squat/
+    /缺少动作 squat 的源视频/
   );
 });
 
