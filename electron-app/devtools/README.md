@@ -13,13 +13,13 @@ npm.cmd run devtools
 
 ## 当前范围
 
-第一版只支持新增变体。替换视频、单独处理视频、图鉴管理和打包控制暂不在这个窗口中提供。
+当前窗口支持新增变体、维护变体和删除测试变体。维护变体包含动作资源替换、结构化元数据编辑 diff 预览与确认写入；删除能力只允许 `scope: "test"` 的 `pettest<seq>` 测试变体。单独视频处理、图鉴管理和打包控制仍不在这个窗口中提供。
 
 ## 新增变体流程
 
 1. 选择 `scope`、`tier`、`species`、`platforms` 和 `date`。
 2. 选择源视频文件夹，或在每个动作卡片上手动选择 `.mp4` 文件。
-3. 按需勾选“自动选取最佳运行帧段”。默认不勾选，`transparent_frames` 使用素材池完整帧范围；勾选后从 `processed_frames` 自动选取最佳循环片段。
+3. 每个动作卡片都可以选择运行帧段模式：完整帧、自动选取或手动范围。顶部默认选项只影响尚未单独设置的动作。
 4. 点击“生成预览”生成预览。
 5. 检查元数据草稿、视频复制目标、处理命令、预检命令和警告。
 6. 二次确认后点击“开始生成”执行生成。
@@ -27,6 +27,17 @@ npm.cmd run devtools
 高级设置中可通过复选框选择额外动作、资源动作、启用功能和禁用功能。基础四个按钮动作默认固定包含，只有被选中的额外动作才会要求上传源视频。
 
 工具会把选中的视频暂存到 `electron-app/.devtools-staging/`，再把暂存目录交给现有的 `variant:bootstrap` 流程处理。该暂存目录已被 `.gitignore` 忽略。
+
+## 维护变体流程
+
+1. 在“维护变体”中选择已有变体。
+2. 替换资源时选择动作和新的 `.mp4`，设置运行帧段模式，生成替换预览后确认执行。底层调用 `tools/process_pet_actions.py replace` 更新动作资源和 manifest。
+3. 修改信息/元数据时只通过表单字段编辑 `species`、`tier`、`notes`、动作列表和功能列表。工具会先生成 diff 预览；若动作列表引用缺失的资源目录，会阻止写入并提示先替换或生成资源。
+4. 确认 diff 后再写入 `electron/pet-variant-metadata.json`。
+
+## 删除测试变体
+
+“删除测试变体”只允许删除 `scope: "test"` 的 `pettest<seq>` 变体。预览会列出将删除的 metadata、`assets/animations/<assetPrefix>_*`、manifest、开发态 `.user-data/<variant>`；只有 `.runtime-assets/pet_variant.json` 当前指向被删变体时，才会同时清理 `.runtime-assets`。
 
 ## 失败行为
 

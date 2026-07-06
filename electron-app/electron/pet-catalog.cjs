@@ -62,6 +62,10 @@ const NOTES_POOL = Object.freeze({
   custom: Object.freeze({
     basic: "客户定制-基础",
     advanced: "客户定制-高级"
+  }),
+  test: Object.freeze({
+    basic: "测试变体-基础",
+    advanced: "测试变体-高级"
   })
 });
 

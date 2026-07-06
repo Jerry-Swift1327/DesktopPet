@@ -4,6 +4,14 @@ const path = require("path");
 const {
   buildBootstrapPlan,
   applyBootstrapPlanAsync,
+  buildReplaceActionPlan,
+  applyReplaceActionPlanAsync,
+  buildMetadataEditPreview: buildCliMetadataEditPreview,
+  applyMetadataEdit: applyCliMetadataEdit,
+  buildDeleteVariantPreview: buildCliDeleteVariantPreview,
+  applyDeleteVariant: applyCliDeleteVariant,
+  listVariantSummaries,
+  getVariantDetails: getCliVariantDetails,
   resolveSourceActionName
 } = require("../../scripts/variant-cli.cjs");
 const {
@@ -20,6 +28,8 @@ const defaultAnimationsRoot = path.join(projectRoot, "assets", "animations");
 const defaultMetadataFile = path.join(appRoot, "electron", "pet-variant-metadata.json");
 const defaultStagingRoot = path.join(appRoot, ".devtools-staging");
 const defaultGalleryRoot = path.join(appRoot, ".variant-gallery");
+const defaultUserDataRoot = path.join(appRoot, ".user-data");
+const defaultRuntimeAssetsRoot = path.join(appRoot, ".runtime-assets");
 
 function createPreviewId() {
   return `preview-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
@@ -193,6 +203,7 @@ function normalizeFormState(formState = {}) {
     sourceFolder: formState.sourceFolder || null,
     actionVideos: formState.actionVideos || {},
     autoSelectLoop: Boolean(formState.autoSelectLoop),
+    loopModes: formState.loopModes && typeof formState.loopModes === "object" ? formState.loopModes : {},
     force: Boolean(formState.force || advanced.force),
     skipProcessing: Boolean(formState.skipProcessing),
     skipPreflight: Boolean(formState.skipPreflight),
@@ -248,6 +259,9 @@ function buildBootstrapArgs(formState, stagingSource) {
   if (!formState.autoSelectLoop) {
     args["use-full-range"] = true;
   }
+  if (formState.loopModes && Object.keys(formState.loopModes).length > 0) {
+    args.loopModes = formState.loopModes;
+  }
 
   return args;
 }
@@ -295,8 +309,25 @@ function createVariantWorkflow(options = {}) {
   const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
   const stagingRoot = options.stagingRoot || defaultStagingRoot;
   const galleryRoot = options.galleryRoot || defaultGalleryRoot;
+  const userDataRoot = options.userDataRoot || defaultUserDataRoot;
+  const runtimeAssetsRoot = options.runtimeAssetsRoot || defaultRuntimeAssetsRoot;
   const idFactory = options.idFactory || createPreviewId;
   const plans = new Map();
+
+  function listVariants() {
+    return listVariantSummaries({ metadataFile });
+  }
+
+  function getVariantDetails(id) {
+    return getCliVariantDetails(id, { metadataFile, animationsRoot });
+  }
+
+  function storePreview(kind, value) {
+    const previewId = idFactory();
+    const preview = { ...value, previewId };
+    plans.set(previewId, { kind, preview, plan: value });
+    return preview;
+  }
 
   function buildNewVariantPreview(rawFormState = {}) {
     const formState = normalizeFormState(rawFormState);
@@ -356,10 +387,91 @@ function createVariantWorkflow(options = {}) {
     });
   }
 
+  function buildReplaceActionPreview(payload = {}) {
+    return storePreview("replaceAction", buildReplaceActionPlan(payload, { metadataFile, animationsRoot }));
+  }
+
+  async function runReplaceAction(previewId, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== "replaceAction") {
+      throw new Error(`未找到替换动作预览方案：${previewId}`);
+    }
+    emitHook(hooks, "onStage", { stage: "replaceAction", status: "running" });
+    try {
+      const result = await applyReplaceActionPlanAsync(entry.plan, {
+        runCommand: options.runCommand,
+        onLog: (event) => emitHook(hooks, "onLog", event)
+      });
+      emitHook(hooks, "onStage", { stage: "replaceAction", status: "done" });
+      return result;
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage: "replaceAction", status: "failed", error: error.message });
+      throw error;
+    }
+  }
+
+  function buildMetadataEditPreview(payload = {}) {
+    return storePreview("metadataEdit", buildCliMetadataEditPreview(payload, { metadataFile, animationsRoot }));
+  }
+
+  async function applyMetadataEdit(previewId, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== "metadataEdit") {
+      throw new Error(`未找到元数据编辑预览方案：${previewId}`);
+    }
+    emitHook(hooks, "onStage", { stage: "writeMetadataEdit", status: "running" });
+    try {
+      const result = applyCliMetadataEdit(entry.preview, { metadataFile });
+      emitHook(hooks, "onStage", { stage: "writeMetadataEdit", status: "done" });
+      return result;
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage: "writeMetadataEdit", status: "failed", error: error.message });
+      throw error;
+    }
+  }
+
+  function buildDeleteVariantPreview(id) {
+    return storePreview("deleteVariant", buildCliDeleteVariantPreview(id, {
+      metadataFile,
+      animationsRoot,
+      userDataRoot,
+      runtimeAssetsRoot
+    }));
+  }
+
+  async function deleteTestVariant(previewId, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== "deleteVariant") {
+      throw new Error(`未找到删除变体预览方案：${previewId}`);
+    }
+    emitHook(hooks, "onStage", { stage: "deleteVariantResources", status: "running" });
+    try {
+      const result = applyCliDeleteVariant(entry.preview, {
+        metadataFile,
+        animationsRoot,
+        userDataRoot,
+        runtimeAssetsRoot
+      });
+      emitHook(hooks, "onStage", { stage: "deleteVariantResources", status: "done" });
+      return result;
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage: "deleteVariantResources", status: "failed", error: error.message });
+      throw error;
+    }
+  }
+
   return {
     getCatalogOptions,
+    listVariants,
+    getVariantDetails,
     buildNewVariantPreview,
-    runNewVariant
+    runNewVariant,
+    buildReplaceActionPreview,
+    runReplaceAction,
+    buildMetadataEditPreview,
+    applyMetadataEdit,
+    buildDeleteVariantPreview,
+    deleteTestVariant
   };
 }
 

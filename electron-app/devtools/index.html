@@ -11,9 +11,13 @@
     <aside class="sidebar">
       <div class="brand">
         <strong>Chongban Devtools</strong>
-        <span>内部工具</span>
+        <span>内部维护工具</span>
       </div>
-      <button class="nav-item active" type="button" data-view="new-variant">新增宠物</button>
+      <div class="nav-stack">
+        <button class="nav-item active" type="button" data-nav-view="newVariant">新增宠物</button>
+        <button class="nav-item" type="button" data-nav-view="maintainVariant">维护变体</button>
+        <button class="nav-item" type="button" data-nav-view="deleteVariant">删除测试变体</button>
+      </div>
     </aside>
     <section class="workspace">
       <div id="app"></div>

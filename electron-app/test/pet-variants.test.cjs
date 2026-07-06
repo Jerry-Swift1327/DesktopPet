@@ -12,7 +12,9 @@ const {
   normalizePetChannel,
   createPetVariantMetadataDraft,
   createVariantInstallerGuid,
+  createNextTestPetVariantId,
   buildPetVariantNamespace,
+  buildPetVariantProfiles,
   buildPetRuntimeConfig,
   resolvePetVariantProfile,
   getActionPool,
@@ -85,6 +87,7 @@ test("catalog pools define species tiers notes actions and features", () => {
   assert.equal(getSpeciesProfiles().cat.baseVariant, "pet2602");
   assert.equal(getTierProfiles().basic.actionButtons.join(","), "squat,walk,feed,ball");
   assert.equal(getNotesPool().internal.advanced, "内部使用-高级");
+  assert.equal(getNotesPool().test.basic, "测试变体-基础");
   assert.equal(getActionPool().look.processPreset, "direction64");
   assert.equal(getFeaturePool().idleYawn.implemented, true);
 });
@@ -296,6 +299,40 @@ test("custom variant ids use pet-year sequence across dated variants", () => {
   assert.equal(createNextPetVariantId({ date: "2026-07-01" }), "pet2611");
   assert.equal(createNextPetVariantId({ date: "2027-01-01" }), "pet2701");
   assert.throws(() => createNextPetVariantId({ date: "2026-06-01" }), /would require resequencing/);
+});
+
+test("test scope variants use independent pettest ids and do not affect official sequences", () => {
+  const metadata = {
+    schemaVersion: 2,
+    variants: {
+      pet2601: { id: "pet2601", species: "cat", scope: "custom", tier: "basic", date: "2026-07-01" },
+      pettest01: { id: "pettest01", species: "cat", scope: "test", tier: "basic", date: "2026-07-02" },
+      pettest09: { id: "pettest09", species: "dog", scope: "test", tier: "basic", date: "2026-07-03" }
+    }
+  };
+
+  assert.equal(createNextPetVariantId({ date: "2026-07-04", metadata }), "pet2602");
+  assert.equal(createNextTestPetVariantId({ metadata }), "pettest10");
+
+  const draft = createPetVariantMetadataDraft({
+    species: "cat",
+    scope: "test",
+    tier: "basic",
+    date: "2026-07-04",
+    metadata
+  });
+  assert.equal(draft.id, "pettest10");
+  assert.equal(draft.scope, "test");
+  assert.equal(draft.notes, "测试变体-基础");
+
+  const profiles = buildPetVariantProfiles({
+    schemaVersion: 2,
+    variants: {
+      pettest10: draft
+    }
+  });
+  assert.equal(profiles.pettest10.scope, "test");
+  assert.equal(profiles.pettest10.deliveryPathSegments.join("/"), "test/pettest10");
 });
 
 test("variant date validation accepts only concrete ISO dates", () => {

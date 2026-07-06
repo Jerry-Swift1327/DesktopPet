@@ -15,6 +15,7 @@ const {
   getTierProfiles,
   getVariantManifestName,
   getWindowsBuildProfile,
+  resolvePetVariantProfile,
   requirePetVariantId
 } = require("../electron/pet-variants.cjs");
 
@@ -64,6 +65,33 @@ function getMetadataVariants(metadata) {
   return metadata.variants;
 }
 
+function clonePlainObject(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getVariantProfilesFromMetadata(metadata) {
+  return buildPetVariantProfiles(metadata);
+}
+
+function getVariantProfileFromMetadata(input, metadata) {
+  const id = String(input || "");
+  const variants = getMetadataVariants(metadata);
+  if (!Object.prototype.hasOwnProperty.call(variants, id)) {
+    throw new Error(`Invalid pet variant: ${input}`);
+  }
+  const profiles = getVariantProfilesFromMetadata(metadata);
+  return clonePlainObject(profiles[id]);
+}
+
+function compareVariantRows(left, right) {
+  const leftDate = left.date || "";
+  const rightDate = right.date || "";
+  if (leftDate !== rightDate) {
+    return leftDate.localeCompare(rightDate);
+  }
+  return String(left.id || "").localeCompare(String(right.id || ""));
+}
+
 function resolveVariantInput(input) {
   return requirePetVariantId(input);
 }
@@ -95,9 +123,7 @@ function getEnabledFeatureNames(features = {}) {
     .map(([feature]) => feature);
 }
 
-function getVariantSummary(input) {
-  const id = resolveVariantInput(input);
-  const profile = getPetVariantProfile(id);
+function buildVariantSummary(profile) {
   return {
     id: profile.id,
     notes: profile.notes,
@@ -114,8 +140,41 @@ function getVariantSummary(input) {
     enabledFeatures: getEnabledFeatureNames(profile.features),
     assetPrefix: profile.assetPrefix || profile.animationPrefix,
     animationPrefix: profile.animationPrefix,
-    manifest: getVariantManifestName(id),
+    manifest: `${profile.assetPrefix || profile.animationPrefix}_actions_manifest.json`,
     deliveryPathSegments: profile.deliveryPathSegments
+  };
+}
+
+function getVariantSummary(input) {
+  const id = resolveVariantInput(input);
+  return buildVariantSummary(getPetVariantProfile(id));
+}
+
+function listVariantSummaries(options = {}) {
+  const metadata = readMetadataFile(options.metadataFile || PET_VARIANT_METADATA_FILE);
+  return Object.values(getVariantProfilesFromMetadata(metadata))
+    .sort(compareVariantRows)
+    .map(buildVariantSummary);
+}
+
+function getVariantDetails(input, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const metadata = readMetadataFile(metadataFile);
+  const profile = getVariantProfileFromMetadata(input, metadata);
+  const animationFolders = (profile.actionButtons || profile.actions || [])
+    .concat(profile.actionAssets || profile.extraAnimationAssets || [])
+    .map((action) => path.join(animationsRoot, `${profile.assetPrefix}_${actionPool[action].asset}`));
+  const manifest = path.join(animationsRoot, `${profile.assetPrefix}_actions_manifest.json`);
+  return {
+    ...buildVariantSummary(profile),
+    profile,
+    raw: clonePlainObject(getMetadataVariants(metadata)[profile.id]),
+    resources: {
+      animationFolders,
+      manifest,
+      existingPaths: animationFolders.concat(manifest).filter((item) => fs.existsSync(item))
+    }
   };
 }
 
@@ -343,6 +402,43 @@ function assertSourceVideosAreRegistered(sourceDir) {
   }
 }
 
+function normalizeLoopMode(loopMode = null, options = {}) {
+  if (loopMode && typeof loopMode === "object") {
+    return {
+      mode: loopMode.mode || "auto",
+      sourceStart: loopMode.sourceStart,
+      sourceEnd: loopMode.sourceEnd
+    };
+  }
+  return { mode: options.useFullRange ? "full" : "auto" };
+}
+
+function appendActionProcessingArgs(processArgs, action, options = {}) {
+  const preset = actionPool[action].processPreset;
+  if (preset === "grounded" || preset === "nearSquat") {
+    processArgs.push("--stable-ground");
+  }
+  if (preset === "nearSquat" && action !== "squat") {
+    processArgs.push("--align-reference-center-x", "--align-reference-bottom");
+  } else if (preset === "direction64") {
+    processArgs.push("--direction-count", "64");
+  }
+
+  const loopMode = normalizeLoopMode(options.loopMode, options);
+  if (preset !== "direction64") {
+    if (loopMode.mode === "full") {
+      processArgs.push("--use-full-range");
+    } else if (loopMode.mode === "manual") {
+      if (loopMode.sourceStart === undefined || loopMode.sourceEnd === undefined) {
+        throw new Error(`Manual loop mode for action ${action} requires sourceStart and sourceEnd.`);
+      }
+      processArgs.push("--source-start", String(Number(loopMode.sourceStart)));
+      processArgs.push("--source-end", String(Number(loopMode.sourceEnd)));
+    }
+  }
+  return processArgs;
+}
+
 function getProcessArgs(assetPrefix, action, options = {}) {
   const processArgs = [
     "tools\\process_pet_actions.py",
@@ -355,19 +451,7 @@ function getProcessArgs(assetPrefix, action, options = {}) {
     "128",
     "--trim-ground-alpha-auto"
   ];
-  const preset = actionPool[action].processPreset;
-  if (preset === "grounded" || preset === "nearSquat") {
-    processArgs.push("--stable-ground");
-  }
-  if (preset === "nearSquat" && action !== "squat") {
-    processArgs.push("--align-reference-center-x", "--align-reference-bottom");
-  } else if (preset === "direction64") {
-    processArgs.push("--direction-count", "64");
-  }
-  if (options.useFullRange && preset !== "direction64") {
-    processArgs.push("--use-full-range");
-  }
-  return processArgs;
+  return appendActionProcessingArgs(processArgs, action, options);
 }
 
 function buildBootstrapPlan(args, options = {}) {
@@ -411,12 +495,14 @@ function buildBootstrapPlan(args, options = {}) {
       target: path.join(animationsRoot, actionName, `${actionName}.mp4`)
     };
   });
+  const loopModes = args.loopModes && typeof args.loopModes === "object" ? args.loopModes : {};
   const processCommands = actionKeys.map((action) => ({
     action,
     cwd: projectRoot,
     command: "python",
     args: getProcessArgs(draft.assetPrefix, action, {
-      useFullRange: Boolean(args["use-full-range"])
+      useFullRange: Boolean(args["use-full-range"]),
+      loopMode: loopModes[action]
     })
   }));
   const preflightCommands = ["release", "installer"].map((channel) => ({
@@ -634,6 +720,320 @@ async function applyBootstrapPlanAsync(plan, options = {}) {
   return plan.draft;
 }
 
+function getActionResourcePath(animationsRoot, assetPrefix, action) {
+  if (!Object.prototype.hasOwnProperty.call(actionPool, action)) {
+    throw new Error(`Unknown pet action ${action}. Register it in ACTION_POOL first.`);
+  }
+  return path.join(animationsRoot, `${assetPrefix}_${actionPool[action].asset}`);
+}
+
+function getManifestPath(animationsRoot, assetPrefix) {
+  return path.join(animationsRoot, `${assetPrefix}_actions_manifest.json`);
+}
+
+function getPatchFields(payload = {}) {
+  return payload.fields || payload.patch || {};
+}
+
+function cloneMetadataWithPatch(metadata, id, fields) {
+  const variants = getMetadataVariants(metadata);
+  const current = variants[id];
+  if (!current) {
+    throw new Error(`Invalid pet variant: ${id}`);
+  }
+  const next = {
+    ...clonePlainObject(current),
+    id
+  };
+  for (const key of ["scope", "tier", "species", "date", "notes", "version", "scale", "platforms", "assetPrefix", "soundPrefix"]) {
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+      next[key] = fields[key];
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, "actions")) {
+    next.actions = {
+      ...(next.actions || {}),
+      ...clonePlainObject(fields.actions)
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, "features")) {
+    next.features = {
+      ...(next.features || {}),
+      ...clonePlainObject(fields.features)
+    };
+  }
+  return {
+    ...clonePlainObject(metadata),
+    variants: {
+      ...clonePlainObject(variants),
+      [id]: next
+    }
+  };
+}
+
+function addDiff(diff, field, before, after) {
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    diff.push({ field, before: before === undefined ? null : before, after: after === undefined ? null : after });
+  }
+}
+
+function buildMetadataDiff(before, after, fields) {
+  const diff = [];
+  for (const key of Object.keys(fields)) {
+    if (key === "actions") {
+      addDiff(diff, "actions.buttons", before.actions?.buttons || [], after.actions?.buttons || []);
+      addDiff(diff, "actions.assets", before.actions?.assets || [], after.actions?.assets || []);
+    } else if (key === "features") {
+      addDiff(diff, "features.enable", before.features?.enable || [], after.features?.enable || []);
+      addDiff(diff, "features.disable", before.features?.disable || [], after.features?.disable || []);
+    } else {
+      addDiff(diff, key, before[key], after[key]);
+    }
+  }
+  return diff;
+}
+
+function findMissingActionResources(profile, animationsRoot) {
+  const actions = uniqueList((profile.actionButtons || profile.actions || []).concat(profile.actionAssets || profile.extraAnimationAssets || []));
+  return actions
+    .map((action) => getActionResourcePath(animationsRoot, profile.assetPrefix || profile.animationPrefix || profile.id, action))
+    .filter((resourcePath) => !fs.existsSync(resourcePath));
+}
+
+function buildMetadataEditPreview(payload = {}, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const id = String(payload.id || "");
+  const metadata = readMetadataFile(metadataFile);
+  const variants = getMetadataVariants(metadata);
+  if (!variants[id]) {
+    throw new Error(`Invalid pet variant: ${payload.id}`);
+  }
+  const fields = getPatchFields(payload);
+  const before = clonePlainObject(variants[id]);
+  const metadataAfterApply = cloneMetadataWithPatch(metadata, id, fields);
+  const after = clonePlainObject(metadataAfterApply.variants[id]);
+  const diff = buildMetadataDiff(before, after, fields);
+  const profile = resolvePetVariantProfile(after);
+  const missingResources = Object.prototype.hasOwnProperty.call(fields, "actions")
+    ? findMissingActionResources(profile, animationsRoot)
+    : [];
+  const canApply = missingResources.length === 0;
+  return {
+    kind: "metadataEdit",
+    id,
+    metadataFile,
+    animationsRoot,
+    canApply,
+    reason: canApply ? null : `Missing action resource(s): ${missingResources.join(", ")}`,
+    diff,
+    before,
+    after,
+    missingResources,
+    metadataAfterApply
+  };
+}
+
+function applyMetadataEdit(preview, options = {}) {
+  if (!preview || preview.kind !== "metadataEdit" || !preview.canApply) {
+    throw new Error("Cannot apply metadata edit preview.");
+  }
+  const metadataFile = options.metadataFile || preview.metadataFile || PET_VARIANT_METADATA_FILE;
+  writeMetadataFile(preview.metadataAfterApply, metadataFile);
+  return { id: preview.id, applied: true };
+}
+
+function buildReplaceActionPlan(payload = {}, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const metadata = readMetadataFile(metadataFile);
+  const profile = getVariantProfileFromMetadata(payload.id, metadata);
+  const action = String(payload.action || "");
+  if (!Object.prototype.hasOwnProperty.call(actionPool, action)) {
+    throw new Error(`Unknown pet action ${action}. Register it in ACTION_POOL first.`);
+  }
+  const video = path.resolve(String(payload.video || payload.source || ""));
+  if (!video || !/\.mp4$/i.test(video) || !fs.existsSync(video) || !fs.statSync(video).isFile()) {
+    throw new Error(`Replacement video must be an existing .mp4 file: ${video}`);
+  }
+  const actionName = `${profile.assetPrefix}_${actionPool[action].asset}`;
+  const manifestName = `${profile.assetPrefix}_actions_manifest.json`;
+  const args = [
+    "tools\\process_pet_actions.py",
+    "replace",
+    "--action",
+    actionName,
+    "--video",
+    video,
+    "--manifest",
+    manifestName,
+    "--trim-ground-alpha",
+    "128",
+    "--trim-ground-alpha-auto"
+  ];
+  appendActionProcessingArgs(args, action, { loopMode: payload.loopMode });
+  return {
+    kind: "replaceAction",
+    id: profile.id,
+    action,
+    video,
+    targetAction: path.join(animationsRoot, actionName),
+    manifest: path.join(animationsRoot, manifestName),
+    command: {
+      action,
+      cwd: projectRoot,
+      command: "python",
+      args
+    }
+  };
+}
+
+function applyReplaceActionPlan(plan, options = {}) {
+  const runner = options.runCommand || runCommand;
+  runner(plan.command.command, plan.command.args, { cwd: plan.command.cwd, stage: "replaceAction", onLog: options.onLog });
+  return { id: plan.id, action: plan.action, replaced: true };
+}
+
+async function applyReplaceActionPlanAsync(plan, options = {}) {
+  const runner = options.runCommand || runCommandAsync;
+  await runner(plan.command.command, plan.command.args, { cwd: plan.command.cwd, stage: "replaceAction", onLog: options.onLog });
+  return { id: plan.id, action: plan.action, replaced: true };
+}
+
+function getCurrentRuntimeVariant(runtimeAssetsRoot) {
+  const configFile = path.join(runtimeAssetsRoot, "pet_variant.json");
+  if (!fs.existsSync(configFile)) {
+    return null;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(configFile, "utf8")).variant || null;
+  } catch {
+    return null;
+  }
+}
+
+function isInsideOrSame(root, target) {
+  const resolvedRoot = path.resolve(root);
+  const resolvedTarget = path.resolve(target);
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
+function collectDeletePaths(profile, options = {}) {
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const userDataRoot = options.userDataRoot || path.join(appRoot, ".user-data");
+  const runtimeAssetsRoot = options.runtimeAssetsRoot || path.join(appRoot, ".runtime-assets");
+  const paths = [];
+  const prefix = `${profile.assetPrefix}_`;
+  if (fs.existsSync(animationsRoot)) {
+    for (const entry of fs.readdirSync(animationsRoot, { withFileTypes: true })) {
+      if (entry.name.startsWith(prefix)) {
+        paths.push(path.join(animationsRoot, entry.name));
+      }
+    }
+  }
+  const manifest = getManifestPath(animationsRoot, profile.assetPrefix);
+  if (fs.existsSync(manifest)) {
+    paths.push(manifest);
+  }
+  const userData = path.join(userDataRoot, profile.id);
+  if (fs.existsSync(userData)) {
+    paths.push(userData);
+  }
+  const currentVariant = getCurrentRuntimeVariant(runtimeAssetsRoot);
+  const clearRuntime = currentVariant === profile.id && fs.existsSync(runtimeAssetsRoot);
+  if (clearRuntime) {
+    paths.push(runtimeAssetsRoot);
+  }
+  return {
+    paths: uniqueList(paths),
+    runtimeAssets: {
+      path: runtimeAssetsRoot,
+      currentVariant,
+      clear: clearRuntime
+    }
+  };
+}
+
+function buildDeleteVariantPreview(input, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const userDataRoot = options.userDataRoot || path.join(appRoot, ".user-data");
+  const runtimeAssetsRoot = options.runtimeAssetsRoot || path.join(appRoot, ".runtime-assets");
+  const metadata = readMetadataFile(metadataFile);
+  let profile;
+  try {
+    profile = getVariantProfileFromMetadata(input, metadata);
+  } catch (error) {
+    return {
+      kind: "deleteVariant",
+      id: String(input || ""),
+      canDelete: false,
+      reason: error.message,
+      paths: [],
+      metadataFile,
+      animationsRoot,
+      userDataRoot,
+      runtimeAssets: { path: runtimeAssetsRoot, currentVariant: null, clear: false }
+    };
+  }
+
+  if (profile.scope !== "test") {
+    return {
+      kind: "deleteVariant",
+      id: profile.id,
+      scope: profile.scope,
+      canDelete: false,
+      reason: `Only test scope variants can be deleted. Current scope: ${profile.scope}`,
+      paths: [],
+      metadataFile,
+      animationsRoot,
+      userDataRoot,
+      runtimeAssets: { path: runtimeAssetsRoot, currentVariant: null, clear: false }
+    };
+  }
+
+  const deletion = collectDeletePaths(profile, { animationsRoot, userDataRoot, runtimeAssetsRoot });
+  const metadataAfterApply = clonePlainObject(metadata);
+  delete metadataAfterApply.variants[profile.id];
+  return {
+    kind: "deleteVariant",
+    id: profile.id,
+    scope: profile.scope,
+    canDelete: true,
+    reason: null,
+    metadataFile,
+    animationsRoot,
+    userDataRoot,
+    paths: deletion.paths,
+    runtimeAssets: deletion.runtimeAssets,
+    metadataAfterApply
+  };
+}
+
+function removeWhitelistedPath(target, roots) {
+  const resolvedTarget = path.resolve(target);
+  if (!roots.some((root) => isInsideOrSame(root, resolvedTarget))) {
+    throw new Error(`Refusing to remove path outside allowed roots: ${resolvedTarget}`);
+  }
+  fs.rmSync(resolvedTarget, { recursive: true, force: true });
+}
+
+function applyDeleteVariant(preview, options = {}) {
+  if (!preview || preview.kind !== "deleteVariant" || !preview.canDelete) {
+    throw new Error("Only test scope variants can be deleted.");
+  }
+  const metadataFile = options.metadataFile || preview.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || preview.animationsRoot || defaultAnimationsRoot;
+  const userDataRoot = options.userDataRoot || preview.userDataRoot || path.join(appRoot, ".user-data");
+  const runtimeAssetsRoot = options.runtimeAssetsRoot || preview.runtimeAssets?.path || path.join(appRoot, ".runtime-assets");
+  const allowedRoots = [animationsRoot, userDataRoot, runtimeAssetsRoot];
+  for (const item of preview.paths || []) {
+    removeWhitelistedPath(item, allowedRoots);
+  }
+  writeMetadataFile(preview.metadataAfterApply, metadataFile);
+  return { id: preview.id, deleted: true, paths: preview.paths || [] };
+}
+
 function bootstrapVariant(args, options = {}) {
   const plan = buildBootstrapPlan(args, options);
   if (!args.apply) {
@@ -814,8 +1214,17 @@ module.exports = {
   buildBootstrapPlan,
   applyBootstrapPlan,
   applyBootstrapPlanAsync,
+  buildReplaceActionPlan,
+  applyReplaceActionPlan,
+  applyReplaceActionPlanAsync,
+  buildMetadataEditPreview,
+  applyMetadataEdit,
+  buildDeleteVariantPreview,
+  applyDeleteVariant,
   bootstrapVariant,
   generateVariantGallery,
+  listVariantSummaries,
+  getVariantDetails,
   getVariantSummary,
   formatList,
   formatTable,

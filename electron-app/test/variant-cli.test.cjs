@@ -10,6 +10,11 @@ const {
   buildBootstrapPlan,
   applyBootstrapPlan,
   applyBootstrapPlanAsync,
+  buildReplaceActionPlan,
+  buildMetadataEditPreview,
+  applyMetadataEdit,
+  buildDeleteVariantPreview,
+  applyDeleteVariant,
   generateVariantGallery,
   formatList,
   getVariantSummary,
@@ -181,6 +186,43 @@ test("bootstrap can use the full processed frame range for runtime frames", () =
 
   assert.equal(plan.processCommands.length, 4);
   assert.equal(plan.processCommands.every((command) => command.args.includes("--use-full-range")), true);
+});
+
+test("bootstrap supports per-action loop mode arguments", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const sourceDir = path.join(tempDir, "downloads");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const plan = buildBootstrapPlan(
+    {
+      species: "cat",
+      scope: "custom",
+      tier: "basic",
+      date: "2026-06-30",
+      source: sourceDir,
+      loopModes: {
+        squat: { mode: "full" },
+        walk: { mode: "manual", sourceStart: 12, sourceEnd: 34 },
+        feed: { mode: "auto" }
+      }
+    },
+    { metadataFile, animationsRoot }
+  );
+
+  const byAction = Object.fromEntries(plan.processCommands.map((command) => [command.action, command.args]));
+  assert.equal(byAction.squat.includes("--use-full-range"), true);
+  assert.equal(byAction.feed.includes("--use-full-range"), false);
+  assert.deepEqual(byAction.walk.slice(byAction.walk.indexOf("--source-start"), byAction.walk.indexOf("--source-start") + 4), [
+    "--source-start",
+    "12",
+    "--source-end",
+    "34"
+  ]);
+  assert.equal(byAction.walk.includes("--use-full-range"), false);
 });
 
 test("bootstrap apply writes V2 metadata and copies videos when processing is skipped", () => {
@@ -371,6 +413,168 @@ test("bootstrap rejects missing required source videos", () => {
     ),
     /Missing source video for action ball/
   );
+});
+
+function writeMaintenanceMetadata(metadataFile) {
+  writeMetadata(metadataFile, {
+    pet2601: {
+      id: "pet2601",
+      date: "2026-05-08",
+      scope: "internal",
+      tier: "basic",
+      species: "dog",
+      notes: "internal",
+      version: "1.1",
+      assetPrefix: "dog",
+      actions: { buttons: ["squat", "walk", "feed", "ball"], assets: [] },
+      features: { enable: ["autoStart"], disable: [] }
+    },
+    pettest01: {
+      id: "pettest01",
+      date: "2026-07-06",
+      scope: "test",
+      tier: "basic",
+      species: "cat",
+      notes: "test draft",
+      version: "1.0",
+      assetPrefix: "pettest01",
+      actions: { buttons: ["squat", "walk", "feed", "ball"], assets: [] },
+      features: { enable: ["autoStart"], disable: [] }
+    }
+  });
+}
+
+function writeAnimationFolders(animationsRoot, assetPrefix, actions) {
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  for (const action of actions) {
+    fs.mkdirSync(path.join(animationsRoot, `${assetPrefix}_${action}`, "transparent_frames"), { recursive: true });
+  }
+  fs.writeFileSync(path.join(animationsRoot, `${assetPrefix}_actions_manifest.json`), "[]", "utf8");
+}
+
+test("metadata edit preview diffs structured fields and apply writes the patch", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball", "lie", "yawn"]);
+
+  const preview = buildMetadataEditPreview(
+    {
+      id: "pettest01",
+      fields: {
+        species: "dog",
+        notes: "manual metadata edit",
+        actions: { buttons: ["squat", "walk", "feed", "ball", "lie"], assets: ["yawn"] }
+      }
+    },
+    { metadataFile, animationsRoot }
+  );
+
+  assert.equal(preview.id, "pettest01");
+  assert.equal(preview.canApply, true);
+  assert.deepEqual(preview.diff.map((entry) => entry.field), ["species", "notes", "actions.buttons", "actions.assets"]);
+
+  applyMetadataEdit(preview, { metadataFile });
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+  assert.equal(metadata.variants.pettest01.species, "dog");
+  assert.deepEqual(metadata.variants.pettest01.actions.buttons, ["squat", "walk", "feed", "ball", "lie"]);
+  assert.deepEqual(metadata.variants.pettest01.actions.assets, ["yawn"]);
+});
+
+test("metadata edit preview blocks action lists that reference missing resources", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+
+  const preview = buildMetadataEditPreview(
+    {
+      id: "pettest01",
+      fields: {
+        actions: { buttons: ["squat", "walk", "feed", "ball", "lie"], assets: [] }
+      }
+    },
+    { metadataFile, animationsRoot }
+  );
+
+  assert.equal(preview.canApply, false);
+  assert.match(preview.reason, /pettest01_lie/);
+  assert.throws(() => applyMetadataEdit(preview, { metadataFile }), /Cannot apply metadata edit/);
+});
+
+test("replace action plan builds process_pet_actions replace command with frame mode args", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const video = path.join(tempDir, "replacement.mp4");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  fs.writeFileSync(video, "video", "utf8");
+
+  const plan = buildReplaceActionPlan(
+    {
+      id: "pettest01",
+      action: "walk",
+      video,
+      loopMode: { mode: "manual", sourceStart: 8, sourceEnd: 21 }
+    },
+    { metadataFile, animationsRoot }
+  );
+
+  assert.equal(plan.id, "pettest01");
+  assert.equal(plan.action, "walk");
+  assert.equal(plan.command.command, "python");
+  assert.deepEqual(plan.command.args.slice(0, 8), [
+    "tools\\process_pet_actions.py",
+    "replace",
+    "--action",
+    "pettest01_walk",
+    "--video",
+    video,
+    "--manifest",
+    "pettest01_actions_manifest.json"
+  ]);
+  assert.deepEqual(plan.command.args.slice(plan.command.args.indexOf("--source-start"), plan.command.args.indexOf("--source-start") + 4), [
+    "--source-start",
+    "8",
+    "--source-end",
+    "21"
+  ]);
+  assert.equal(plan.command.args.includes("--use-full-range"), false);
+});
+
+test("delete variant preview and apply only remove test-scope variant resources", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const userDataRoot = path.join(tempDir, ".user-data");
+  const runtimeAssetsRoot = path.join(tempDir, ".runtime-assets");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  fs.mkdirSync(path.join(userDataRoot, "pettest01"), { recursive: true });
+  fs.mkdirSync(runtimeAssetsRoot, { recursive: true });
+  fs.writeFileSync(path.join(runtimeAssetsRoot, "pet_variant.json"), JSON.stringify({ variant: "pettest01", channel: "release" }), "utf8");
+
+  const blocked = buildDeleteVariantPreview("pet2601", { metadataFile, animationsRoot, userDataRoot, runtimeAssetsRoot });
+  assert.equal(blocked.canDelete, false);
+  assert.match(blocked.reason, /scope/);
+
+  const preview = buildDeleteVariantPreview("pettest01", { metadataFile, animationsRoot, userDataRoot, runtimeAssetsRoot });
+  assert.equal(preview.canDelete, true);
+  assert.equal(preview.runtimeAssets.currentVariant, "pettest01");
+  assert.equal(preview.runtimeAssets.clear, true);
+  assert.equal(preview.paths.some((item) => item.endsWith(`${path.sep}pettest01_squat`)), true);
+
+  assert.throws(() => applyDeleteVariant(blocked, { metadataFile }), /Only test scope variants can be deleted/);
+  applyDeleteVariant(preview, { metadataFile });
+
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+  assert.equal(Object.hasOwn(metadata.variants, "pettest01"), false);
+  assert.equal(fs.existsSync(path.join(animationsRoot, "pettest01_squat")), false);
+  assert.equal(fs.existsSync(path.join(userDataRoot, "pettest01")), false);
+  assert.equal(fs.existsSync(runtimeAssetsRoot), false);
 });
 
 test("source action names resolve from exact or prefixed mp4 names", () => {

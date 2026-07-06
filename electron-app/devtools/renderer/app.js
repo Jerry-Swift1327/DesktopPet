@@ -1,14 +1,10 @@
 const api = window.variantDevtools;
+const appNode = document.getElementById("app");
+const sidebarNode = document.querySelector(".sidebar");
 
-const stageNames = [
-  "prepareStaging",
-  "writeMetadata",
-  "copyVideos",
-  "processVideos",
-  "runPreflight",
-  "generateGallery",
-  "complete"
-];
+const newVariantStages = ["prepareStaging", "writeMetadata", "copyVideos", "processVideos", "runPreflight", "generateGallery", "complete"];
+const maintenanceStages = ["replaceAction", "writeMetadataEdit", "deleteVariantResources", "complete"];
+const allStageNames = Array.from(new Set(newVariantStages.concat(maintenanceStages)));
 
 const stageLabels = {
   prepareStaging: "准备暂存",
@@ -17,6 +13,9 @@ const stageLabels = {
   processVideos: "处理视频",
   runPreflight: "运行预检",
   generateGallery: "生成图鉴",
+  replaceAction: "替换动作",
+  writeMetadataEdit: "写入维护元数据",
+  deleteVariantResources: "删除测试资源",
   complete: "完成",
   task: "任务",
   window: "窗口"
@@ -37,6 +36,19 @@ const streamLabels = {
   error: "错误"
 };
 
+const stageWeights = {
+  prepareStaging: 6,
+  writeMetadata: 10,
+  copyVideos: 12,
+  processVideos: 42,
+  runPreflight: 14,
+  generateGallery: 10,
+  replaceAction: 72,
+  writeMetadataEdit: 84,
+  deleteVariantResources: 90,
+  complete: 100
+};
+
 const defaultActionButtons = ["squat", "walk", "feed", "ball"];
 const defaultEnabledFeatures = ["autoStart", "windowRoam"];
 
@@ -52,9 +64,14 @@ const featureLabels = {
   dockShake: "Dock 抖动"
 };
 
-const state = {
-  options: null,
-  form: {
+const navItems = [
+  { view: "newVariant", label: "新增宠物" },
+  { view: "maintainVariant", label: "维护变体" },
+  { view: "deleteVariant", label: "删除测试变体" }
+];
+
+function createDefaultForm() {
+  return {
     scope: "custom",
     tier: "basic",
     species: "cat",
@@ -63,6 +80,7 @@ const state = {
     sourceFolder: "",
     actionVideos: {},
     autoSelectLoop: false,
+    loopModes: {},
     advanced: {
       actionButtons: defaultActionButtons.slice(),
       actionAssets: [],
@@ -73,18 +91,52 @@ const state = {
     skipProcessing: false,
     skipPreflight: false,
     skipGallery: false
-  },
+  };
+}
+
+const state = {
+  view: "newVariant",
+  options: null,
+  variants: [],
+  variantsPending: false,
+  form: createDefaultForm(),
   preview: null,
   previewPending: false,
   previewRequestId: 0,
   result: null,
+  successModal: null,
   running: false,
+  activeOperation: "newVariant",
   advancedOpen: false,
   logs: [],
-  stages: {}
+  stages: {},
+  maintain: {
+    selectedId: "",
+    details: null,
+    action: "",
+    replacementVideo: "",
+    loopMode: { mode: "auto", sourceStart: "", sourceEnd: "" },
+    replacePreview: null,
+    replacePending: false,
+    metadataFields: {
+      species: "",
+      tier: "",
+      notes: "",
+      actionButtons: "",
+      actionAssets: "",
+      featuresEnable: "",
+      featuresDisable: ""
+    },
+    metadataPreview: null,
+    metadataPending: false
+  },
+  deleteVariant: {
+    selectedId: "",
+    preview: null,
+    pending: false,
+    confirmText: ""
+  }
 };
-
-const appNode = document.getElementById("app");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -111,6 +163,10 @@ function parseList(value) {
 
 function renderJson(value) {
   return escapeHtml(JSON.stringify(value, null, 2));
+}
+
+function busy() {
+  return state.running || state.previewPending || state.maintain.replacePending || state.maintain.metadataPending || state.deleteVariant.pending;
 }
 
 function getNotesValue() {
@@ -187,35 +243,64 @@ function selectedPath(action) {
   return typeof value === "string" ? value : value.path || "";
 }
 
-function clearPreview() {
+function defaultLoopMode() {
+  return state.form.autoSelectLoop ? "auto" : "full";
+}
+
+function loopModeFor(action) {
+  const explicit = state.form.loopModes[action];
+  return explicit || { mode: defaultLoopMode(), sourceStart: "", sourceEnd: "" };
+}
+
+function buildEffectiveLoopModes() {
+  const result = {};
+  for (const action of requiredActions()) {
+    const mode = loopModeFor(action);
+    result[action] = {
+      mode: mode.mode || defaultLoopMode()
+    };
+    if (result[action].mode === "manual") {
+      result[action].sourceStart = mode.sourceStart;
+      result[action].sourceEnd = mode.sourceEnd;
+    }
+  }
+  return result;
+}
+
+function clearNewPreview() {
   state.preview = null;
   state.result = null;
 }
 
+function clearMaintainPreviews() {
+  state.maintain.replacePreview = null;
+  state.maintain.metadataPreview = null;
+}
+
 function setField(name, value) {
-  if (state.running || state.previewPending) {
+  if (busy()) {
     return;
   }
   state.form[name] = value;
-  clearPreview();
+  clearNewPreview();
   render();
 }
 
 function setAdvancedField(name, value) {
-  if (state.running || state.previewPending) {
+  if (busy()) {
     return;
   }
   state.form.advanced[name] = value;
-  clearPreview();
+  clearNewPreview();
   render();
 }
 
 function setAdvancedList(name, values) {
-  if (state.running || state.previewPending) {
+  if (busy()) {
     return;
   }
   state.form.advanced[name] = Array.from(new Set(values));
-  clearPreview();
+  clearNewPreview();
   render();
 }
 
@@ -249,28 +334,63 @@ function toggleFeature(name, feature, checked) {
 }
 
 function setRunOption(name, value) {
-  if (state.running || state.previewPending) {
+  if (busy()) {
     return;
   }
   state.form[name] = value;
-  clearPreview();
+  if (name === "autoSelectLoop") {
+    state.form.loopModes = {};
+  }
+  clearNewPreview();
+  render();
+}
+
+function setLoopMode(action, patch) {
+  if (busy()) {
+    return;
+  }
+  state.form.loopModes[action] = {
+    ...loopModeFor(action),
+    ...patch
+  };
+  clearNewPreview();
   render();
 }
 
 function setActionVideo(action, filePath) {
-  if (state.running || state.previewPending) {
-    return;
-  }
-  if (!filePath) {
+  if (busy() || !filePath) {
     return;
   }
   state.form.actionVideos[action] = filePath;
-  clearPreview();
+  clearNewPreview();
   render();
 }
 
+function resetNewVariantForm() {
+  state.form = createDefaultForm();
+  state.preview = null;
+  state.result = null;
+  state.successModal = null;
+  state.logs = [];
+  state.stages = {};
+  render();
+}
+
+function renderSidebar() {
+  if (!sidebarNode) {
+    return;
+  }
+  sidebarNode.innerHTML = `<div class="brand">
+    <strong>Chongban Devtools</strong>
+    <span>内部维护工具</span>
+  </div>
+  <div class="nav-stack">
+    ${navItems.map((item) => `<button class="nav-item ${state.view === item.view ? "active" : ""}" type="button" data-nav-view="${escapeHtml(item.view)}">${escapeHtml(item.label)}</button>`).join("")}
+  </div>`;
+}
+
 function renderSelect(name, values) {
-  const disabled = state.running || state.previewPending ? " disabled" : "";
+  const disabled = busy() ? " disabled" : "";
   return `<select data-field="${escapeHtml(name)}"${disabled}>${values.map((value) => {
     const selected = state.form[name] === value ? " selected" : "";
     return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(value)}</option>`;
@@ -280,13 +400,13 @@ function renderSelect(name, values) {
 function renderPlatformToggles() {
   return ["win32", "darwin"].map((platform) => {
     const checked = state.form.platforms.includes(platform) ? " checked" : "";
-    const disabled = state.running || state.previewPending ? " disabled" : "";
+    const disabled = busy() ? " disabled" : "";
     return `<label class="check"><input type="checkbox" data-platform="${platform}"${checked}${disabled}>${platform}</label>`;
   }).join("");
 }
 
 function renderActionOption(action, kind, checked, locked = false) {
-  const disabled = state.running || state.previewPending || locked ? " disabled" : "";
+  const disabled = busy() || locked ? " disabled" : "";
   const checkedAttr = checked ? " checked" : "";
   const lockedText = locked ? `<span class="option-note">必选</span>` : "";
   return `<label class="option-check">
@@ -297,7 +417,7 @@ function renderActionOption(action, kind, checked, locked = false) {
 }
 
 function renderFeatureOption(feature, name, checked) {
-  const disabled = state.running || state.previewPending ? " disabled" : "";
+  const disabled = busy() ? " disabled" : "";
   const checkedAttr = checked ? " checked" : "";
   return `<label class="option-check">
     <input type="checkbox" data-feature-toggle="${escapeHtml(feature)}" data-feature-list="${escapeHtml(name)}"${checkedAttr}${disabled}>
@@ -368,6 +488,24 @@ function renderDerivedSummary() {
   </div>`;
 }
 
+function renderLoopControls(action) {
+  const value = loopModeFor(action);
+  const disabled = busy() ? " disabled" : "";
+  return `<div class="loop-controls">
+    <label>运行帧
+      <select data-loop-mode="${escapeHtml(action)}"${disabled}>
+        <option value="full"${value.mode === "full" ? " selected" : ""}>完整帧</option>
+        <option value="auto"${value.mode === "auto" ? " selected" : ""}>自动选取</option>
+        <option value="manual"${value.mode === "manual" ? " selected" : ""}>手动范围</option>
+      </select>
+    </label>
+    <div class="loop-range ${value.mode === "manual" ? "" : "is-hidden"}">
+      <input type="number" min="0" step="1" placeholder="start" data-loop-start="${escapeHtml(action)}" value="${escapeHtml(value.sourceStart ?? "")}"${disabled}>
+      <input type="number" min="0" step="1" placeholder="end" data-loop-end="${escapeHtml(action)}" value="${escapeHtml(value.sourceEnd ?? "")}"${disabled}>
+    </div>
+  </div>`;
+}
+
 function renderActionCards() {
   return requiredActions().map((action) => {
     const manualPath = selectedPath(action);
@@ -378,11 +516,15 @@ function renderActionCards() {
     const sourceText = manualPath || stagedPath || (state.form.sourceFolder ? "生成预览后扫描文件夹" : "未选择视频");
     return `<article class="action-card ${status}">
       <div class="action-copy">
-        <h3>${escapeHtml(actionLabel(action))}</h3>
-        <span class="badge">${escapeHtml(cardStatusLabel)} / ${escapeHtml(sourceKind)}</span>
+        <div class="action-title-row">
+          <h3>${escapeHtml(actionLabel(action))}</h3>
+          <span class="action-status"><span class="status-dot"></span>${escapeHtml(cardStatusLabel)}</span>
+        </div>
+        <span class="badge">${escapeHtml(sourceKind)}</span>
         <p>${escapeHtml(sourceText)}</p>
+        ${renderLoopControls(action)}
       </div>
-      <button type="button" data-choose-action="${escapeHtml(action)}"${state.running || state.previewPending ? " disabled" : ""}>${manualPath ? "替换视频" : "选择视频"}</button>
+      <button type="button" data-choose-action="${escapeHtml(action)}"${busy() ? " disabled" : ""}>${manualPath ? "替换视频" : "选择视频"}</button>
     </article>`;
   }).join("");
 }
@@ -400,7 +542,7 @@ function renderPreview() {
   return `<section class="panel">
     <div class="panel-header">
       <h2>预览</h2>
-      <button type="button" class="primary" data-run-preview="${escapeHtml(state.preview.previewId)}"${state.running || state.previewPending ? " disabled" : ""}>开始生成</button>
+      <button type="button" class="primary" data-run-preview="${escapeHtml(state.preview.previewId)}"${busy() ? " disabled" : ""}>开始生成</button>
     </div>
     <div class="summary-grid">
       <div><span>变体 ID id</span><strong>${escapeHtml(state.preview.draft.id)}</strong></div>
@@ -431,16 +573,40 @@ function renderPreview() {
   </section>`;
 }
 
+function progressForStage(status, stage) {
+  if (status === "done" || status === "skipped") {
+    return 100;
+  }
+  if (status === "failed") {
+    return 100;
+  }
+  if (status === "running") {
+    return Math.max(18, Math.min(92, stageWeights[stage] || 50));
+  }
+  return 0;
+}
+
+function visibleStages() {
+  if (state.activeOperation === "maintainVariant" || state.activeOperation === "deleteVariant") {
+    return maintenanceStages;
+  }
+  return newVariantStages;
+}
+
 function renderExecution() {
-  return `<section class="panel">
+  return `<section class="panel execution-panel">
     <div class="panel-header">
       <h2>执行进度</h2>
       ${state.result ? `<span class="success">已生成 ${escapeHtml(state.result.id)}</span>` : `<span class="muted">${state.running ? "执行中" : "空闲"}</span>`}
     </div>
     <div class="stage-list">
-      ${stageNames.map((stage) => {
+      ${visibleStages().map((stage, index) => {
         const status = state.stages[stage] || "pending";
-        return `<div class="stage ${escapeHtml(status)}"><span>${escapeHtml(stageLabel(stage))}</span><strong>${escapeHtml(statusLabel(status))}</strong></div>`;
+        const percent = progressForStage(status, stage);
+        return `<div class="stage ${escapeHtml(status)} stage-tone-${index % 5}">
+          <div class="stage-row"><span>${escapeHtml(stageLabel(stage))}</span><strong>${percent}% · ${escapeHtml(statusLabel(status))}</strong></div>
+          <div class="stage-progress"><span style="width: ${percent}%"></span></div>
+        </div>`;
       }).join("")}
     </div>
     <pre class="log">${state.logs.map(escapeHtml).join("\n")}</pre>
@@ -449,7 +615,7 @@ function renderExecution() {
 
 function renderAdvancedControls() {
   const advanced = state.form.advanced;
-  const disabled = state.running || state.previewPending ? " disabled" : "";
+  const disabled = busy() ? " disabled" : "";
   return `<details class="advanced"${state.advancedOpen ? " open" : ""}>
     <summary>高级设置（谨慎使用）</summary>
     <div class="form-grid">
@@ -469,47 +635,265 @@ function renderAdvancedControls() {
   </details>`;
 }
 
-function renderMain() {
+function renderNewVariant() {
   const options = state.options;
-  appNode.innerHTML = `<div class="wizard">
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h1>新增宠物</h1>
-          <p class="muted">基于 bootstrap 流程创建宠物变体</p>
+  return `<div class="wizard">
+    <div class="wizard-left">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h1>新增宠物</h1>
+            <p class="muted">基于 bootstrap 流程创建宠物变体</p>
+          </div>
+          <button type="button" class="primary" data-build-preview${busy() ? " disabled" : ""}>${state.previewPending ? "生成中" : "生成预览"}</button>
         </div>
-        <button type="button" class="primary" data-build-preview${state.running || state.previewPending ? " disabled" : ""}>${state.previewPending ? "生成中" : "生成预览"}</button>
-      </div>
-      <div class="form-grid">
-        <label>范围 scope ${renderSelect("scope", Object.keys(options.notes))}</label>
-        <label>套餐 tier ${renderSelect("tier", Object.keys(options.tiers))}</label>
-        <label>物种 species ${renderSelect("species", Object.keys(options.species))}</label>
-        <label>日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${state.running || state.previewPending ? " disabled" : ""}></label>
-      </div>
-      <div class="platforms">${renderPlatformToggles()}</div>
-      <div class="check-row processing-options">
-        <label class="check"><input type="checkbox" data-run-option="autoSelectLoop"${state.form.autoSelectLoop ? " checked" : ""}${state.running || state.previewPending ? " disabled" : ""}>自动选取最佳运行帧段</label>
-        <span class="muted">未勾选时，运行帧使用素材池完整帧范围。</span>
-      </div>
-      ${renderDerivedSummary()}
-      ${renderAdvancedControls()}
-    </section>
+        <div class="form-grid">
+          <label>范围 scope ${renderSelect("scope", Object.keys(options.notes))}</label>
+          <label>套餐 tier ${renderSelect("tier", Object.keys(options.tiers))}</label>
+          <label>物种 species ${renderSelect("species", Object.keys(options.species))}</label>
+          <label>日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${busy() ? " disabled" : ""}></label>
+        </div>
+        <div class="platforms">${renderPlatformToggles()}</div>
+        <div class="check-row processing-options">
+          <label class="check"><input type="checkbox" data-run-option="autoSelectLoop"${state.form.autoSelectLoop ? " checked" : ""}${busy() ? " disabled" : ""}>默认自动选取最佳运行帧段</label>
+          <span class="muted">每个动作仍可单独改为完整帧、自动选取或手动范围。</span>
+        </div>
+        ${renderDerivedSummary()}
+        ${renderAdvancedControls()}
+      </section>
 
-    <section class="panel">
-      <div class="panel-header">
-        <h2>源视频</h2>
-        <button type="button" data-choose-folder${state.running || state.previewPending ? " disabled" : ""}>选择文件夹</button>
-      </div>
-      <div class="source-path">${escapeHtml(state.form.sourceFolder || "未选择源视频文件夹")}</div>
-      <div class="action-grid">${renderActionCards()}</div>
-    </section>
+      <section class="panel">
+        <div class="panel-header">
+          <h2>源视频</h2>
+          <button type="button" data-choose-folder${busy() ? " disabled" : ""}>选择文件夹</button>
+        </div>
+        <div class="source-path">${escapeHtml(state.form.sourceFolder || "未选择源视频文件夹")}</div>
+        <div class="action-grid">${renderActionCards()}</div>
+      </section>
+    </div>
 
-    ${renderPreview()}
-    ${renderExecution()}
+    <div class="wizard-right">
+      ${renderPreview()}
+      ${renderExecution()}
+    </div>
+  </div>
+  ${renderSuccessModal()}`;
+}
+
+function renderVariantOptions(selectedId, onlyTest = false) {
+  const rows = onlyTest ? state.variants.filter((variant) => variant.scope === "test") : state.variants;
+  if (rows.length === 0) {
+    return `<option value="">暂无变体</option>`;
+  }
+  return rows.map((variant) => `<option value="${escapeHtml(variant.id)}"${selectedId === variant.id ? " selected" : ""}>${escapeHtml(variant.id)} · ${escapeHtml(variant.scope)} · ${escapeHtml(variant.species)}</option>`).join("");
+}
+
+function actionsFromDetails(details) {
+  if (!details || !details.profile) {
+    return [];
+  }
+  return Array.from(new Set((details.profile.actionButtons || details.profile.actions || []).concat(details.profile.actionAssets || details.profile.extraAnimationAssets || [])));
+}
+
+function syncMaintainFields(details) {
+  if (!details || !details.profile) {
+    return;
+  }
+  const profile = details.profile;
+  state.maintain.metadataFields = {
+    species: profile.species || "",
+    tier: profile.tier || "",
+    notes: profile.notes || "",
+    actionButtons: (profile.actionButtons || profile.actions || []).join(", "),
+    actionAssets: (profile.actionAssets || profile.extraAnimationAssets || []).join(", "),
+    featuresEnable: (profile.enabledFeatures || Object.entries(profile.features || {}).filter(([, enabled]) => enabled).map(([name]) => name)).join(", "),
+    featuresDisable: Object.entries(profile.features || {}).filter(([, enabled]) => enabled === false).map(([name]) => name).join(", ")
+  };
+  const actions = actionsFromDetails(details);
+  if (!state.maintain.action || !actions.includes(state.maintain.action)) {
+    state.maintain.action = actions[0] || "";
+  }
+}
+
+function renderMaintainVariant() {
+  const details = state.maintain.details;
+  const fields = state.maintain.metadataFields;
+  const actions = actionsFromDetails(details);
+  const disabled = busy() ? " disabled" : "";
+  return `<div class="wizard">
+    <div class="wizard-left">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h1>维护变体</h1>
+            <p class="muted">替换动作资源或预览后写入结构化元数据</p>
+          </div>
+          <button type="button" data-refresh-variants${disabled}>刷新</button>
+        </div>
+        <div class="form-grid">
+          <label>选择变体
+            <select data-maintain-select${disabled}>${renderVariantOptions(state.maintain.selectedId)}</select>
+          </label>
+          <label>替换动作
+            <select data-maintain-action${disabled}>${actions.map((action) => `<option value="${escapeHtml(action)}"${state.maintain.action === action ? " selected" : ""}>${escapeHtml(actionLabel(action))}</option>`).join("")}</select>
+          </label>
+        </div>
+        ${details ? `<div class="summary-grid">
+          <div><span>scope</span><strong>${escapeHtml(details.profile.scope)}</strong></div>
+          <div><span>assetPrefix</span><strong>${escapeHtml(details.profile.assetPrefix)}</strong></div>
+          <div><span>version</span><strong>${escapeHtml(details.profile.version)}</strong></div>
+          <div><span>manifest</span><strong>${escapeHtml(details.resources.manifest)}</strong></div>
+        </div>` : `<p class="muted">请选择一个变体。</p>`}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>替换动作资源</h2>
+          <button type="button" data-build-replace-preview${disabled}>生成替换预览</button>
+        </div>
+        <div class="source-path">${escapeHtml(state.maintain.replacementVideo || "未选择替换视频")}</div>
+        <div class="replace-toolbar">
+          <button type="button" data-choose-replacement${disabled}>选择 MP4</button>
+          ${renderMaintainLoopControls()}
+        </div>
+        ${state.maintain.replacePreview ? `<div class="preview-grid">
+          <section><h3>替换命令</h3><pre>${renderJson(state.maintain.replacePreview.command)}</pre></section>
+          <section><h3>目标资源</h3><pre>${renderJson({ targetAction: state.maintain.replacePreview.targetAction, manifest: state.maintain.replacePreview.manifest })}</pre></section>
+        </div>
+        <button type="button" class="primary" data-run-replace-action="${escapeHtml(state.maintain.replacePreview.previewId)}"${disabled}>执行替换</button>` : ""}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>修改信息 / 元数据</h2>
+          <button type="button" data-build-metadata-preview${disabled}>生成 diff 预览</button>
+        </div>
+        <div class="form-grid">
+          <label>species <input type="text" data-maintain-field="species" value="${escapeHtml(fields.species)}"${disabled}></label>
+          <label>tier <input type="text" data-maintain-field="tier" value="${escapeHtml(fields.tier)}"${disabled}></label>
+          <label>notes <input type="text" data-maintain-field="notes" value="${escapeHtml(fields.notes)}"${disabled}></label>
+          <label>actions.buttons <input type="text" data-maintain-field="actionButtons" value="${escapeHtml(fields.actionButtons)}"${disabled}></label>
+          <label>actions.assets <input type="text" data-maintain-field="actionAssets" value="${escapeHtml(fields.actionAssets)}"${disabled}></label>
+          <label>features.enable <input type="text" data-maintain-field="featuresEnable" value="${escapeHtml(fields.featuresEnable)}"${disabled}></label>
+          <label>features.disable <input type="text" data-maintain-field="featuresDisable" value="${escapeHtml(fields.featuresDisable)}"${disabled}></label>
+        </div>
+        ${renderMetadataDiff()}
+      </section>
+    </div>
+    <div class="wizard-right">
+      ${renderVariantDetails(details)}
+      ${renderExecution()}
+    </div>
+  </div>`;
+}
+
+function renderMaintainLoopControls() {
+  const value = state.maintain.loopMode;
+  const disabled = busy() ? " disabled" : "";
+  return `<div class="loop-controls inline-loop">
+    <label>运行帧
+      <select data-maintain-loop-mode${disabled}>
+        <option value="full"${value.mode === "full" ? " selected" : ""}>完整帧</option>
+        <option value="auto"${value.mode === "auto" ? " selected" : ""}>自动选取</option>
+        <option value="manual"${value.mode === "manual" ? " selected" : ""}>手动范围</option>
+      </select>
+    </label>
+    <div class="loop-range ${value.mode === "manual" ? "" : "is-hidden"}">
+      <input type="number" min="0" step="1" placeholder="start" data-maintain-loop-start value="${escapeHtml(value.sourceStart ?? "")}"${disabled}>
+      <input type="number" min="0" step="1" placeholder="end" data-maintain-loop-end value="${escapeHtml(value.sourceEnd ?? "")}"${disabled}>
+    </div>
+  </div>`;
+}
+
+function renderMetadataDiff() {
+  const preview = state.maintain.metadataPreview;
+  if (!preview) {
+    return `<pre class="metadata-diff">尚未生成 diff 预览。</pre>`;
+  }
+  return `<div class="metadata-diff">
+    ${preview.reason ? `<p class="danger">${escapeHtml(preview.reason)}</p>` : ""}
+    <pre>${renderJson(preview.diff || [])}</pre>
+    <button type="button" class="primary" data-apply-metadata-edit="${escapeHtml(preview.previewId)}"${busy() || !preview.canApply ? " disabled" : ""}>确认写入元数据</button>
+  </div>`;
+}
+
+function renderVariantDetails(details) {
+  if (!details) {
+    return `<section class="panel empty-preview">
+      <div class="panel-header"><h2>变体详情</h2><span class="muted">${state.variantsPending ? "加载中" : "未选择"}</span></div>
+    </section>`;
+  }
+  return `<section class="panel">
+    <div class="panel-header"><h2>变体详情</h2><span class="muted">${escapeHtml(details.id)}</span></div>
+    <div class="preview-grid">
+      <section><h3>profile</h3><pre>${renderJson(details.profile)}</pre></section>
+      <section><h3>resources</h3><pre>${renderJson(details.resources)}</pre></section>
+    </div>
+  </section>`;
+}
+
+function renderDeleteVariant() {
+  const preview = state.deleteVariant.preview;
+  const selected = state.deleteVariant.selectedId;
+  const disabled = busy() ? " disabled" : "";
+  const confirmReady = selected && state.deleteVariant.confirmText === selected && preview && preview.canDelete;
+  return `<div class="wizard">
+    <div class="wizard-left">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h1>删除测试变体</h1>
+            <p class="muted">仅允许删除 scope 为 test 的变体及其开发态资源</p>
+          </div>
+          <button type="button" data-refresh-variants${disabled}>刷新</button>
+        </div>
+        <div class="form-grid">
+          <label>测试变体
+            <select data-delete-select${disabled}>${renderVariantOptions(selected, true)}</select>
+          </label>
+          <label>二次确认
+            <input type="text" data-delete-confirm-input value="${escapeHtml(state.deleteVariant.confirmText)}" placeholder="输入变体 ID"${disabled}>
+          </label>
+        </div>
+        <div class="check-row">
+          <button type="button" data-build-delete-preview${disabled}>生成删除预览</button>
+          <button type="button" class="danger-button" data-delete-confirm="${preview ? escapeHtml(preview.previewId) : ""}"${!confirmReady || busy() ? " disabled" : ""}>确认删除测试变体</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>删除清单</h2>
+          ${preview ? `<span class="${preview.canDelete ? "success" : "danger"}">${preview.canDelete ? "可删除" : "不可删除"}</span>` : `<span class="muted">尚未预览</span>`}
+        </div>
+        ${preview ? `<pre>${renderJson({ reason: preview.reason, runtimeAssets: preview.runtimeAssets, paths: preview.paths })}</pre>` : `<p class="muted">生成预览后会显示 metadata、资源目录、运行时资源和用户数据清单。</p>`}
+      </section>
+    </div>
+    <div class="wizard-right">
+      ${renderExecution()}
+    </div>
+  </div>`;
+}
+
+function renderSuccessModal() {
+  if (!state.successModal) {
+    return "";
+  }
+  return `<div class="success-modal" role="dialog" aria-modal="true">
+    <div class="success-dialog">
+      <div class="checkmark" aria-hidden="true"></div>
+      <h2>生成完成</h2>
+      <p class="muted">${escapeHtml(state.successModal.id)} 已生成。</p>
+      <div class="check-row">
+        <button type="button" class="primary" data-reset-new-variant>清空表单并恢复默认</button>
+        <button type="button" data-close-success>保留当前记录</button>
+      </div>
+    </div>
   </div>`;
 }
 
 function render() {
+  renderSidebar();
   if (!api) {
     appNode.innerHTML = `<pre class="fatal">Devtools 预加载 API 不可用。</pre>`;
     return;
@@ -518,7 +902,13 @@ function render() {
     appNode.innerHTML = `<div class="loading">加载中</div>`;
     return;
   }
-  renderMain();
+  if (state.view === "maintainVariant") {
+    appNode.innerHTML = renderMaintainVariant();
+  } else if (state.view === "deleteVariant") {
+    appNode.innerHTML = renderDeleteVariant();
+  } else {
+    appNode.innerHTML = renderNewVariant();
+  }
 }
 
 function pushLog(message) {
@@ -531,18 +921,76 @@ function formatLogEvent(event) {
   return `[${stageLabel(stage)}:${streamLabel(stream)}] ${String(event.message || "").trim()}`;
 }
 
+async function refreshVariants() {
+  if (!api.listVariants) {
+    return;
+  }
+  state.variantsPending = true;
+  render();
+  try {
+    state.variants = await api.listVariants();
+    if (!state.maintain.selectedId && state.variants.length > 0) {
+      state.maintain.selectedId = state.variants[0].id;
+    }
+    const testVariants = state.variants.filter((variant) => variant.scope === "test");
+    if (!state.deleteVariant.selectedId && testVariants.length > 0) {
+      state.deleteVariant.selectedId = testVariants[0].id;
+    }
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.variantsPending = false;
+    render();
+  }
+}
+
+async function loadMaintainDetails(id) {
+  if (!id || !api.getVariantDetails) {
+    state.maintain.details = null;
+    render();
+    return;
+  }
+  try {
+    state.maintain.details = await api.getVariantDetails(id);
+    syncMaintainFields(state.maintain.details);
+  } catch (error) {
+    state.maintain.details = null;
+    pushLog(error.message);
+  }
+  render();
+}
+
+async function switchView(view) {
+  if (busy() || state.view === view) {
+    return;
+  }
+  state.view = view;
+  state.activeOperation = view;
+  state.logs = [];
+  state.stages = {};
+  render();
+  if (view === "maintainVariant" || view === "deleteVariant") {
+    await refreshVariants();
+    if (view === "maintainVariant" && state.maintain.selectedId) {
+      await loadMaintainDetails(state.maintain.selectedId);
+    }
+  }
+}
+
 async function buildPreview() {
-  if (state.running || state.previewPending) {
+  if (busy()) {
     return;
   }
   const requestId = state.previewRequestId + 1;
   state.previewRequestId = requestId;
   state.previewPending = true;
-  clearPreview();
+  state.activeOperation = "newVariant";
+  clearNewPreview();
   render();
 
   try {
     const formSnapshot = JSON.parse(JSON.stringify(state.form));
+    formSnapshot.loopModes = buildEffectiveLoopModes();
     const preview = await api.buildNewVariantPreview(formSnapshot);
     if (requestId !== state.previewRequestId) {
       return;
@@ -563,14 +1011,223 @@ async function buildPreview() {
   }
 }
 
+async function runPreview(previewId) {
+  if (!state.preview || busy()) {
+    return;
+  }
+  if (!window.confirm("确认开始生成这个宠物变体吗？")) {
+    return;
+  }
+
+  state.running = true;
+  state.activeOperation = "newVariant";
+  state.result = null;
+  state.logs = [];
+  state.stages = {};
+  render();
+
+  try {
+    const result = await api.runNewVariant(previewId);
+    state.result = result;
+    state.successModal = { id: result.id };
+    state.stages.complete = "done";
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    render();
+  }
+}
+
+function buildMetadataPayload() {
+  const fields = state.maintain.metadataFields;
+  return {
+    id: state.maintain.selectedId,
+    fields: {
+      species: fields.species,
+      tier: fields.tier,
+      notes: fields.notes,
+      actions: {
+        buttons: parseList(fields.actionButtons),
+        assets: parseList(fields.actionAssets)
+      },
+      features: {
+        enable: parseList(fields.featuresEnable),
+        disable: parseList(fields.featuresDisable)
+      }
+    }
+  };
+}
+
+async function buildReplacePreview() {
+  if (busy() || !state.maintain.selectedId || !state.maintain.action || !state.maintain.replacementVideo) {
+    return;
+  }
+  state.maintain.replacePending = true;
+  clearMaintainPreviews();
+  render();
+  try {
+    state.maintain.replacePreview = await api.buildReplaceActionPreview({
+      id: state.maintain.selectedId,
+      action: state.maintain.action,
+      video: state.maintain.replacementVideo,
+      loopMode: state.maintain.loopMode
+    });
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.maintain.replacePending = false;
+    render();
+  }
+}
+
+async function runReplaceAction(previewId) {
+  if (busy() || !previewId || !window.confirm("确认执行动作资源替换吗？")) {
+    return;
+  }
+  state.running = true;
+  state.activeOperation = "maintainVariant";
+  state.logs = [];
+  state.stages = {};
+  render();
+  try {
+    await api.runReplaceAction(previewId);
+    state.stages.complete = "done";
+    await loadMaintainDetails(state.maintain.selectedId);
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    render();
+  }
+}
+
+async function buildMetadataPreview() {
+  if (busy() || !state.maintain.selectedId) {
+    return;
+  }
+  state.maintain.metadataPending = true;
+  state.maintain.metadataPreview = null;
+  render();
+  try {
+    state.maintain.metadataPreview = await api.buildMetadataEditPreview(buildMetadataPayload());
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.maintain.metadataPending = false;
+    render();
+  }
+}
+
+async function applyMetadataEdit(previewId) {
+  if (busy() || !previewId || !window.confirm("确认写入这次元数据修改吗？")) {
+    return;
+  }
+  state.running = true;
+  state.activeOperation = "maintainVariant";
+  state.logs = [];
+  state.stages = {};
+  render();
+  try {
+    await api.applyMetadataEdit(previewId);
+    state.stages.complete = "done";
+    await refreshVariants();
+    await loadMaintainDetails(state.maintain.selectedId);
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    render();
+  }
+}
+
+async function buildDeletePreview() {
+  if (busy() || !state.deleteVariant.selectedId) {
+    return;
+  }
+  state.deleteVariant.pending = true;
+  state.deleteVariant.preview = null;
+  render();
+  try {
+    state.deleteVariant.preview = await api.buildDeleteVariantPreview(state.deleteVariant.selectedId);
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.deleteVariant.pending = false;
+    render();
+  }
+}
+
+async function deleteTestVariant(previewId) {
+  if (busy() || !previewId || !window.confirm("确认删除这个测试变体及其开发态资源吗？")) {
+    return;
+  }
+  state.running = true;
+  state.activeOperation = "deleteVariant";
+  state.logs = [];
+  state.stages = {};
+  render();
+  try {
+    await api.deleteTestVariant(previewId);
+    state.stages.complete = "done";
+    state.deleteVariant.preview = null;
+    state.deleteVariant.confirmText = "";
+    await refreshVariants();
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    render();
+  }
+}
+
+if (sidebarNode) {
+  sidebarNode.addEventListener("click", (event) => {
+    const view = event.target.dataset.navView;
+    if (view) {
+      switchView(view);
+    }
+  });
+}
+
 appNode.addEventListener("toggle", (event) => {
   if (event.target.classList.contains("advanced")) {
     state.advancedOpen = event.target.open;
   }
 }, true);
 
-appNode.addEventListener("change", (event) => {
-  if (state.running || state.previewPending) {
+appNode.addEventListener("input", (event) => {
+  const maintainField = event.target.dataset.maintainField;
+  if (maintainField) {
+    state.maintain.metadataFields[maintainField] = event.target.value;
+    state.maintain.metadataPreview = null;
+    render();
+    return;
+  }
+  if (event.target.dataset.deleteConfirmInput !== undefined) {
+    state.deleteVariant.confirmText = event.target.value;
+    render();
+    return;
+  }
+  if (event.target.dataset.maintainLoopStart !== undefined) {
+    state.maintain.loopMode.sourceStart = event.target.value;
+    state.maintain.replacePreview = null;
+  } else if (event.target.dataset.maintainLoopEnd !== undefined) {
+    state.maintain.loopMode.sourceEnd = event.target.value;
+    state.maintain.replacePreview = null;
+  } else if (event.target.dataset.loopStart) {
+    setLoopMode(event.target.dataset.loopStart, { sourceStart: event.target.value });
+  } else if (event.target.dataset.loopEnd) {
+    setLoopMode(event.target.dataset.loopEnd, { sourceEnd: event.target.value });
+  }
+});
+
+appNode.addEventListener("change", async (event) => {
+  if (busy()) {
     render();
     return;
   }
@@ -602,15 +1259,35 @@ appNode.addEventListener("change", (event) => {
       next.add("win32");
     }
     state.form.platforms = Array.from(next);
-    clearPreview();
+    clearNewPreview();
     render();
   } else if (runOption) {
     setRunOption(runOption, event.target.checked);
+  } else if (event.target.dataset.loopMode) {
+    setLoopMode(event.target.dataset.loopMode, { mode: event.target.value });
+  } else if (event.target.dataset.maintainSelect !== undefined) {
+    state.maintain.selectedId = event.target.value;
+    state.maintain.replacePreview = null;
+    state.maintain.metadataPreview = null;
+    await loadMaintainDetails(event.target.value);
+  } else if (event.target.dataset.maintainAction !== undefined) {
+    state.maintain.action = event.target.value;
+    state.maintain.replacePreview = null;
+    render();
+  } else if (event.target.dataset.maintainLoopMode !== undefined) {
+    state.maintain.loopMode.mode = event.target.value;
+    state.maintain.replacePreview = null;
+    render();
+  } else if (event.target.dataset.deleteSelect !== undefined) {
+    state.deleteVariant.selectedId = event.target.value;
+    state.deleteVariant.preview = null;
+    state.deleteVariant.confirmText = "";
+    render();
   }
 });
 
 appNode.addEventListener("click", async (event) => {
-  if (state.running || state.previewPending) {
+  if (busy() && event.target.dataset.closeSuccess === undefined) {
     return;
   }
   const action = event.target.dataset.chooseAction;
@@ -628,35 +1305,34 @@ appNode.addEventListener("click", async (event) => {
     await buildPreview();
   } else if (previewId) {
     await runPreview(previewId);
+  } else if (event.target.dataset.resetNewVariant !== undefined) {
+    resetNewVariantForm();
+  } else if (event.target.dataset.closeSuccess !== undefined) {
+    state.successModal = null;
+    render();
+  } else if (event.target.dataset.refreshVariants !== undefined) {
+    await refreshVariants();
+  } else if (event.target.dataset.chooseReplacement !== undefined) {
+    const filePath = await api.chooseActionVideo(state.maintain.action || "replace");
+    if (filePath) {
+      state.maintain.replacementVideo = filePath;
+      state.maintain.replacePreview = null;
+      render();
+    }
+  } else if (event.target.dataset.buildReplacePreview !== undefined) {
+    await buildReplacePreview();
+  } else if (event.target.dataset.runReplaceAction) {
+    await runReplaceAction(event.target.dataset.runReplaceAction);
+  } else if (event.target.dataset.buildMetadataPreview !== undefined) {
+    await buildMetadataPreview();
+  } else if (event.target.dataset.applyMetadataEdit) {
+    await applyMetadataEdit(event.target.dataset.applyMetadataEdit);
+  } else if (event.target.dataset.buildDeletePreview !== undefined) {
+    await buildDeletePreview();
+  } else if (event.target.dataset.deleteConfirm) {
+    await deleteTestVariant(event.target.dataset.deleteConfirm);
   }
 });
-
-async function runPreview(previewId) {
-  if (!state.preview || state.running || state.previewPending) {
-    return;
-  }
-  if (!window.confirm("确认开始生成这个宠物变体吗？")) {
-    return;
-  }
-
-  state.running = true;
-  state.result = null;
-  state.logs = [];
-  state.stages = {};
-  render();
-
-  try {
-    const result = await api.runNewVariant(previewId);
-    state.result = result;
-    state.stages.complete = "done";
-  } catch (error) {
-    state.stages.complete = "failed";
-    pushLog(error.message);
-  } finally {
-    state.running = false;
-    render();
-  }
-}
 
 if (api) {
   api.onTaskStatus((event) => {
@@ -672,9 +1348,10 @@ if (api) {
     render();
   });
 
-  api.getCatalogOptions().then((options) => {
+  api.getCatalogOptions().then(async (options) => {
     state.options = options;
     render();
+    await refreshVariants();
   }).catch((error) => {
     appNode.innerHTML = `<pre class="fatal">${escapeHtml(error.message)}</pre>`;
   });

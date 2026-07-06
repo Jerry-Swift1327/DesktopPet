@@ -21,11 +21,61 @@ function writeSourceVideos(sourceDir, actions) {
   }
 }
 
+function writeMaintenanceMetadata(file) {
+  writeMetadata(file, {
+    pettest01: {
+      id: "pettest01",
+      date: "2026-07-06",
+      scope: "test",
+      tier: "basic",
+      species: "cat",
+      notes: "test draft",
+      version: "1.0",
+      assetPrefix: "pettest01",
+      actions: { buttons: ["squat", "walk", "feed", "ball"], assets: [] },
+      features: { enable: ["autoStart"], disable: [] }
+    },
+    pet2601: {
+      id: "pet2601",
+      date: "2026-05-08",
+      scope: "internal",
+      tier: "basic",
+      species: "dog",
+      notes: "internal",
+      version: "1.1",
+      assetPrefix: "dog",
+      actions: { buttons: ["squat", "walk", "feed", "ball"], assets: [] },
+      features: { enable: ["autoStart"], disable: [] }
+    }
+  });
+}
+
+function writeAnimationFolders(animationsRoot, assetPrefix, actions) {
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  for (const action of actions) {
+    fs.mkdirSync(path.join(animationsRoot, `${assetPrefix}_${action}`, "transparent_frames"), { recursive: true });
+  }
+  fs.writeFileSync(path.join(animationsRoot, `${assetPrefix}_actions_manifest.json`), "[]", "utf8");
+}
+
 test("devtools workflow exposes required service helpers", () => {
   assert.equal(typeof variantWorkflow.getCatalogOptions, "function");
   assert.equal(typeof variantWorkflow.getRequiredActions, "function");
   assert.equal(typeof variantWorkflow.normalizeFormState, "function");
   assert.equal(typeof variantWorkflow.scanSourceFolder, "function");
+});
+
+test("devtools workflow exposes maintenance helpers", () => {
+  const workflow = createVariantWorkflow();
+
+  assert.equal(typeof workflow.listVariants, "function");
+  assert.equal(typeof workflow.getVariantDetails, "function");
+  assert.equal(typeof workflow.buildReplaceActionPreview, "function");
+  assert.equal(typeof workflow.runReplaceAction, "function");
+  assert.equal(typeof workflow.buildMetadataEditPreview, "function");
+  assert.equal(typeof workflow.applyMetadataEdit, "function");
+  assert.equal(typeof workflow.buildDeleteVariantPreview, "function");
+  assert.equal(typeof workflow.deleteTestVariant, "function");
 });
 
 test("devtools workflow exposes catalog options for the new variant form", () => {
@@ -124,6 +174,48 @@ test("devtools preview can keep automatic runtime loop selection enabled", () =>
   });
 
   assert.equal(preview.processCommands.every((command) => !command.args.includes("--use-full-range")), true);
+});
+
+test("devtools preview forwards per-action loop mode parameters", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const stagingRoot = path.join(tempDir, "staging");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+
+  const sourceDir = path.join(tempDir, "source");
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    stagingRoot,
+    idFactory: () => "preview-loop-modes"
+  });
+  const preview = workflow.buildNewVariantPreview({
+    scope: "custom",
+    tier: "basic",
+    species: "cat",
+    platforms: ["win32"],
+    date: "2026-07-06",
+    sourceFolder: sourceDir,
+    loopModes: {
+      squat: { mode: "auto" },
+      walk: { mode: "manual", sourceStart: 3, sourceEnd: 14 },
+      feed: { mode: "full" }
+    }
+  });
+
+  const byAction = Object.fromEntries(preview.processCommands.map((command) => [command.action, command.args]));
+  assert.equal(byAction.squat.includes("--use-full-range"), false);
+  assert.equal(byAction.feed.includes("--use-full-range"), true);
+  assert.deepEqual(byAction.walk.slice(byAction.walk.indexOf("--source-start"), byAction.walk.indexOf("--source-start") + 4), [
+    "--source-start",
+    "3",
+    "--source-end",
+    "14"
+  ]);
 });
 
 test("devtools preview stages advanced action button additions", () => {
@@ -268,6 +360,131 @@ test("devtools preview rejects missing required basic action videos", () => {
     }),
     /缺少动作 squat 的源视频/
   );
+});
+
+test("devtools maintenance workflow lists variants and reads details from metadata", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+
+  const workflow = createVariantWorkflow({ metadataFile, animationsRoot });
+  const variants = workflow.listVariants();
+  const details = workflow.getVariantDetails("pettest01");
+
+  assert.equal(variants.some((variant) => variant.id === "pettest01" && variant.scope === "test"), true);
+  assert.equal(details.id, "pettest01");
+  assert.equal(details.profile.scope, "test");
+  assert.equal(details.resources.manifest.endsWith("pettest01_actions_manifest.json"), true);
+});
+
+test("devtools maintenance workflow previews and runs action replacement", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const replacement = path.join(tempDir, "replacement.mp4");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  fs.writeFileSync(replacement, "video", "utf8");
+
+  const stages = [];
+  const commands = [];
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    idFactory: () => "replace-preview",
+    runCommand: async (command, args) => {
+      commands.push([command, args]);
+    }
+  });
+  const preview = workflow.buildReplaceActionPreview({
+    id: "pettest01",
+    action: "walk",
+    video: replacement,
+    loopMode: { mode: "full" }
+  });
+  const result = await workflow.runReplaceAction(preview.previewId, {
+    onStage: (event) => stages.push(event)
+  });
+
+  assert.equal(preview.previewId, "replace-preview");
+  assert.equal(preview.command.args.includes("--use-full-range"), true);
+  assert.equal(result.replaced, true);
+  assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
+    "replaceAction:running",
+    "replaceAction:done"
+  ]);
+  assert.equal(commands[0][1].includes("replace"), true);
+});
+
+test("devtools maintenance workflow previews and applies metadata edits", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+
+  const stages = [];
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    idFactory: () => "metadata-preview"
+  });
+  const preview = workflow.buildMetadataEditPreview({
+    id: "pettest01",
+    fields: { notes: "edited in devtools", species: "dog" }
+  });
+  const result = await workflow.applyMetadataEdit(preview.previewId, {
+    onStage: (event) => stages.push(event)
+  });
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+
+  assert.equal(preview.canApply, true);
+  assert.equal(result.applied, true);
+  assert.equal(metadata.variants.pettest01.notes, "edited in devtools");
+  assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
+    "writeMetadataEdit:running",
+    "writeMetadataEdit:done"
+  ]);
+});
+
+test("devtools maintenance workflow previews and deletes only test variants", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const userDataRoot = path.join(tempDir, ".user-data");
+  const runtimeAssetsRoot = path.join(tempDir, ".runtime-assets");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  fs.mkdirSync(path.join(userDataRoot, "pettest01"), { recursive: true });
+  fs.mkdirSync(runtimeAssetsRoot, { recursive: true });
+  fs.writeFileSync(path.join(runtimeAssetsRoot, "pet_variant.json"), JSON.stringify({ variant: "pet2601" }), "utf8");
+
+  const stages = [];
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    userDataRoot,
+    runtimeAssetsRoot,
+    idFactory: () => "delete-preview"
+  });
+  const blocked = workflow.buildDeleteVariantPreview("pet2601");
+  const preview = workflow.buildDeleteVariantPreview("pettest01");
+  const result = await workflow.deleteTestVariant(preview.previewId, {
+    onStage: (event) => stages.push(event)
+  });
+
+  assert.equal(blocked.canDelete, false);
+  assert.equal(preview.canDelete, true);
+  assert.equal(preview.runtimeAssets.clear, false);
+  assert.equal(result.deleted, true);
+  assert.equal(fs.existsSync(path.join(animationsRoot, "pettest01_squat")), false);
+  assert.equal(fs.existsSync(runtimeAssetsRoot), true);
+  assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
+    "deleteVariantResources:running",
+    "deleteVariantResources:done"
+  ]);
 });
 
 test("devtools runNewVariant emits failed stage and preserves written metadata on process failure", async () => {

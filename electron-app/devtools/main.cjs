@@ -110,6 +110,16 @@ ipcMain.handle("devtools:chooseActionVideo", async (event) => {
   return result.filePaths[0];
 });
 
+ipcMain.handle("devtools:listVariants", (event) => {
+  assertDevtoolsSender(event);
+  return workflow.listVariants();
+});
+
+ipcMain.handle("devtools:getVariantDetails", (event, id) => {
+  assertDevtoolsSender(event);
+  return workflow.getVariantDetails(id);
+});
+
 ipcMain.handle("devtools:buildNewVariantPreview", (event, formState) => {
   assertDevtoolsSender(event);
   return workflow.buildNewVariantPreview(formState || {});
@@ -134,6 +144,75 @@ ipcMain.handle("devtools:runNewVariant", async (event, previewId) => {
       id: draft.id
     });
     return { id: draft.id, applied: true };
+  } finally {
+    activeRun = null;
+  }
+});
+
+ipcMain.handle("devtools:buildReplaceActionPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildReplaceActionPreview(payload || {});
+});
+
+ipcMain.handle("devtools:runReplaceAction", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) {
+    throw new Error("已有 devtools 任务正在执行。");
+  }
+
+  activeRun = workflow.runReplaceAction(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
+ipcMain.handle("devtools:buildMetadataEditPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildMetadataEditPreview(payload || {});
+});
+
+ipcMain.handle("devtools:applyMetadataEdit", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) {
+    throw new Error("已有 devtools 任务正在执行。");
+  }
+
+  activeRun = workflow.applyMetadataEdit(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
+ipcMain.handle("devtools:buildDeleteVariantPreview", (event, id) => {
+  assertDevtoolsSender(event);
+  return workflow.buildDeleteVariantPreview(id);
+});
+
+ipcMain.handle("devtools:deleteTestVariant", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) {
+    throw new Error("已有 devtools 任务正在执行。");
+  }
+
+  activeRun = workflow.deleteTestVariant(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+
+  try {
+    return await activeRun;
   } finally {
     activeRun = null;
   }

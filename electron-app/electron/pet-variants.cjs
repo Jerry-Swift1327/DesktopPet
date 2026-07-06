@@ -27,6 +27,7 @@ const PET_VARIANT_METADATA_FILE = path.join(__dirname, "pet-variant-metadata.jso
 const INSTALLER_GUID_NAMESPACE = "6d0c98fd-153d-40cf-9738-77c241c1e064";
 const PET_VARIANT_NAMESPACE_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const PET_VARIANT_ID_PATTERN = /^pet\d{4}$/;
+const TEST_PET_VARIANT_ID_PATTERN = /^pettest\d{2}$/;
 const PET_ACTION_ORDER = Object.freeze(TIER_PROFILES.basic.actionButtons.slice());
 
 const PET_ACTIONS = Object.freeze(Object.fromEntries(
@@ -291,18 +292,32 @@ function assertVariantNamespaceToken(token, kind, variantId) {
 }
 
 function assertPetVariantId(value) {
-  if (!PET_VARIANT_ID_PATTERN.test(String(value || ""))) {
-    throw new Error(`Invalid pet variant id ${value}. Use pet<yy><seq>, such as pet2601.`);
+  if (!PET_VARIANT_ID_PATTERN.test(String(value || "")) && !TEST_PET_VARIANT_ID_PATTERN.test(String(value || ""))) {
+    throw new Error(`Invalid pet variant id ${value}. Use pet<yy><seq> or pettest<seq>, such as pet2601 or pettest01.`);
   }
+}
+
+function isTestPetVariantId(value) {
+  return TEST_PET_VARIANT_ID_PATTERN.test(String(value || ""));
+}
+
+function isOfficialPetVariantId(value) {
+  return PET_VARIANT_ID_PATTERN.test(String(value || ""));
 }
 
 function getPetVariantIdYear(id) {
   assertPetVariantId(id);
+  if (isTestPetVariantId(id)) {
+    throw new Error(`Test pet variant id ${id} does not contain a year segment.`);
+  }
   return String(id).slice(3, 5);
 }
 
 function getPetVariantIdSequence(id) {
   assertPetVariantId(id);
+  if (isTestPetVariantId(id)) {
+    return Number(String(id).slice(7, 9));
+  }
   return Number(String(id).slice(5, 7));
 }
 
@@ -311,8 +326,20 @@ function assertPetVariantIdMatchesDate(id, date) {
   if (!isValidVariantDate(date)) {
     throw new Error(`Pet variant ${id} date must be a valid YYYY-MM-DD date.`);
   }
+  if (isTestPetVariantId(id)) {
+    return;
+  }
   if (getPetVariantIdYear(id) !== getVariantIdYear(date)) {
     throw new Error(`Pet variant ${id} year does not match date ${date}.`);
+  }
+}
+
+function assertPetVariantIdMatchesScope(id, scope) {
+  if (scope === "test" && !isTestPetVariantId(id)) {
+    throw new Error(`Test scope variant id ${id} must use pettest<seq>, such as pettest01.`);
+  }
+  if (scope !== "test" && isTestPetVariantId(id)) {
+    throw new Error(`Variant id ${id} is reserved for test scope variants.`);
   }
 }
 
@@ -356,6 +383,7 @@ function resolvePetVariantProfile(rawProfile) {
   assertKnownScope(scope);
   assertKnownTier(tier);
   assertKnownSpecies(species);
+  assertPetVariantIdMatchesScope(id, scope);
 
   const actionConfig = normalizeActionConfig({ ...rawProfile, tier }, id);
   const features = normalizeFeatureConfig({ ...rawProfile, tier }, id);
@@ -420,6 +448,9 @@ function assertPetVariantMetadataChronology(metadata = PET_VARIANT_METADATA) {
   const byYear = new Map();
   for (const profile of variants) {
     assertPetVariantIdMatchesDate(profile.id, profile.date);
+    if (!isOfficialPetVariantId(profile.id)) {
+      continue;
+    }
     const year = String(profile.date).slice(0, 4);
     if (!byYear.has(year)) {
       byYear.set(year, []);
@@ -618,6 +649,7 @@ function getNextPetVariantSequence({ date, metadata = PET_VARIANT_METADATA }) {
   }
   const year = String(date).slice(0, 4);
   const variants = Object.values(normalizeVariantMetadata(metadata).variants)
+    .filter((profile) => isOfficialPetVariantId(profile.id))
     .filter((profile) => String(profile.date || "").slice(0, 4) === year)
     .slice();
   const latestDate = variants
@@ -645,6 +677,23 @@ function getNextPetVariantSequence({ date, metadata = PET_VARIANT_METADATA }) {
 
 function createNextPetVariantId({ date, metadata = PET_VARIANT_METADATA }) {
   return createPetVariantId(date, getNextPetVariantSequence({ date, metadata }));
+}
+
+function createNextTestPetVariantId({ metadata = PET_VARIANT_METADATA } = {}) {
+  const variants = Object.values(normalizeVariantMetadata(metadata).variants);
+  let maxSequence = 0;
+  for (const profile of variants) {
+    const id = String(profile.id || "");
+    if (!isTestPetVariantId(id)) {
+      continue;
+    }
+    maxSequence = Math.max(maxSequence, getPetVariantIdSequence(id));
+  }
+  const sequence = maxSequence + 1;
+  if (sequence > 99) {
+    throw new Error("No available test variant sequence for pettest.");
+  }
+  return `pettest${String(sequence).padStart(2, "0")}`;
 }
 
 function getNextInternalVersion(metadata = PET_VARIANT_METADATA) {
@@ -690,9 +739,12 @@ function createPetVariantMetadataDraft({
   if (!isValidVariantDate(date)) {
     throw new Error(`Invalid variant date: ${date}. Use YYYY-MM-DD.`);
   }
-  const variantId = id || createNextPetVariantId({ date, metadata });
+  const variantId = id || (scope === "test"
+    ? createNextTestPetVariantId({ metadata })
+    : createNextPetVariantId({ date, metadata }));
   assertVariantNamespaceToken(variantId, "id", variantId);
   assertPetVariantId(variantId);
+  assertPetVariantIdMatchesScope(variantId, scope);
   const namespace = buildPetVariantNamespace(metadata);
   if (Object.prototype.hasOwnProperty.call(namespace, variantId)) {
     throw new Error(`Variant namespace token already exists: ${variantId}`);
@@ -738,6 +790,8 @@ module.exports = {
   SWITCHABLE_VARIANTS,
   PET_VARIANT_METADATA_FILE,
   PET_VARIANT_NAMESPACE_PATTERN,
+  PET_VARIANT_ID_PATTERN,
+  TEST_PET_VARIANT_ID_PATTERN,
   PET_VARIANT_IDS: Object.freeze(Object.values(PET_VARIANT_PROFILES).sort(comparePetVariantProfiles).map((profile) => profile.id)),
   PET_VARIANT_ALIASES: Object.freeze([]),
   PET_SPECIES_IDS: Object.freeze(Object.keys(PET_SPECIES_PROFILES)),
@@ -769,8 +823,11 @@ module.exports = {
   getVariantManifestName,
   getWindowsBuildProfile,
   isValidVariantDate,
+  isTestPetVariantId,
+  isOfficialPetVariantId,
   getNextPetVariantSequence,
   createNextPetVariantId,
+  createNextTestPetVariantId,
   createPetVariantId,
   getNextInternalVersion,
   createDefaultVersion,
