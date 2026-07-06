@@ -9,6 +9,7 @@ const {
   findSourceVideo,
   buildBootstrapPlan,
   applyBootstrapPlan,
+  applyBootstrapPlanAsync,
   generateVariantGallery,
   formatList,
   getVariantSummary,
@@ -187,6 +188,132 @@ test("bootstrap apply writes V2 metadata and copies videos when processing is sk
   assert.equal(metadata.variants.pet2601.version, "1.1");
   assert.equal(fs.existsSync(path.join(animationsRoot, "pet2601_squat", "pet2601_squat.mp4")), true);
   assert.equal(fs.existsSync(path.join(galleryRoot, "index.html")), true);
+});
+
+test("bootstrap async apply emits stage status and command logs", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const sourceDir = path.join(tempDir, "downloads");
+  const galleryRoot = path.join(tempDir, "gallery");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const plan = buildBootstrapPlan(
+    { species: "cat", scope: "custom", tier: "basic", date: "2026-07-06", source: sourceDir },
+    { metadataFile, animationsRoot }
+  );
+  const stages = [];
+  const logs = [];
+
+  const draft = await applyBootstrapPlanAsync(plan, {
+    galleryRoot,
+    skipPreflight: true,
+    onStage: (event) => stages.push(event),
+    onLog: (event) => logs.push(event),
+    runCommand: async (command, args, options) => {
+      logs.push({
+        stage: "processVideos",
+        stream: "stdout",
+        message: `${command} ${args.join(" ")} @ ${options.cwd}`
+      });
+    }
+  });
+
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+
+  assert.equal(draft.id, "pet2601");
+  assert.equal(metadata.variants.pet2601.species, "cat");
+  assert.equal(fs.existsSync(path.join(animationsRoot, "pet2601_squat", "pet2601_squat.mp4")), true);
+  assert.equal(fs.existsSync(path.join(galleryRoot, "index.html")), true);
+  assert.deepEqual(
+    stages.filter((event) => event.status === "done").map((event) => event.stage),
+    ["writeMetadata", "copyVideos", "processVideos", "generateGallery"]
+  );
+  assert.deepEqual(
+    stages.filter((event) => event.status === "skipped").map((event) => event.stage),
+    ["runPreflight"]
+  );
+  assert.equal(logs.some((event) => /process_pet_actions\.py/.test(event.message)), true);
+});
+
+test("bootstrap async apply ignores observer callback failures", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const sourceDir = path.join(tempDir, "downloads");
+  const galleryRoot = path.join(tempDir, "gallery");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const plan = buildBootstrapPlan(
+    { species: "cat", scope: "custom", tier: "basic", date: "2026-07-06", source: sourceDir },
+    { metadataFile, animationsRoot }
+  );
+
+  const draft = await applyBootstrapPlanAsync(plan, {
+    galleryRoot,
+    skipProcessing: true,
+    skipPreflight: true,
+    onStage: (event) => {
+      if (event.stage === "writeMetadata" && event.status === "done") {
+        throw new Error("observer failed");
+      }
+    }
+  });
+
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+
+  assert.equal(draft.id, "pet2601");
+  assert.equal(metadata.variants.pet2601.species, "cat");
+  assert.equal(fs.existsSync(path.join(animationsRoot, "pet2601_squat", "pet2601_squat.mp4")), true);
+  assert.equal(fs.existsSync(path.join(galleryRoot, "index.html")), true);
+});
+
+test("bootstrap async apply streams default command logs and stops after process failure", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const sourceDir = path.join(tempDir, "downloads");
+  const galleryRoot = path.join(tempDir, "gallery");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const plan = buildBootstrapPlan(
+    { species: "cat", scope: "custom", tier: "basic", date: "2026-07-06", source: sourceDir },
+    { metadataFile, animationsRoot }
+  );
+  plan.processCommands = [
+    {
+      command: process.execPath,
+      args: ["-e", "process.stdout.write('async-out'); process.stderr.write('async-err'); process.exit(7);"],
+      cwd: tempDir
+    }
+  ];
+  const stages = [];
+  const logs = [];
+
+  await assert.rejects(
+    () => applyBootstrapPlanAsync(plan, {
+      galleryRoot,
+      onStage: (event) => stages.push(event),
+      onLog: (event) => logs.push(event)
+    }),
+    /failed with exit code 7/
+  );
+
+  assert.equal(logs.some((event) => event.stage === "processVideos" && event.stream === "stdout" && event.message.includes("async-out")), true);
+  assert.equal(logs.some((event) => event.stage === "processVideos" && event.stream === "stderr" && event.message.includes("async-err")), true);
+  assert.deepEqual(
+    stages.filter((event) => event.status === "failed").map((event) => event.stage),
+    ["processVideos"]
+  );
+  assert.equal(stages.some((event) => event.stage === "runPreflight"), false);
+  assert.equal(stages.some((event) => event.stage === "generateGallery"), false);
+  assert.equal(fs.existsSync(path.join(galleryRoot, "index.html")), false);
 });
 
 test("bootstrap rejects unregistered source video actions before writing metadata", () => {

@@ -1,0 +1,363 @@
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const {
+  buildBootstrapPlan,
+  applyBootstrapPlanAsync,
+  resolveSourceActionName
+} = require("../../scripts/variant-cli.cjs");
+const {
+  getActionPool,
+  getFeaturePool,
+  getNotesPool,
+  getSpeciesProfiles,
+  getTierProfiles
+} = require("../../electron/pet-catalog.cjs");
+
+const appRoot = path.resolve(__dirname, "..", "..");
+const projectRoot = path.dirname(appRoot);
+const defaultAnimationsRoot = path.join(projectRoot, "assets", "animations");
+const defaultMetadataFile = path.join(appRoot, "electron", "pet-variant-metadata.json");
+const defaultStagingRoot = path.join(appRoot, ".devtools-staging");
+const defaultGalleryRoot = path.join(appRoot, ".variant-gallery");
+
+function createPreviewId() {
+  return `preview-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
+function asArray(value) {
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.filter(Boolean);
+  }
+  return String(value)
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getCatalogOptions() {
+  return {
+    species: getSpeciesProfiles(),
+    tiers: getTierProfiles(),
+    actions: getActionPool(),
+    features: getFeaturePool(),
+    notes: getNotesPool()
+  };
+}
+
+function getRequiredActions(tier) {
+  const tiers = getTierProfiles();
+  const profile = tiers[tier];
+  if (!profile) {
+    throw new Error(`Unknown tier: ${tier}`);
+  }
+  return Array.from(new Set((profile.actionButtons || []).concat(profile.actionAssets || [])));
+}
+
+function getEffectiveRequiredActions(formState) {
+  const tiers = getTierProfiles();
+  const profile = tiers[formState.tier];
+  if (!profile) {
+    throw new Error(`Unknown tier: ${formState.tier}`);
+  }
+
+  const buttons = formState.advanced.actionButtons.length > 0
+    ? formState.advanced.actionButtons
+    : profile.actionButtons || [];
+  const assets = formState.advanced.actionAssets.length > 0
+    ? formState.advanced.actionAssets
+    : profile.actionAssets || [];
+  return Array.from(new Set(buttons.concat(assets)));
+}
+
+function assertKnownFormValues(formState) {
+  const options = getCatalogOptions();
+  if (!options.species[formState.species]) {
+    throw new Error(`Unknown species: ${formState.species}`);
+  }
+  if (!options.tiers[formState.tier]) {
+    throw new Error(`Unknown tier: ${formState.tier}`);
+  }
+  if (!options.notes[formState.scope]) {
+    throw new Error(`Unknown scope: ${formState.scope}`);
+  }
+}
+
+function scanSourceFolder(sourceDir, requiredActions) {
+  const resolvedSourceDir = path.resolve(sourceDir || "");
+  if (!sourceDir || !fs.existsSync(resolvedSourceDir) || !fs.statSync(resolvedSourceDir).isDirectory()) {
+    throw new Error(`Source folder was not found: ${resolvedSourceDir}`);
+  }
+
+  const requiredSet = new Set(requiredActions);
+  const matches = {};
+  const duplicateActions = new Set();
+  const warnings = [];
+
+  const entries = fs
+    .readdirSync(resolvedSourceDir, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.mp4$/i.test(entry.name)) {
+      continue;
+    }
+    const action = resolveSourceActionName(entry.name);
+    if (!action) {
+      warnings.push(`Unrecognized source video: ${entry.name}`);
+      continue;
+    }
+    if (!requiredSet.has(action)) {
+      warnings.push(`Source video is not required by this tier: ${entry.name}`);
+      continue;
+    }
+    if (matches[action]) {
+      duplicateActions.add(action);
+      warnings.push(`Multiple source videos found for action ${action}; choose one manually.`);
+      delete matches[action];
+      continue;
+    }
+    if (!duplicateActions.has(action)) {
+      matches[action] = path.join(resolvedSourceDir, entry.name);
+    }
+  }
+
+  return { matches, warnings };
+}
+
+function readActionVideoPath(value) {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  return value.path || null;
+}
+
+function resolveActionVideos(formState, requiredActions) {
+  const selections = {};
+  const warnings = [];
+
+  if (formState.sourceFolder) {
+    const scanned = scanSourceFolder(formState.sourceFolder, requiredActions);
+    Object.assign(selections, scanned.matches);
+    warnings.push(...scanned.warnings);
+  }
+
+  const manualVideos = formState.actionVideos || {};
+  for (const action of requiredActions) {
+    const manualPath = readActionVideoPath(manualVideos[action]);
+    if (manualPath) {
+      selections[action] = manualPath;
+    }
+  }
+
+  for (const action of requiredActions) {
+    const selectedPath = selections[action];
+    if (!selectedPath) {
+      throw new Error(`Missing source video for action ${action}`);
+    }
+    if (!/\.mp4$/i.test(selectedPath)) {
+      throw new Error(`Source video for action ${action} must be an .mp4 file: ${selectedPath}`);
+    }
+    if (!fs.existsSync(selectedPath) || !fs.statSync(selectedPath).isFile()) {
+      throw new Error(`Source video for action ${action} was not found: ${selectedPath}`);
+    }
+  }
+
+  return { selections, warnings };
+}
+
+function normalizeFormState(formState = {}) {
+  const advanced = formState.advanced || {};
+  const tier = formState.tier || "basic";
+  const scope = formState.scope || "custom";
+  const species = formState.species || "cat";
+  const date = formState.date || new Date().toISOString().slice(0, 10);
+  const platforms = asArray(formState.platforms && formState.platforms.length ? formState.platforms : ["win32"]);
+
+  return {
+    scope,
+    tier,
+    species,
+    date,
+    platforms,
+    sourceFolder: formState.sourceFolder || null,
+    actionVideos: formState.actionVideos || {},
+    force: Boolean(formState.force || advanced.force),
+    skipProcessing: Boolean(formState.skipProcessing),
+    skipPreflight: Boolean(formState.skipPreflight),
+    skipGallery: Boolean(formState.skipGallery),
+    advanced: {
+      id: advanced.id || formState.id || null,
+      assetPrefix: advanced.assetPrefix || formState.assetPrefix || null,
+      scale: advanced.scale || formState.scale || null,
+      version: advanced.version || formState.version || null,
+      actionButtons: asArray(advanced.actionButtons || formState.actionButtons),
+      actionAssets: asArray(advanced.actionAssets || formState.actionAssets),
+      features: asArray(advanced.features || formState.features),
+      disableFeatures: asArray(advanced.disableFeatures || formState.disableFeatures)
+    }
+  };
+}
+
+function buildBootstrapArgs(formState, stagingSource) {
+  const args = {
+    scope: formState.scope,
+    tier: formState.tier,
+    species: formState.species,
+    date: formState.date,
+    platforms: formState.platforms,
+    source: stagingSource
+  };
+
+  if (formState.advanced.id) {
+    args.id = formState.advanced.id;
+  }
+  if (formState.advanced.assetPrefix) {
+    args["asset-prefix"] = formState.advanced.assetPrefix;
+  }
+  if (formState.advanced.scale) {
+    args.scale = formState.advanced.scale;
+  }
+  if (formState.advanced.version) {
+    args.version = formState.advanced.version;
+  }
+  if (formState.advanced.actionButtons.length > 0) {
+    args["action-buttons"] = formState.advanced.actionButtons;
+  }
+  if (formState.advanced.actionAssets.length > 0) {
+    args["action-assets"] = formState.advanced.actionAssets;
+  }
+  if (formState.advanced.features.length > 0) {
+    args.features = formState.advanced.features;
+  }
+  if (formState.advanced.disableFeatures.length > 0) {
+    args["disable-features"] = formState.advanced.disableFeatures;
+  }
+
+  return args;
+}
+
+function stageActionVideos(stagingSource, selections, requiredActions) {
+  fs.mkdirSync(stagingSource, { recursive: true });
+  const staged = {};
+  for (const action of requiredActions) {
+    const target = path.join(stagingSource, `${action}.mp4`);
+    fs.copyFileSync(selections[action], target);
+    staged[action] = target;
+  }
+  return staged;
+}
+
+function serializePreview(previewId, plan, stagedVideos, warnings, stagingSource) {
+  return {
+    previewId,
+    sourceDir: plan.sourceDir,
+    stagingSource,
+    draft: plan.draft,
+    copied: plan.copied,
+    processCommands: plan.processCommands,
+    preflightCommands: plan.preflightCommands,
+    warnings: (plan.warnings || []).concat(warnings || []),
+    metadataAfterApply: plan.metadataAfterApply,
+    stagedVideos
+  };
+}
+
+function emitHook(hooks, name, event) {
+  const callback = hooks[name];
+  if (typeof callback !== "function") {
+    return;
+  }
+  try {
+    callback(event);
+  } catch {
+    // Devtools observers are best-effort and must not change apply behavior.
+  }
+}
+
+function createVariantWorkflow(options = {}) {
+  const metadataFile = options.metadataFile || defaultMetadataFile;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const stagingRoot = options.stagingRoot || defaultStagingRoot;
+  const galleryRoot = options.galleryRoot || defaultGalleryRoot;
+  const idFactory = options.idFactory || createPreviewId;
+  const plans = new Map();
+
+  function buildNewVariantPreview(rawFormState = {}) {
+    const formState = normalizeFormState(rawFormState);
+    assertKnownFormValues(formState);
+    const requiredActions = getEffectiveRequiredActions(formState);
+    const { selections, warnings } = resolveActionVideos(formState, requiredActions);
+    const previewId = idFactory();
+    const stagingSource = path.join(stagingRoot, previewId, "source");
+    const stagedVideos = stageActionVideos(stagingSource, selections, requiredActions);
+    const plan = buildBootstrapPlan(
+      buildBootstrapArgs(formState, stagingSource),
+      { metadataFile, animationsRoot }
+    );
+
+    plans.set(previewId, {
+      previewId,
+      formState,
+      plan,
+      stagedVideos,
+      stagingSource,
+      galleryRoot
+    });
+
+    return serializePreview(previewId, plan, stagedVideos, warnings, stagingSource);
+  }
+
+  async function runNewVariant(previewId, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry) {
+      throw new Error(`Preview plan was not found: ${previewId}`);
+    }
+    emitHook(hooks, "onStage", { stage: "prepareStaging", status: "running" });
+    try {
+      for (const [action, stagedPath] of Object.entries(entry.stagedVideos)) {
+        if (!fs.existsSync(stagedPath)) {
+          throw new Error(`Staged source video for action ${action} was not found: ${stagedPath}`);
+        }
+      }
+      emitHook(hooks, "onStage", { stage: "prepareStaging", status: "done" });
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage: "prepareStaging", status: "failed", error: error.message });
+      throw error;
+    }
+    return applyBootstrapPlanAsync(entry.plan, {
+      force: entry.formState.force,
+      skipProcessing: entry.formState.skipProcessing,
+      skipPreflight: entry.formState.skipPreflight,
+      skipGallery: entry.formState.skipGallery,
+      galleryRoot,
+      runCommand: options.runCommand,
+      onStage: (event) => {
+        emitHook(hooks, "onStage", event);
+      },
+      onLog: (event) => {
+        emitHook(hooks, "onLog", event);
+      }
+    });
+  }
+
+  return {
+    getCatalogOptions,
+    buildNewVariantPreview,
+    runNewVariant
+  };
+}
+
+module.exports = {
+  createVariantWorkflow,
+  getCatalogOptions,
+  getRequiredActions,
+  normalizeFormState,
+  scanSourceFolder
+};

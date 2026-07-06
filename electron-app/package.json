@@ -6,6 +6,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "start": "electron .",
+    "devtools": "electron devtools/main.cjs",
     "test": "node --test \"test/**/*.test.cjs\"",
     "prepare:runtime-assets": "node prepare-runtime-assets.cjs",
     "package:win": "powershell -ExecutionPolicy Bypass -File build-electron-win.ps1",

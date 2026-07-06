@@ -25,6 +25,7 @@
 | `electron-app/electron/pet-catalog.cjs` | 动作池、功能池、tier profile 和 notes pool | 新增动作 ID、功能开关、套餐默认值或 notes 规则 |
 | `electron-app/electron/pet-variants.cjs` | 将 V2 元数据和 catalog 展开为运行时配置、动作 ID、渠道配置和打包 profile | 调整派生规则、动作顺序、打包输出 |
 | `electron-app/scripts/variant-cli.cjs` | 查询/新增/bootstrap 变体，按 species/tier/date 筛选，生成本地图鉴 | 新增变体流程或 CLI 能力 |
+| `electron-app/devtools/` | 内部 Electron 开发者工具窗口，当前用于可视化新增变体 | 维护内部新增变体向导、预览执行流程或工具窗口文档 |
 | `electron-app/electron/walk-clock.cjs` | 行走循环暂停/恢复计时 | 修改行走倒计时或暂停恢复规则 |
 | `electron-app/electron/window-surfaces.ps1` | Windows 可贴靠窗口候选探测 | 修复窗口贴靠或漫游候选问题 |
 | `electron-app/electron/window-from-point.ps1` | 根据屏幕点查找窗口 | 修复拖拽吸附命中问题 |
@@ -107,6 +108,7 @@ npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --dat
 - `electron-app/.npm-cache*`
 - `electron-app/.electron-builder-cache`
 - `electron-app/.mac-builder-cache`
+- `electron-app/.devtools-staging`
 - `electron-app/.tmp`
 - `electron-app/.user-data`
 - `electron-app/deliverables`

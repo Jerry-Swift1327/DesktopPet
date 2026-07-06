@@ -456,7 +456,62 @@ function runCommand(command, args, options = {}) {
   }
 }
 
-function applyBootstrapPlan(plan, options = {}) {
+function emitStage(options, event) {
+  if (typeof options.onStage === "function") {
+    try {
+      options.onStage(event);
+    } catch {
+      // Observer callbacks are best-effort and must not change apply behavior.
+    }
+  }
+}
+
+function emitLog(options, event) {
+  if (typeof options.onLog === "function") {
+    try {
+      options.onLog(event);
+    } catch {
+      // Observer callbacks are best-effort and must not change apply behavior.
+    }
+  }
+}
+
+function runCommandAsync(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = childProcess.spawn(command, args, {
+      cwd: options.cwd,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    child.stdout.on("data", (chunk) => {
+      emitLog(options, {
+        stage: options.stage || null,
+        stream: "stdout",
+        message: chunk.toString()
+      });
+    });
+
+    child.stderr.on("data", (chunk) => {
+      emitLog(options, {
+        stage: options.stage || null,
+        stream: "stderr",
+        message: chunk.toString()
+      });
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}`));
+    });
+  });
+}
+
+function writeBootstrapMetadata(plan) {
   const metadata = readMetadataFile(plan.metadataFile);
   const variants = getMetadataVariants(metadata);
   if (variants[plan.draft.id]) {
@@ -464,7 +519,9 @@ function applyBootstrapPlan(plan, options = {}) {
   }
   variants[plan.draft.id] = plan.draft;
   writeMetadataFile(metadata, plan.metadataFile);
+}
 
+function copyBootstrapVideos(plan, options = {}) {
   for (const item of plan.copied) {
     if (fs.existsSync(item.target) && !options.force) {
       throw new Error(`Target video already exists: ${item.target}. Pass --force to overwrite.`);
@@ -472,25 +529,98 @@ function applyBootstrapPlan(plan, options = {}) {
     fs.mkdirSync(path.dirname(item.target), { recursive: true });
     fs.copyFileSync(item.source, item.target);
   }
+}
 
-  if (!options.skipProcessing) {
-    for (const processCommand of plan.processCommands) {
-      (options.runCommand || runCommand)(processCommand.command, processCommand.args, { cwd: processCommand.cwd });
+function runPlanCommandsSync(stage, commands, options = {}) {
+  const runner = options.runCommand || runCommand;
+  for (const item of commands) {
+    runner(item.command, item.args, { cwd: item.cwd, stage, onLog: options.onLog });
+  }
+}
+
+async function runPlanCommandsAsync(stage, commands, options = {}) {
+  const runner = options.runCommand || runCommandAsync;
+  for (const item of commands) {
+    await runner(item.command, item.args, { cwd: item.cwd, stage, onLog: options.onLog });
+  }
+}
+
+function generateBootstrapGallery(plan, options = {}) {
+  generateVariantGallery({
+    metadataFile: plan.metadataFile,
+    animationsRoot: plan.animationsRoot,
+    outputDir: options.galleryRoot || defaultGalleryRoot
+  });
+}
+
+function getBootstrapApplyStages(plan, options = {}) {
+  return [
+    {
+      stage: "writeMetadata",
+      skip: false,
+      runSync: () => writeBootstrapMetadata(plan),
+      runAsync: async () => writeBootstrapMetadata(plan)
+    },
+    {
+      stage: "copyVideos",
+      skip: false,
+      runSync: () => copyBootstrapVideos(plan, options),
+      runAsync: async () => copyBootstrapVideos(plan, options)
+    },
+    {
+      stage: "processVideos",
+      skip: Boolean(options.skipProcessing),
+      runSync: () => runPlanCommandsSync("processVideos", plan.processCommands, options),
+      runAsync: async () => runPlanCommandsAsync("processVideos", plan.processCommands, options)
+    },
+    {
+      stage: "runPreflight",
+      skip: Boolean(options.skipPreflight),
+      runSync: () => runPlanCommandsSync("runPreflight", plan.preflightCommands, options),
+      runAsync: async () => runPlanCommandsAsync("runPreflight", plan.preflightCommands, options)
+    },
+    {
+      stage: "generateGallery",
+      skip: Boolean(options.skipGallery),
+      runSync: () => generateBootstrapGallery(plan, options),
+      runAsync: async () => generateBootstrapGallery(plan, options)
+    }
+  ];
+}
+
+function applyBootstrapPlan(plan, options = {}) {
+  for (const item of getBootstrapApplyStages(plan, options)) {
+    if (item.skip) {
+      emitStage(options, { stage: item.stage, status: "skipped" });
+      continue;
+    }
+    emitStage(options, { stage: item.stage, status: "running" });
+    try {
+      item.runSync();
+      emitStage(options, { stage: item.stage, status: "done" });
+    } catch (error) {
+      emitStage(options, { stage: item.stage, status: "failed", error: error.message });
+      throw error;
     }
   }
 
-  if (!options.skipPreflight) {
-    for (const preflightCommand of plan.preflightCommands) {
-      (options.runCommand || runCommand)(preflightCommand.command, preflightCommand.args, { cwd: preflightCommand.cwd });
-    }
-  }
+  return plan.draft;
+}
 
-  if (!options.skipGallery) {
-    generateVariantGallery({
-      metadataFile: plan.metadataFile,
-      animationsRoot: plan.animationsRoot,
-      outputDir: options.galleryRoot || defaultGalleryRoot
-    });
+async function applyBootstrapPlanAsync(plan, options = {}) {
+  for (const item of getBootstrapApplyStages(plan, options)) {
+    if (item.skip) {
+      emitStage(options, { stage: item.stage, status: "skipped" });
+      continue;
+    }
+    emitStage(options, { stage: item.stage, status: "running" });
+    try {
+      await item.runAsync();
+      emitStage(options, { stage: item.stage, status: "done" });
+    } catch (error) {
+      emitStage(options, { stage: item.stage, status: "failed", error: error.message });
+      throw error;
+    }
   }
 
   return plan.draft;
@@ -675,6 +805,7 @@ module.exports = {
   findSourceVideo,
   buildBootstrapPlan,
   applyBootstrapPlan,
+  applyBootstrapPlanAsync,
   bootstrapVariant,
   generateVariantGallery,
   getVariantSummary,

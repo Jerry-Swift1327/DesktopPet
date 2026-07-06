@@ -87,10 +87,21 @@ npm run installer:mac -- --pet-variant=pet2604 --arch=arm64
 npm run installer:mac -- --pet-variant=pet2604 --arch=x64
 ```
 
+## Internal Devtools
+
+从应用工作区启动内部开发者窗口：
+
+```powershell
+npm.cmd run devtools
+```
+
+第一版支持通过可视化流程新增变体，并复用 `npm.cmd run variant:bootstrap` 的同一套生成规则。Devtools 源码位于 `devtools/`，不包含在正常交付包中。
+
 ## 关键目录
 
 | 路径 | 作用 |
 | --- | --- |
+| `devtools` | 内部维护工具窗口，当前用于新增变体，不进入正常交付包 |
 | `electron` | 主进程、预加载桥、变体配置、行走计时和 Windows 窗口探测脚本 |
 | `scripts` | 变体元数据查询、新建和资源重命名 CLI |
 | `static` | 宠物窗口、快捷菜单、悬停面板和气泡的渲染入口 |
