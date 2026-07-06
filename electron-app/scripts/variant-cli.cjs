@@ -356,6 +356,9 @@ function getProcessArgs(assetPrefix, action, options = {}) {
     "--trim-ground-alpha-auto"
   ];
   const preset = actionPool[action].processPreset;
+  if (preset === "grounded" || preset === "nearSquat") {
+    processArgs.push("--stable-ground");
+  }
   if (preset === "nearSquat" && action !== "squat") {
     processArgs.push("--align-reference-center-x", "--align-reference-bottom");
   } else if (preset === "direction64") {

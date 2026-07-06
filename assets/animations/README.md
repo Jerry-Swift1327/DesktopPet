@@ -41,6 +41,8 @@
 
 `loop.json` 和 manifest 中的 `frameSize` 是运行 PNG 画布尺寸，当前仍为 256；Electron 默认基础精灵是 128 CSS 像素，因此 256px 运行帧属于 2x 素材。`sourceCanvasSize` 记录源视频抽帧尺寸，不要求所有动作相同。
 
+`stableGround` 元数据表示素材池生成时启用了稳定贴地：工具会识别主体组件，清理主体底线以下的小型离散残点，并按稳定主体底线做有限垂直对齐。若底部存在较大的离散组件，工具会保留它并在 `stableGround.warnings` 与 audit 的 `groundArtifacts` 中提示，避免把真实宠物或有效道具误裁掉。
+
 新加入变体或动作时，优先使用默认 `source-canvas` 保留源视频构图，并在素材池生成阶段检查动作级画布居中。如果源视频本身主体整体偏左或偏右，可使用 `--center-visible-action-x` 对该动作全部素材池帧应用同一个 X 平移，使中位可见中心靠近 256px 画布中心。不要逐帧单独居中，否则会抵消走路、扑球、转身等动作本身的自然位移。近蹲坐动作可在 squat 自身构图正确后，再使用 `--align-reference-center-x --align-reference-bottom` 对齐到同变体 squat；若 one-shot 动作底线随源视频下沉但实际应始终贴合 surface，可追加 `--align-reference-bottom-per-frame` 逐帧贴地。
 
 对亮白或低饱和毛色的变体，处理脚本会自动执行 alpha 稳定化，减少主体内部透明针孔和低透明裂纹。新增或替换此类资源后，建议使用 `process_pet_actions.py audit` 检查 `interiorAlphaHoles` 和 `denseLowAlphaCracks` 指标，再抽查 `processed_frames` 与 `transparent_frames` 的关键帧。
@@ -111,6 +113,6 @@ python tools\build_quality_previews.py --actions dog_feed --clean
 - `electron-app/electron/pet-variant-metadata.json` 维护 V2 变体元数据，`electron-app/electron/pet-catalog.cjs` 维护动作池/功能池/tier/notes，`electron-app/electron/pet-variants.cjs` 展开动作顺序和打包资源列表。
 - 打包脚本只复制运行需要的 `transparent_frames`、`loop.json` 和 manifest。
 - `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库；`raw_frames` 默认保留但可用 `--clean-raw` 清理。
-- 底部低透明 alpha、动作级画布偏心、动作偏移或缩放突变应优先在素材池生成阶段处理，再重新导出 `transparent_frames`。只有需要旧版裁剪贴地效果时才使用 `--normalization-mode crop`。
+- 底部低透明 alpha、底部小型离散残点、动作级画布偏心、动作偏移或缩放突变应优先在素材池生成阶段处理，再重新导出 `transparent_frames`。只有需要旧版裁剪贴地效果时才使用 `--normalization-mode crop`。
 - 替换资源后，先检查 `loop.json` 和 manifest，再启动应用确认动作播放、落地点和循环是否正常。
 - 如果动作帧尺寸或命名规则变化，需要同步主进程资源加载、渲染层播放逻辑和测试。

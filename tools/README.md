@@ -38,6 +38,8 @@
                               ↓
                      亮色毛发 alpha 稳定化（内部针孔/低透明裂纹修复）
                               ↓
+                     [可选/自动编排] 稳定贴地（主体组件识别、底部离散残点清理、稳定主体底线对齐）
+                              ↓
                      [默认] 亮度异常检测 → 确定 excludedFrames
                               ↓
                      [默认] 选取循环片段 → transparent_frames/ (跨机器同步的最终运行帧)
@@ -85,6 +87,8 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--use-full-range` | 使用完整抽帧范围 |
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
 | `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
+| `--stable-ground` | 使用主体组件分析清理底部小型离散残点，并按稳定主体底线做垂直对齐 |
+| `--stable-ground-max-shift` | 限制 `--stable-ground` 的最大垂直平移，默认 32px |
 | `--normalization-mode` | 帧归一化模式，默认 `source-canvas` 保留源视频完整画布构图；`crop` 使用旧版裁剪贴地归一化 |
 | `--visible-height` / `--visible-max-width` | 覆盖可见高度/宽度，仅适用于 `--normalization-mode crop` |
 | `--center-visible-action-x` | 对整个动作的素材池帧应用同一个 X 平移，让中位可见中心位于画布中心，保留帧内运动 |
@@ -126,6 +130,10 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 ### alpha 稳定化
 
 抠像后的归一化帧会自动执行亮色毛发安全处理：对高亮、低饱和的近白前景采用更保守的绿幕判定，并在 256px/128px 帧内修复局部前景密度较高区域中的透明针孔和低透明裂纹。该步骤用于避免 ragdoll、van、pomeranian 等浅色毛发在播放时因 alpha 破洞产生闪烁，同时不会整体外扩外轮廓。
+
+### 稳定贴地
+
+`--stable-ground` 会在素材池生成阶段按 alpha 前景连通组件识别主体组件，清理主体底线以下的小型离散残点，再把同一动作的帧按稳定主体底线做有限垂直对齐。它用于修复高 alpha 小残点把状态 bottom 拉低、导致主体悬空的问题；不会通过加大 `--trim-ground-alpha` 阈值裁剪主体。若底部存在较大的离散组件，工具会保留该组件并在 `loop.json`/manifest 的 `stableGround.warnings` 与 audit 的 `groundArtifacts` 中暴露风险。
 
 ### 画布归一化
 
@@ -179,6 +187,7 @@ python tools\process_pet_actions.py audit --variants tabby van bshmitted
 
 ### 新资源几何建议
 - 对新加入的变体和动作，优先使用默认 `source-canvas` 保留源视频构图；如果源视频本身主体整体偏左或偏右，再用 `--center-visible-action-x` 修正动作级画布 X 偏心。该参数只计算一次中位可见中心并对所有帧应用同一个平移，不会逐帧抵消动作本身的运动。
+- `variant:bootstrap` 会对 `grounded` 和 `nearSquat` 预设自动启用 `--stable-ground`，日常从 Devtools 新增变体时无需手动处理底部小型残点；生成后仍建议用 `audit` 抽查 `groundArtifacts` 和 `stableGround.warnings`。
 - 对 `squat/lick/shake/yawn/hiss/look` 等近蹲坐动作，可在 squat 自身构图正确后，再叠加 `--align-reference-center-x --align-reference-bottom` 约束首帧和底线。
 - 对 `walk/ball/feed/sleep/lie/stretch` 等动作，不要默认强行匹配 squat 宽高；优先保证动作级构图、底线稳定和帧内漂移合理。
 

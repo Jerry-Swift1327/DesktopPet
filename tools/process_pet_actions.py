@@ -91,6 +91,8 @@ def process_action_core(
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
     trim_ground_alpha_auto: bool = False,
+    stable_ground: bool = False,
+    stable_ground_max_shift: int = 32,
     visible_height: int | None = None,
     visible_max_width: int | None = None,
     normalization_mode: str = SOURCE_CANVAS_NORMALIZATION,
@@ -149,6 +151,8 @@ def process_action_core(
         trim_ground_alpha_auto=trim_ground_alpha_auto,
         trim_ground_alpha=processed_trim_ground_alpha,
         trim_ground_padding=trim_ground_padding,
+        stable_ground=stable_ground,
+        stable_ground_max_shift=stable_ground_max_shift,
         center_visible_action_x=center_visible_action_x,
         center_visible_target_x=center_visible_target_x,
         center_visible_max_shift=center_visible_max_shift,
@@ -176,6 +180,9 @@ def process_action_core(
         metadata["trimGroundAlphaMode"] = "processed-auto"
         metadata["trimGroundAlpha"] = processed_trim_ground_alpha
         metadata["trimGroundPadding"] = max(0, trim_ground_padding)
+    if stable_ground:
+        metadata["stableGroundMode"] = "processed-subject-components"
+        metadata["stableGroundMaxShift"] = int(stable_ground_max_shift)
     if center_visible_action_x:
         metadata["centerVisibleActionX"] = True
         metadata["centerVisibleTargetX"] = (
@@ -414,6 +421,8 @@ def cmd_process(args: argparse.Namespace) -> None:
             trim_ground_alpha=args.trim_ground_alpha,
             trim_ground_padding=args.trim_ground_padding,
             trim_ground_alpha_auto=args.trim_ground_alpha_auto,
+            stable_ground=args.stable_ground,
+            stable_ground_max_shift=args.stable_ground_max_shift,
             visible_height=args.visible_height,
             visible_max_width=args.visible_max_width,
             normalization_mode=args.normalization_mode,
@@ -462,6 +471,8 @@ def cmd_replace(args: argparse.Namespace) -> None:
         trim_ground_alpha=args.trim_ground_alpha,
         trim_ground_padding=args.trim_ground_padding,
         trim_ground_alpha_auto=args.trim_ground_alpha_auto,
+        stable_ground=args.stable_ground,
+        stable_ground_max_shift=args.stable_ground_max_shift,
         visible_height=args.visible_height,
         visible_max_width=args.visible_max_width,
         normalization_mode=args.normalization_mode,
@@ -509,6 +520,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--trim-ground-alpha", type=int, default=0, help="Clear rows below last solid-alpha row. Disabled by default.")
     parser.add_argument("--trim-ground-padding", type=int, default=1, help="Rows to keep below last solid-alpha row when --trim-ground-alpha is enabled.")
     parser.add_argument("--trim-ground-alpha-auto", action="store_true", help="Apply safe ground-alpha cleanup to processed_frames before runtime frames are selected.")
+    parser.add_argument("--stable-ground", action="store_true", help="Use subject-component analysis to clear small bottom artifacts and align frames to a stable subject bottom.")
+    parser.add_argument("--stable-ground-max-shift", type=int, default=32, help="Maximum vertical shift for --stable-ground.")
     parser.add_argument("--visible-height", type=int, default=None, help="Override sprite visible height for this action.")
     parser.add_argument("--visible-max-width", type=int, default=None, help="Override sprite visible max width for this action.")
     parser.add_argument(

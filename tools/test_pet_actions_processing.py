@@ -141,6 +141,59 @@ class PetActionProcessingTests(unittest.TestCase):
         self.assertEqual(info["applied"], False)
         self.assertEqual(cleaned.getchannel("A").getpixel((12, 21)), 255)
 
+    def test_stabilize_ground_removes_bottom_stray_components_and_aligns_subject(self) -> None:
+        from pet_actions.chroma import get_frame_geometry, stabilize_frames_to_ground
+
+        first = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        second = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        first_pixels = first.load()
+        second_pixels = second.load()
+        for y in range(18, 46):
+            for x in range(18, 42):
+                first_pixels[x, y] = (120, 80, 60, 255)
+        for y in range(19, 47):
+            for x in range(18, 42):
+                second_pixels[x, y] = (120, 80, 60, 255)
+
+        # High-alpha detached residue below the pet should not define ground.
+        for y in range(58, 61):
+            for x in range(54, 57):
+                first_pixels[x, y] = (30, 30, 30, 194)
+
+        stabilized, info = stabilize_frames_to_ground(
+            [("frame_000.png", first), ("frame_001.png", second)],
+            enabled=True,
+            max_shift=8,
+        )
+        first_geometry = get_frame_geometry(stabilized[0][1])
+        second_geometry = get_frame_geometry(stabilized[1][1])
+        first_alpha = stabilized[0][1].getchannel("A")
+
+        self.assertEqual(info["applied"], True)
+        self.assertEqual(info["cleanedComponents"], 1)
+        self.assertEqual(info["cleanedPixels"], 9)
+        self.assertEqual(first_alpha.getpixel((55, 59)), 0)
+        self.assertEqual(first_geometry["bottom"], second_geometry["bottom"])
+        self.assertEqual(first_geometry["bottom"], info["targetBottom"])
+
+    def test_stabilize_ground_keeps_large_detached_foreground_as_warning(self) -> None:
+        from pet_actions.chroma import stabilize_frames_to_ground
+
+        image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        pixels = image.load()
+        for y in range(18, 46):
+            for x in range(18, 42):
+                pixels[x, y] = (120, 80, 60, 255)
+        for y in range(50, 61):
+            for x in range(8, 28):
+                pixels[x, y] = (80, 70, 60, 220)
+
+        stabilized, info = stabilize_frames_to_ground([("frame_000.png", image)], enabled=True)
+
+        self.assertEqual(stabilized[0][1].getchannel("A").getpixel((12, 55)), 220)
+        self.assertEqual(info["cleanedComponents"], 0)
+        self.assertGreater(info["warningCount"], 0)
+
     def test_stabilize_alpha_mask_repairs_enclosed_pinhole_without_expanding_edge(self) -> None:
         from pet_actions.chroma import detect_interior_alpha_holes, stabilize_alpha_mask_pixels
 

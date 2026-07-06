@@ -471,6 +471,240 @@ def center_frames_to_canvas_x(
     return [(name, translate_frame(frame, dx, 0)) for name, frame in frames], info
 
 
+def _alpha_component_records(alpha: np.ndarray, threshold: int) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for ys, xs in _iter_components(alpha > threshold):
+        area = int(len(ys))
+        if area <= 0:
+            continue
+        records.append({
+            "ys": ys,
+            "xs": xs,
+            "area": area,
+            "left": int(xs.min()),
+            "top": int(ys.min()),
+            "right": int(xs.max()),
+            "bottom": int(ys.max()),
+            "width": int(xs.max() - xs.min() + 1),
+            "height": int(ys.max() - ys.min() + 1),
+            "maxAlpha": int(alpha[ys, xs].max()),
+        })
+    return records
+
+
+def _select_subject_component(alpha: np.ndarray, subject_threshold: int) -> dict[str, object] | None:
+    components = _alpha_component_records(alpha, subject_threshold)
+    if not components:
+        return None
+    return max(components, key=lambda item: (int(item["area"]), int(item["height"]), int(item["width"])))
+
+
+def _ground_artifact_analysis(
+    alpha: np.ndarray,
+    *,
+    subject_threshold: int,
+    component_threshold: int,
+    bottom_gap: int,
+    artifact_area_ratio: float,
+    artifact_max_area: int,
+    artifact_max_span: int,
+) -> tuple[dict[str, object] | None, list[dict[str, object]], list[dict[str, object]], dict[str, int | bool]]:
+    subject = _select_subject_component(alpha, subject_threshold)
+    if subject is None:
+        return None, [], [], {
+            "hasSubject": False,
+            "subjectBottom": -1,
+            "subjectArea": 0,
+            "strayComponents": 0,
+            "strayPixels": 0,
+            "maxStrayArea": 0,
+            "largeBottomComponents": 0,
+            "largeBottomPixels": 0,
+        }
+
+    subject_area = int(subject["area"])
+    subject_bottom = int(subject["bottom"])
+    area_limit = max(16, min(max(16, int(artifact_max_area)), int(max(16.0, subject_area * artifact_area_ratio))))
+    span_limit = max(1, int(artifact_max_span))
+    gap = max(0, int(bottom_gap))
+    stray_components: list[dict[str, object]] = []
+    large_components: list[dict[str, object]] = []
+
+    for component in _alpha_component_records(alpha, component_threshold):
+        if int(component["top"]) <= subject_bottom + gap:
+            continue
+        is_small = (
+            int(component["area"]) <= area_limit
+            and int(component["width"]) <= span_limit
+            and int(component["height"]) <= span_limit
+        )
+        if is_small:
+            stray_components.append(component)
+        else:
+            large_components.append(component)
+
+    return subject, stray_components, large_components, {
+        "hasSubject": True,
+        "subjectBottom": subject_bottom,
+        "subjectArea": subject_area,
+        "strayComponents": len(stray_components),
+        "strayPixels": sum(int(component["area"]) for component in stray_components),
+        "maxStrayArea": max((int(component["area"]) for component in stray_components), default=0),
+        "largeBottomComponents": len(large_components),
+        "largeBottomPixels": sum(int(component["area"]) for component in large_components),
+    }
+
+
+def detect_ground_artifacts(
+    image: Image.Image,
+    *,
+    subject_threshold: int = 128,
+    component_threshold: int = 0,
+    bottom_gap: int = 1,
+    artifact_area_ratio: float = 0.012,
+    artifact_max_area: int = 96,
+    artifact_max_span: int = 16,
+) -> dict[str, int | bool]:
+    """Detect small detached foreground components below the main subject."""
+    alpha = np.array(image.convert("RGBA").getchannel("A"))
+    _subject, _stray, _large, info = _ground_artifact_analysis(
+        alpha,
+        subject_threshold=subject_threshold,
+        component_threshold=component_threshold,
+        bottom_gap=bottom_gap,
+        artifact_area_ratio=artifact_area_ratio,
+        artifact_max_area=artifact_max_area,
+        artifact_max_span=artifact_max_span,
+    )
+    return info
+
+
+def stabilize_frames_to_ground(
+    frames: list[tuple[str, Image.Image]],
+    *,
+    enabled: bool = False,
+    subject_threshold: int = 128,
+    component_threshold: int = 0,
+    bottom_gap: int = 1,
+    artifact_area_ratio: float = 0.012,
+    artifact_max_area: int = 96,
+    artifact_max_span: int = 16,
+    target_percentile: float = 90.0,
+    max_shift: int = 32,
+) -> tuple[list[tuple[str, Image.Image]], dict[str, object]]:
+    """Remove small bottom artifacts and align frames to a stable subject bottom."""
+    empty_info: dict[str, object] = {
+        "enabled": bool(enabled),
+        "applied": False,
+        "targetBottom": -1,
+        "targetPercentile": float(target_percentile),
+        "maxShift": int(max_shift),
+        "cleanedComponents": 0,
+        "cleanedPixels": 0,
+        "maxCleanedArea": 0,
+        "alignedFrames": 0,
+        "maxAbsShift": 0,
+        "clampedFrames": 0,
+        "warningCount": 0,
+        "warnings": [],
+    }
+    if not enabled or not frames:
+        return frames, empty_info
+
+    prepared: list[tuple[str, Image.Image, int | None]] = []
+    subject_bottoms: list[int] = []
+    warnings: list[str] = []
+    cleaned_components = 0
+    cleaned_pixels = 0
+    max_cleaned_area = 0
+
+    for name, frame in frames:
+        output = frame.convert("RGBA")
+        pixels = np.array(output)
+        alpha = pixels[:, :, 3]
+        subject, stray_components, large_components, artifact_info = _ground_artifact_analysis(
+            alpha,
+            subject_threshold=subject_threshold,
+            component_threshold=component_threshold,
+            bottom_gap=bottom_gap,
+            artifact_area_ratio=artifact_area_ratio,
+            artifact_max_area=artifact_max_area,
+            artifact_max_span=artifact_max_span,
+        )
+        if subject is None:
+            warnings.append(f"{name}: no subject component")
+            prepared.append((name, output, None))
+            continue
+
+        if large_components:
+            warnings.append(f"{name}: large detached bottom component kept")
+
+        for component in stray_components:
+            ys = component["ys"]
+            xs = component["xs"]
+            pixels[ys, xs, 3] = 0
+            pixels[ys, xs, :3] = 0
+
+        if stray_components:
+            output = Image.fromarray(pixels, "RGBA")
+            cleaned_components += int(artifact_info["strayComponents"])
+            cleaned_pixels += int(artifact_info["strayPixels"])
+            max_cleaned_area = max(max_cleaned_area, int(artifact_info["maxStrayArea"]))
+
+        subject_bottom = int(subject["bottom"])
+        subject_bottoms.append(subject_bottom)
+        prepared.append((name, output, subject_bottom))
+
+    if not subject_bottoms:
+        return frames, {**empty_info, "warningCount": len(warnings), "warnings": warnings[:12]}
+
+    target_bottom = int(round(float(np.percentile(subject_bottoms, float(target_percentile)))))
+    resolved_max_shift = max(0, int(max_shift))
+    aligned_frames: list[tuple[str, Image.Image]] = []
+    aligned_count = 0
+    max_abs_shift = 0
+    clamped_frames = 0
+
+    for name, frame, subject_bottom in prepared:
+        dy = 0
+        if subject_bottom is not None:
+            requested_dy = int(round(target_bottom - subject_bottom))
+            dy = int(np.clip(requested_dy, -resolved_max_shift, resolved_max_shift))
+            if dy != requested_dy:
+                clamped_frames += 1
+            geometry = get_frame_geometry(frame, alpha_threshold=0)
+            if geometry is not None:
+                min_dy = -int(geometry["top"])
+                max_dy = frame.height - 1 - int(geometry["bottom"])
+                clipped_dy = int(np.clip(dy, min_dy, max_dy))
+                if clipped_dy != dy:
+                    clamped_frames += 1
+                dy = clipped_dy
+        if dy:
+            frame = translate_frame(frame, 0, dy)
+            aligned_count += 1
+            max_abs_shift = max(max_abs_shift, abs(dy))
+        aligned_frames.append((name, frame))
+
+    if clamped_frames:
+        warnings.append("vertical shift clamped to avoid clipping")
+
+    info: dict[str, object] = {
+        **empty_info,
+        "applied": cleaned_components > 0 or aligned_count > 0,
+        "targetBottom": target_bottom,
+        "cleanedComponents": cleaned_components,
+        "cleanedPixels": cleaned_pixels,
+        "maxCleanedArea": max_cleaned_area,
+        "alignedFrames": aligned_count,
+        "maxAbsShift": max_abs_shift,
+        "clampedFrames": clamped_frames,
+        "warningCount": len(warnings),
+        "warnings": warnings[:12],
+    }
+    return aligned_frames, info
+
+
 def get_global_bounds(raw_frames: list[Path]) -> tuple[int, int, int, int]:
     """计算所有帧的全局可见边界（含 6px padding）。"""
     lefts: list[int] = []
@@ -634,6 +868,8 @@ def process_frames_to_processed(
     trim_ground_alpha_auto: bool = False,
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
+    stable_ground: bool = False,
+    stable_ground_max_shift: int = 32,
     center_visible_action_x: bool = False,
     center_visible_target_x: float | None = None,
     center_visible_max_shift: int = 32,
@@ -674,6 +910,12 @@ def process_frames_to_processed(
         )
         enhanced_frames.append((raw_frame.name, enhanced))
 
+    enhanced_frames, stable_ground_info = stabilize_frames_to_ground(
+        enhanced_frames,
+        enabled=stable_ground,
+        max_shift=stable_ground_max_shift,
+    )
+
     enhanced_frames, _center_info = center_frames_to_canvas_x(
         enhanced_frames,
         enabled=center_visible_action_x,
@@ -707,6 +949,8 @@ def process_frames_to_processed(
     info: dict[str, object] = {"normalizationMode": normalization_mode}
     if normalization_mode == SOURCE_CANVAS_NORMALIZATION and source_canvas_size is not None:
         info["sourceCanvasSize"] = source_canvas_size
+    if stable_ground:
+        info["stableGround"] = stable_ground_info
     return sorted(processed_dir.glob("frame_*.png")), info
 
 

@@ -12,6 +12,7 @@ from PIL import Image
 from . import ALPHA_CROP_THRESHOLD, ANIMATIONS_ROOT
 from .chroma import (
     detect_dense_low_alpha_cracks,
+    detect_ground_artifacts,
     detect_ground_alpha_remnants,
     detect_interior_alpha_holes,
     get_frame_geometry,
@@ -39,6 +40,7 @@ def _measure_frame(path: Path) -> dict[str, object]:
             "centerY": None,
             "gravityX": None,
             "gravityY": None,
+            "groundArtifacts": detect_ground_artifacts(image),
             "groundAlpha": detect_ground_alpha_remnants(image),
             "interiorAlphaHoles": detect_interior_alpha_holes(image),
             "denseLowAlphaCracks": detect_dense_low_alpha_cracks(image),
@@ -68,6 +70,7 @@ def _measure_frame(path: Path) -> dict[str, object]:
         "centerY": _round(float(geometry["centerY"])),
         "gravityX": _round(gravity_x),
         "gravityY": _round(gravity_y),
+        "groundArtifacts": detect_ground_artifacts(image),
         "groundAlpha": detect_ground_alpha_remnants(image),
         "interiorAlphaHoles": detect_interior_alpha_holes(image),
         "denseLowAlphaCracks": detect_dense_low_alpha_cracks(image),
@@ -128,6 +131,10 @@ def summarize_action_frames(action_dir: Path, frame_folder: str = "transparent_f
     ground_infos = [frame["groundAlpha"] for frame in frames if isinstance(frame.get("groundAlpha"), dict)]
     low_rows = [int(info.get("lowRows", 0)) for info in ground_infos]
     low_pixels = [int(info.get("lowPixels", 0)) for info in ground_infos]
+    ground_artifact_infos = [frame["groundArtifacts"] for frame in frames if isinstance(frame.get("groundArtifacts"), dict)]
+    stray_components = [int(info.get("strayComponents", 0)) for info in ground_artifact_infos]
+    stray_pixels = [int(info.get("strayPixels", 0)) for info in ground_artifact_infos]
+    large_bottom_components = [int(info.get("largeBottomComponents", 0)) for info in ground_artifact_infos]
     hole_infos = [frame["interiorAlphaHoles"] for frame in frames if isinstance(frame.get("interiorAlphaHoles"), dict)]
     hole_pixels = [int(info.get("pixels", 0)) for info in hole_infos]
     hole_components = [int(info.get("components", 0)) for info in hole_infos]
@@ -179,6 +186,12 @@ def summarize_action_frames(action_dir: Path, frame_folder: str = "transparent_f
             "p90LowRows": _round(float(np.percentile(low_rows, 90))) if low_rows else 0.0,
             "maxLowPixels": max(low_pixels) if low_pixels else 0,
             "framesWithLowRows": sum(1 for value in low_rows if value > 0),
+        },
+        "groundArtifacts": {
+            "maxStrayComponents": max(stray_components) if stray_components else 0,
+            "maxStrayPixels": max(stray_pixels) if stray_pixels else 0,
+            "framesWithStray": sum(1 for value in stray_components if value > 0),
+            "framesWithLargeBottomComponents": sum(1 for value in large_bottom_components if value > 0),
         },
         "interiorAlphaHoles": {
             "maxPixels": max(hole_pixels) if hole_pixels else 0,
@@ -284,15 +297,17 @@ def rank_geometry_risks(report: dict[str, object]) -> list[dict[str, object]]:
             canvas_info = action.get("canvas", {})
             hole_info = action.get("interiorAlphaHoles", {})
             crack_info = action.get("denseLowAlphaCracks", {})
+            artifact_info = action.get("groundArtifacts", {})
             if (
                 not isinstance(range_info, dict)
                 or not isinstance(ground_info, dict)
                 or not isinstance(canvas_info, dict)
                 or not isinstance(hole_info, dict)
                 or not isinstance(crack_info, dict)
+                or not isinstance(artifact_info, dict)
             ):
                 continue
-            score = _risk_score(delta, range_info, ground_info, canvas_info, hole_info, crack_info)
+            score = _risk_score(delta, range_info, ground_info, artifact_info, canvas_info, hole_info, crack_info)
             risks.append({
                 "variant": variant,
                 "action": action.get("action"),
@@ -302,6 +317,7 @@ def rank_geometry_risks(report: dict[str, object]) -> list[dict[str, object]]:
                 "canvas": canvas_info,
                 "range": range_info,
                 "groundAlpha": ground_info,
+                "groundArtifacts": artifact_info,
                 "interiorAlphaHoles": hole_info,
                 "denseLowAlphaCracks": crack_info,
             })
@@ -312,6 +328,7 @@ def _risk_score(
     delta: dict[str, object],
     range_info: dict[str, object],
     ground_info: dict[str, object],
+    artifact_info: dict[str, object],
     canvas_info: dict[str, object],
     hole_info: dict[str, object],
     crack_info: dict[str, object],
@@ -324,11 +341,12 @@ def _risk_score(
     )
     drift = max(float(range_info.get("centerX", 0)), float(range_info.get("centerY", 0)))
     ground = float(ground_info.get("maxLowRows", 0))
+    artifacts = float(artifact_info.get("framesWithStray", 0)) * 1.5 + float(artifact_info.get("framesWithLargeBottomComponents", 0)) * 0.5
     pinholes = float(hole_info.get("p90Pixels", 0)) * 0.02 + float(hole_info.get("framesWithHoles", 0)) * 0.05
     cracks = float(crack_info.get("p90Pixels", 0)) * 0.015 + float(crack_info.get("framesWithCracks", 0)) * 0.04
     canvas_shift = abs(float(canvas_info.get("medianCenterDeltaX", 0)))
     margin_imbalance = abs(float(canvas_info.get("medianMarginDeltaX", 0)))
-    return first_shift + median_shift + scale_delta * 80 + drift * 0.35 + ground * 0.4 + pinholes + cracks + canvas_shift * 0.5 + margin_imbalance * 0.2
+    return first_shift + median_shift + scale_delta * 80 + drift * 0.35 + ground * 0.4 + artifacts + pinholes + cracks + canvas_shift * 0.5 + margin_imbalance * 0.2
 
 
 def write_audit_report(report: dict[str, object], output: Path) -> None:

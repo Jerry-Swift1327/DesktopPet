@@ -26,6 +26,8 @@ npm.cmd run variant:species
 
 `variant:bootstrap` 默认 dry-run，只有传入 `--apply` 后才写入元数据、复制视频并调用 `../../tools/process_pet_actions.py`。源视频默认从 Downloads 查找，也可以用 `--source` 指定目录；视频名支持 `squat.mp4` 或 `<任意前缀>_squat.mp4`。未知动作会严格报错，需要先注册到动作池。
 
+bootstrap 会按动作池的 `processPreset` 组装资源处理参数：`grounded` 和 `nearSquat` 默认启用 `--stable-ground`，清理底部小型离散残点并按稳定主体底线对齐；`nearSquat` 仍会额外对齐到同变体 squat；`direction64` 保持方向采样，不做稳定贴地强修。
+
 变体元数据使用 V2 字段：`species`、`scope`、`tier`、`notes`、`assetPrefix`、`actions.buttons`、`actions.assets` 和 `features.enable/disable`。`notes` 由 `scope + tier` 自动生成，custom 默认版本 `1.0`，internal 版本按当前最大 internal 版本递增。
 
 ## 修改注意

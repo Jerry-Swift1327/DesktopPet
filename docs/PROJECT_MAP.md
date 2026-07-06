@@ -11,7 +11,7 @@
 | `docs` | 架构、目录、文档维护和 macOS 打包说明 | 文档结构、架构说明、平台打包说明变化 |
 | `electron-app` | Electron 桌面宠物应用主体 | 主进程、渲染层、测试、打包和安装包 |
 | `assets` | 宠物动画资源 | 新增变体、动作或替换动作素材 |
-| `tools` | 资源处理 Python 脚本 | 抽帧、抠像、保源画布归一化、循环段选择、动作替换、画质预览 |
+| `tools` | 资源处理 Python 脚本 | 抽帧、抠像、保源画布归一化、稳定贴地、循环段选择、动作替换、画质预览 |
 | `app_icon.ico` | Windows 应用图标源文件 | 更新应用图标 |
 
 ## Electron 应用
@@ -92,8 +92,8 @@ npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --dat
 
 | 文件 | 作用 |
 | --- | --- |
-| `tools/process_pet_actions.py` | 统一资源处理 CLI 入口：抽帧、抠像、保源画布 256px 增强、循环选取、方向采样和几何审计 |
-| `tools/pet_actions/` | 资源处理 Python 包，按职责拆分到子模块（ffmpeg、files、chroma 归一化、frames、loops、manifest、audit） |
+| `tools/process_pet_actions.py` | 统一资源处理 CLI 入口：抽帧、抠像、保源画布 256px 增强、稳定贴地、循环选取、方向采样和几何审计 |
+| `tools/pet_actions/` | 资源处理 Python 包，按职责拆分到子模块（ffmpeg、files、chroma 归一化与稳定贴地、frames、loops、manifest、audit） |
 | `tools/build_quality_previews.py` | 生成当前/候选/对比预览视频 |
 | `tools/process_pet_videos.py` | （已弃用）旧版批量处理脚本，功能已合并到 `process_pet_actions.py` |
 | `tools/replace_action_video.py` | （已弃用）旧版替换单个动作脚本，功能已合并到 `process_pet_actions.py` |

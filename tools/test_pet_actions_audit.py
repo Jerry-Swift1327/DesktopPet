@@ -65,6 +65,27 @@ class PetActionAuditTests(unittest.TestCase):
         self.assertEqual(summary["interiorAlphaHoles"]["framesWithHoles"], 1)
         self.assertGreater(summary["denseLowAlphaCracks"]["maxPixels"], 0)
 
+    def test_summarize_action_frames_reports_high_alpha_ground_artifacts(self) -> None:
+        from pet_actions.audit import summarize_action_frames
+
+        with tempfile.TemporaryDirectory() as tmp:
+            frame_dir = Path(tmp) / "tabby_ball" / "transparent_frames"
+            frame_dir.mkdir(parents=True)
+            make_frame(frame_dir / "frame_000.png", (8, 6, 20, 22), size=(40, 40))
+
+            image = Image.open(frame_dir / "frame_000.png").convert("RGBA")
+            pixels = image.load()
+            for y in range(34, 37):
+                for x in range(31, 34):
+                    pixels[x, y] = (20, 20, 20, 194)
+            image.save(frame_dir / "frame_000.png")
+
+            summary = summarize_action_frames(frame_dir.parent)
+
+        self.assertEqual(summary["groundArtifacts"]["maxStrayComponents"], 1)
+        self.assertEqual(summary["groundArtifacts"]["maxStrayPixels"], 9)
+        self.assertEqual(summary["groundArtifacts"]["framesWithStray"], 1)
+
     def test_build_variant_audit_compares_actions_to_squat_and_ranks_risks(self) -> None:
         from pet_actions.audit import build_variant_audit, rank_geometry_risks
 

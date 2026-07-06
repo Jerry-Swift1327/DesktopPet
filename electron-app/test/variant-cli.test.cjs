@@ -160,6 +160,7 @@ test("bootstrap dry-run builds a plan without writing metadata", () => {
   assert.equal(plan.draft.id, "pet2601");
   assert.equal(plan.copied.length, 4);
   assert.equal(plan.processCommands[0].args.includes("--trim-ground-alpha-auto"), true);
+  assert.equal(plan.processCommands[0].args.includes("--stable-ground"), true);
   assert.equal(plan.processCommands[0].args.includes("--use-full-range"), false);
   assert.deepEqual(metadata.variants, {});
 });
