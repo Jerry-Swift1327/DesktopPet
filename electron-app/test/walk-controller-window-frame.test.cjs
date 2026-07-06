@@ -115,8 +115,10 @@ function createWindowWalkHarness({
     getWalkVisibleRectFromWindowX: (x, y, _state, direction = walkDirection) => visibleRectForX(x, y, direction),
     getWindowXForVisibleEdge: (edge, value, _state, direction = walkDirection) => windowXForVisibleEdge(edge, value, direction),
     getSafeWindowXForDirection: (x, _surface, _state, direction = walkDirection) => safeWindowX(x, direction),
-    setWalkWindowPosition: (x, y, _surface, direction = walkDirection) => {
-      const nextX = safeWindowX(x, direction);
+    setWalkWindowPosition: (x, y, _surface, direction = walkDirection, options = {}) => {
+      const nextX = options.clampToSurface === false
+        ? Math.round(x)
+        : safeWindowX(x, direction);
       const nextY = Math.round(y);
       calls.push({
         type: "state-position",
@@ -235,6 +237,26 @@ test("window-surface walk mirrors at the left edge and continues with a stable X
   assert.equal(first.x, 80);
   assert.equal(second.x, 90);
   assert.deepEqual(harness.calls.map((call) => call.x), [80, 90]);
+});
+
+test("window-surface walk caps mirrored edge correction to one real X step", () => {
+  const harness = createWindowWalkHarness({
+    initialX: 30,
+    initialDirection: -1,
+    visibleOffsetForDirection: (direction) => direction < 0 ? 72 : 48
+  });
+
+  const before = harness.controller.advanceWalkStep(3, 80);
+  const after = harness.controller.advanceWalkStep(4, 80);
+
+  assert.equal(before.direction, 1);
+  assert.equal(after.direction, 1);
+  assert.equal(before.x, 40);
+  assert.equal(after.x, 50);
+  assert.deepEqual(
+    harness.calls.map((call) => call.x),
+    [40, 50]
+  );
 });
 
 test("window-surface walk mirrors at the right edge without visible-center back solving", () => {

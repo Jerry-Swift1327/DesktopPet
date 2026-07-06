@@ -206,10 +206,11 @@ test("window roam attaches directly and keeps the locked target stable", () => {
   assert.equal(calls.some((call) => call.type === "setPosition"), true);
   assert.equal(calls.some((call) => call.type === "transition" || call.type === "animate"), false);
 
+  calls.length = 0;
   controller.tickWindowRoam();
 
   assert.equal(getCurrentSurface().sourceWindowId, "b");
-  assert.equal(calls.filter((call) => call.type === "setSurface" && call.id === "b").length, 2);
+  assert.equal(calls.length, 0);
   assert.equal(calls.some((call) => call.type === "setSurface" && call.id === "a"), false);
 });
 

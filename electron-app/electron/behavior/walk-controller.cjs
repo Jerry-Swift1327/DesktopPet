@@ -293,6 +293,13 @@ function createWalkController(context) {
     return result;
   }
 
+  function clampWindowWalkStepDistance(x, previousX) {
+    const nextX = Math.round(x);
+    const previous = Math.round(previousX);
+    const maxStep = Math.max(1, Math.round(Math.abs(WALK_STEP)));
+    return clamp(nextX, previous - maxStep, previous + maxStep);
+  }
+
   function advanceWalkStep(frameStep = 0, elapsedMs = 0) {
     const stepStartedAt = Date.now();
     if (!getPetWindow() || getPetWindow().isDestroyed() || !isWalkingState()) {
@@ -397,7 +404,9 @@ function createWalkController(context) {
       setWalkMirrorCooldownSteps(getWalkMirrorCooldownSteps() - 1);
     }
 
-    nextX = getSafeWindowXForDirection(nextX, activeSurface, getActiveState(), nextDirection);
+    const safeNextX = getSafeWindowXForDirection(nextX, activeSurface, getActiveState(), nextDirection);
+    nextX = clampWindowWalkStepDistance(safeNextX, previousX);
+    const shouldClampToSurface = nextX === Math.round(safeNextX);
     if (!mirroredThisStep && nextDirection < 0) {
       nextX = Math.min(previousX, nextX);
     } else if (!mirroredThisStep && nextDirection > 0) {
@@ -405,7 +414,9 @@ function createWalkController(context) {
     }
 
     setWalkDirection(nextDirection);
-    const actualX = setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection());
+    const actualX = setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection(), {
+      clampToSurface: shouldClampToSurface
+    });
     if (actualX === previousX) {
       setStalledWalkSteps(getStalledWalkSteps() + 1);
     } else {

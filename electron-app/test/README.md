@@ -19,7 +19,7 @@ node --test "test/**/*.test.cjs"
 
 | 文件 | 覆盖内容 | 相关源码 |
 | --- | --- | --- |
-| `walk-controller-window-frame.test.cjs` | Window surface walk regression: stable real-window X track drives the pet window, returns scale with each step, handles direction-specific visible insets and edge mirrors, and frameStep does not change walk speed. | `../electron/behavior/walk-controller.cjs` |
+| `walk-controller-window-frame.test.cjs` | Window surface walk regression: stable real-window X track drives the pet window, returns scale with each step, handles direction-specific visible insets and edge mirrors, caps mirrored edge correction to one X step, and frameStep does not change walk speed. | `../electron/behavior/walk-controller.cjs` |
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名 | `../electron/pet-variants.cjs` |
 | `variant-cli.test.cjs` | 变体 CLI 的新建、校验和动作源视频复制重命名 | `../scripts/variant-cli.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |

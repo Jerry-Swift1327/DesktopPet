@@ -3532,9 +3532,11 @@ function syncWalkTrackX(x = null) {
   walkTrackX = getSafeWindowXForDirection(sourceX, surface, activeState, walkDirection);
 }
 
-function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection) {
+function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection, options = {}) {
   if (surface?.type === "window") {
-    const nextX = getSafeWindowXForDirection(x, surface, activeState, direction);
+    const nextX = options?.clampToSurface === false
+      ? Math.round(x)
+      : getSafeWindowXForDirection(x, surface, activeState, direction);
     const nextY = Math.round(y);
     walkTrackX = nextX;
     const bounds = getPetWindow().getBounds();

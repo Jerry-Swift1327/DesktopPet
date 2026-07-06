@@ -216,6 +216,14 @@ function createWindowRoamController(context) {
       return;
     }
 
+    const currentSurface = getCurrentSurface();
+    const currentLockedId = currentSurface?.type === "window"
+      ? parseWindowHwnd(currentSurface.sourceWindowId)
+      : "";
+    if (currentLockedId && currentLockedId === windowRoamLastTargetId) {
+      return;
+    }
+
     const surface = selectWindowRoamSurface();
     if (!surface) {
       windowRoamMissingTicks += 1;

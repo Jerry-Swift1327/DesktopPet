@@ -173,7 +173,7 @@ test("window surface walk 使用 state 级可见中心而非逐帧 X 补偿", ()
   );
   assert.match(
     controllerSource,
-    /const actualX = setWalkWindowPosition\(nextX, groundedY, activeSurface, getWalkDirection\(\)\);/
+    /const actualX = setWalkWindowPosition\(nextX, groundedY, activeSurface, getWalkDirection\(\), \{/
   );
   assert.doesNotMatch(controllerSource, /trackCenterX/);
   assert.doesNotMatch(controllerSource, /getWindowXForWalkFrameVisibleCenter/);
