@@ -21,9 +21,10 @@
 | `electron-app/package.json` | npm 脚本、Electron 入口和 electron-builder 配置 | 新增脚本、调整依赖或打包配置 |
 | `electron-app/electron/main.cjs` | 主进程核心逻辑 | 窗口、菜单、悬停面板、状态值、拖拽、吸附、行走、自启动 |
 | `electron-app/electron/preload.cjs` | 暴露安全 IPC API 给渲染层 | 新增渲染层调用主进程能力 |
-| `electron-app/electron/pet-variant-metadata.json` | 精简宠物变体元数据（id、aliases、breed、date、scope、动作增量和功能覆盖） | 新增定制变体、调整品种、别名或定制日期 |
-| `electron-app/electron/pet-variants.cjs` | 将精简元数据展开为运行时配置、动作 ID、渠道配置和打包 profile | 调整派生规则、动作顺序、打包输出 |
-| `electron-app/scripts/variant-cli.cjs` | 查询/新增变体，按品种和日期筛选，复制并重命名动作源视频 | 新增变体流程或 CLI 能力 |
+| `electron-app/electron/pet-variant-metadata.json` | V2 宠物变体元数据（id、species、tier、notes、scope、actions、features） | 新增定制变体、调整套餐、平台或资源前缀 |
+| `electron-app/electron/pet-catalog.cjs` | 动作池、功能池、tier profile 和 notes pool | 新增动作 ID、功能开关、套餐默认值或 notes 规则 |
+| `electron-app/electron/pet-variants.cjs` | 将 V2 元数据和 catalog 展开为运行时配置、动作 ID、渠道配置和打包 profile | 调整派生规则、动作顺序、打包输出 |
+| `electron-app/scripts/variant-cli.cjs` | 查询/新增/bootstrap 变体，按 species/tier/date 筛选，生成本地图鉴 | 新增变体流程或 CLI 能力 |
 | `electron-app/electron/walk-clock.cjs` | 行走循环暂停/恢复计时 | 修改行走倒计时或暂停恢复规则 |
 | `electron-app/electron/window-surfaces.ps1` | Windows 可贴靠窗口候选探测 | 修复窗口贴靠或漫游候选问题 |
 | `electron-app/electron/window-from-point.ps1` | 根据屏幕点查找窗口 | 修复拖拽吸附命中问题 |
@@ -60,23 +61,23 @@ npm.cmd run package:win
 npm.cmd run installer:win
 npm.cmd run pack:win
 npm.cmd run variant:list
-npm.cmd run variant:new -- --breed lihua --date 2026-06-30
+npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --date 2026-07-06 --source C:\path\to\source-videos
 ```
 
 ## 宠物变体和资源
 
-| 变体 | 品种 | 范围 | 平台 | 动作 |
-| --- | --- | --- | --- | --- |
-| `pet2601` | `gr` | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
-| `pet2602` | `ash` | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
-| `pet2603` | `sf` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `pet2604` | `pom` | custom | macOS | `squat`、`walk`、`feed`、`ball` |
-| `pet2605` | `lihua` | custom | Windows | `squat`、`walk`、`feed`、`ball`、`lie`、`lick`、`belly`、`stretch`，额外资源 `look`、`shake`、`yawn`、`sleep`、`hiss` |
-| `pet2606` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `pet2607` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `pet2608` | `bsh` | custom | Windows | `squat`、`walk`、`feed`、`ball` |
-| `pet2609` | `ragdoll` | internal | Windows | `squat`、`walk`、`feed`、`ball`、`spin`、`lick`、`stretch`、`splits`，额外资源 `yawn`、`hiss` |
-| `pet2610` | `lihua` | custom | Windows | `squat`、`walk`、`feed`、`ball`，额外资源 `shake`、`yawn` |
+| 变体 | species | tier | 范围 | 平台 | 动作 |
+| --- | --- | --- | --- | --- | --- |
+| `pet2601` | dog | basic | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
+| `pet2602` | cat | basic | internal | Windows、macOS | `squat`、`walk`、`feed`、`ball` |
+| `pet2603` | cat | basic | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2604` | dog | basic | custom | macOS | `squat`、`walk`、`feed`、`ball` |
+| `pet2605` | cat | advanced | custom | Windows | `squat`、`walk`、`feed`、`ball`、`lie`、`lick`、`belly`、`stretch`，额外资源 `look`、`shake`、`yawn`、`sleep`、`hiss` |
+| `pet2606` | cat | basic | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2607` | cat | basic | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2608` | cat | basic | custom | Windows | `squat`、`walk`、`feed`、`ball` |
+| `pet2609` | cat | advanced | internal | Windows | `squat`、`walk`、`feed`、`ball`、`spin`、`lick`、`stretch`、`splits`，额外资源 `yawn`、`hiss` |
+| `pet2610` | cat | advanced | custom | Windows | `squat`、`walk`、`feed`、`ball`，额外资源 `shake`、`yawn` |
 
 资源目录命名为 `assets/animations/<variant>_<action>`，运行时主要使用：
 
@@ -84,7 +85,7 @@ npm.cmd run variant:new -- --breed lihua --date 2026-06-30
 - `loop.json`
 - `<variant>_actions_manifest.json`
 
-新增 custom 变体通过 `variant:new` 生成 `pet<yy><seq>` ID，Windows 产物路径派生为 `deliverables/<scope>/<id>/<channel>`。`aliases` 是可选字符串字段，空值在 CLI 中显示为 `-`。
+新增 custom 变体推荐通过 `variant:bootstrap` 生成 `pet<yy><seq>` ID 并接入资源，Windows 产物路径派生为 `deliverables/<scope>/<id>/<channel>`。变体只按真实 id 解析，不再使用 aliases。
 
 ## 工具脚本
 
@@ -95,7 +96,7 @@ npm.cmd run variant:new -- --breed lihua --date 2026-06-30
 | `tools/build_quality_previews.py` | 生成当前/候选/对比预览视频 |
 | `tools/process_pet_videos.py` | （已弃用）旧版批量处理脚本，功能已合并到 `process_pet_actions.py` |
 | `tools/replace_action_video.py` | （已弃用）旧版替换单个动作脚本，功能已合并到 `process_pet_actions.py` |
-| `electron-app/scripts/variant-cli.cjs` | 变体元数据查询、新建和动作源视频复制重命名 |
+| `electron-app/scripts/variant-cli.cjs` | 变体元数据查询、新建/bootstrap、动作源视频复制重命名和本地图鉴生成 |
 
 ## 生成产物和本地目录
 

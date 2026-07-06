@@ -18,9 +18,12 @@
     "variant:show": "node scripts/variant-cli.cjs show",
     "variant:query": "node scripts/variant-cli.cjs query",
     "variant:new": "node scripts/variant-cli.cjs new",
+    "variant:bootstrap": "node scripts/variant-cli.cjs bootstrap",
     "variant:check": "node scripts/variant-cli.cjs check",
     "variant:rename-assets": "node scripts/variant-cli.cjs rename-assets",
-    "variant:breeds": "node scripts/variant-cli.cjs breeds"
+    "variant:gallery": "node scripts/variant-cli.cjs gallery",
+    "variant:species": "node scripts/variant-cli.cjs species",
+    "variant:tiers": "node scripts/variant-cli.cjs tiers"
   },
   "devDependencies": {
     "electron": "^37.0.0",

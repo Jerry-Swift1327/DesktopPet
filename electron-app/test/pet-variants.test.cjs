@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const {
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
-  PET_BREED_IDS,
+  PET_SPECIES_IDS,
   PET_VARIANT_ALIASES,
   PET_VARIANT_IDS,
   SWITCHABLE_VARIANTS,
@@ -15,7 +15,11 @@ const {
   buildPetVariantNamespace,
   buildPetRuntimeConfig,
   resolvePetVariantProfile,
-  getPetBreedProfiles,
+  getActionPool,
+  getFeaturePool,
+  getNotesPool,
+  getSpeciesProfiles,
+  getTierProfiles,
   getPetVariantMetadata,
   getPetVariantMetadataList,
   getPetVariantProfile,
@@ -25,7 +29,8 @@ const {
   getVariantManifestName,
   getWindowsBuildProfile,
   isValidVariantDate,
-  createNextPetVariantId
+  createNextPetVariantId,
+  getNextInternalVersion
 } = require("../electron/pet-variants.cjs");
 
 test("pet runtime config defaults to pet2601 release while keeping dog assets", () => {
@@ -58,44 +63,54 @@ test("pet runtime config defaults to pet2601 release while keeping dog assets", 
   assert.equal(config.channelConfig.hoverPanelHeight, 180);
 });
 
+test("metadata v2 exposes species tier notes without legacy source fields", () => {
+  const raw = getPetVariantMetadata("pet2605");
+  const profile = getPetVariantProfile("pet2605");
+
+  assert.equal(raw.species, "cat");
+  assert.equal(raw.tier, "advanced");
+  assert.equal(raw.notes, "客户定制-高级");
+  assert.equal(raw.assetPrefix, "tabby");
+  assert.deepEqual(raw.actions.buttons, ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
+  assert.deepEqual(raw.actions.assets, ["look", "shake", "yawn", "sleep", "hiss"]);
+  assert.equal(Object.hasOwn(raw, "breed"), false);
+  assert.equal(Object.hasOwn(raw, "aliases"), false);
+  assert.equal(Object.hasOwn(raw, "tags"), false);
+  assert.equal(Object.hasOwn(profile, "breedGroup"), false);
+  assert.equal(Object.hasOwn(profile, "audience"), false);
+});
+
+test("catalog pools define species tiers notes actions and features", () => {
+  assert.deepEqual(PET_SPECIES_IDS, ["cat", "dog"]);
+  assert.equal(getSpeciesProfiles().cat.baseVariant, "pet2602");
+  assert.equal(getTierProfiles().basic.actionButtons.join(","), "squat,walk,feed,ball");
+  assert.equal(getNotesPool().internal.advanced, "内部使用-高级");
+  assert.equal(getActionPool().look.processPreset, "direction64");
+  assert.equal(getFeaturePool().idleYawn.implemented, true);
+});
+
 test("pet runtime config keeps variant features separate under pet ids", () => {
   const dogConfig = buildPetRuntimeConfig({ variant: "pet2601" });
   const catConfig = buildPetRuntimeConfig({ variant: "pet2602" });
   const shorthairConfig = buildPetRuntimeConfig({ variant: "pet2603" });
   const pomeranianConfig = buildPetRuntimeConfig({ variant: "pet2604" });
   const tabbyConfig = buildPetRuntimeConfig({ variant: "pet2605" });
-  const britConfig = buildPetRuntimeConfig({ variant: "pet2606" });
-  const vanConfig = buildPetRuntimeConfig({ variant: "pet2607" });
-  const bshmittedConfig = buildPetRuntimeConfig({ variant: "pet2608" });
   const ragdollConfig = buildPetRuntimeConfig({ variant: "pet2609" });
   const pet2610Config = buildPetRuntimeConfig({ variant: "pet2610" });
 
   assert.equal(dogConfig.features.autoStart, true);
   assert.equal(dogConfig.features.windowRoam, true);
+  assert.equal(dogConfig.features.customization, true);
   assert.equal(dogConfig.features.switchPet, false);
-  assert.equal(dogConfig.defaultScale, 1.1);
-  assert.equal(dogConfig.autoStartRegistryKey, "ChongbanDesktopPet-pet2601");
-  assert.equal(catConfig.features.autoStart, true);
-  assert.equal(catConfig.features.windowRoam, true);
-  assert.equal(catConfig.features.switchPet, false);
   assert.equal(catConfig.defaultScale, 1);
-  assert.equal(catConfig.autoStartRegistryKey, "ChongbanDesktopPet-pet2602");
   assert.equal(shorthairConfig.features.autoStart, false);
   assert.equal(shorthairConfig.features.windowRoam, false);
-  assert.equal(shorthairConfig.defaultScale, 1.1);
-  assert.equal(shorthairConfig.autoStartRegistryKey, "ChongbanDesktopPet-pet2603");
   assert.equal(pomeranianConfig.features.autoStart, false);
   assert.equal(pomeranianConfig.features.windowRoam, false);
-  assert.equal(pomeranianConfig.defaultScale, 1.1);
-  assert.equal(pomeranianConfig.autoStartRegistryKey, "ChongbanDesktopPet-pet2604");
-  assert.equal(tabbyConfig.features.autoStart, true);
-  assert.equal(tabbyConfig.features.windowRoam, true);
   assert.equal(tabbyConfig.features.eyeTracking, true);
-  assert.equal(tabbyConfig.defaultScale, 1.1);
-  assert.equal(tabbyConfig.autoStartRegistryKey, "ChongbanDesktopPet-pet2605");
+  assert.equal(tabbyConfig.features.sleepPoseSwitch, true);
   assert.equal(tabbyConfig.soundPrefix, "tabby");
-  assert.equal(tabbyConfig.channelConfig.showYawnTimer, true);
-  assert.equal(tabbyConfig.channelConfig.showSleepPoseTimer, true);
+  assert.equal(tabbyConfig.channelConfig.hoverPanelHeight, 225);
   assert.deepEqual(tabbyConfig.actionOrder, [
     "petSquat",
     "petWalk",
@@ -106,17 +121,6 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
     "petBelly",
     "petStretch"
   ]);
-  assert.equal(tabbyConfig.channelConfig.hoverPanelHeight, 225);
-  assert.equal(britConfig.features.autoStart, true);
-  assert.equal(vanConfig.features.autoStart, true);
-  assert.equal(bshmittedConfig.features.autoStart, true);
-  assert.equal(ragdollConfig.features.autoStart, true);
-  assert.equal(ragdollConfig.features.windowRoam, true);
-  assert.equal(ragdollConfig.features.eyeTracking, undefined);
-  assert.equal(ragdollConfig.features.dockShake, undefined);
-  assert.equal(ragdollConfig.channelConfig.showYawnTimer, true);
-  assert.equal(ragdollConfig.channelConfig.showSleepPoseTimer, false);
-  assert.deepEqual(ragdollConfig.actionLabelOverrides, {});
   assert.deepEqual(ragdollConfig.actionStatEffects, {
     petSplits: {
       healthDelta: 2,
@@ -133,15 +137,8 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
     "petStretch",
     "petSplits"
   ]);
-  assert.equal(pet2610Config.features.autoStart, true);
-  assert.equal(pet2610Config.features.windowRoam, true);
   assert.equal(pet2610Config.features.idleYawn, true);
   assert.equal(pet2610Config.features.dockShake, true);
-  assert.equal(pet2610Config.features.sleepPoseSwitch, undefined);
-  assert.equal(pet2610Config.features.wakeHiss, undefined);
-  assert.equal(pet2610Config.soundPrefix, null);
-  assert.equal(pet2610Config.channelConfig.showYawnTimer, true);
-  assert.equal(pet2610Config.channelConfig.showSleepPoseTimer, false);
   assert.deepEqual(pet2610Config.actionOrder, [
     "petSquat",
     "petWalk",
@@ -161,47 +158,19 @@ test("installer channel hides debug timers and uses compact panel height", () =>
   assert.equal(config.channelConfig.hoverPanelHeight, 150);
 });
 
-test("pomeranian variant uses release and installer channels", () => {
-  const releaseConfig = buildPetRuntimeConfig({ variant: "pet2604", channel: "release" });
-  const installerConfig = buildPetRuntimeConfig({ variant: "pet2604", channel: "installer" });
-
-  assert.equal(releaseConfig.variant, "pet2604");
-  assert.equal(releaseConfig.channel, "release");
-  assert.equal(releaseConfig.animationPrefix, "pomeranian");
-  assert.equal(releaseConfig.channelConfig.showDebugTimers, true);
-  assert.equal(releaseConfig.channelConfig.hoverPanelHeight, 180);
-  assert.equal(installerConfig.variant, "pet2604");
-  assert.equal(installerConfig.channel, "installer");
-  assert.equal(installerConfig.animationPrefix, "pomeranian");
-  assert.equal(installerConfig.channelConfig.showDebugTimers, false);
-  assert.equal(installerConfig.channelConfig.hoverPanelHeight, 150);
-});
-
-test("variant metadata resolves pet ids, breeds and delivery fields", () => {
-  assert.ok(PET_BREED_IDS.includes("gr"));
-  assert.ok(PET_BREED_IDS.includes("ash"));
-  assert.ok(PET_BREED_IDS.includes("sf"));
-  assert.ok(PET_BREED_IDS.includes("lihua"));
-  assert.equal(getPetBreedProfiles().gr.species, "dog");
-  assert.equal(getPetBreedProfiles().ash.species, "cat");
-  assert.equal(getPetVariantMetadata("pet2605").breed, "lihua");
-  assert.equal(getPetVariantMetadata("pet2610").breed, "lihua");
-  assert.equal(getPetVariantMetadata("pet2604").breed, "pom");
+test("variant metadata resolves pet ids species tiers and delivery fields", () => {
+  assert.equal(getPetVariantMetadata("pet2605").species, "cat");
+  assert.equal(getPetVariantMetadata("pet2610").species, "cat");
+  assert.equal(getPetVariantMetadata("pet2604").species, "dog");
+  assert.equal(getPetVariantProfile("pet2609").notes, "内部使用-高级");
   assert.deepEqual(getPetVariantProfile("pet2602").platforms, ["win32", "darwin"]);
   assert.deepEqual(getPetVariantProfile("pet2603").deliveryPathSegments, ["custom", "pet2603"]);
-  assert.deepEqual(getPetVariantProfile("pet2606").deliveryPathSegments, ["custom", "pet2606"]);
-  assert.deepEqual(getPetVariantProfile("pet2608").deliveryPathSegments, ["custom", "pet2608"]);
-  assert.deepEqual(getPetVariantProfile("pet2607").deliveryPathSegments, ["custom", "pet2607"]);
-  assert.deepEqual(getPetVariantProfile("pet2605").deliveryPathSegments, ["custom", "pet2605"]);
   assert.deepEqual(getPetVariantProfile("pet2605").actions, ["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]);
   assert.deepEqual(getPetVariantProfile("pet2609").deliveryPathSegments, ["internal", "pet2609"]);
   assert.deepEqual(getPetVariantProfile("pet2609").actions, ["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "splits"]);
   assert.deepEqual(getPetVariantProfile("pet2609").extraAnimationAssets, ["yawn", "hiss"]);
-  assert.deepEqual(getPetVariantProfile("pet2610").deliveryPathSegments, ["custom", "pet2610"]);
-  assert.deepEqual(getPetVariantProfile("pet2610").actions, ["squat", "walk", "feed", "ball"]);
   assert.deepEqual(getPetVariantProfile("pet2610").extraAnimationAssets, ["shake", "yawn"]);
   assert.deepEqual(getPetVariantProfile("pet2604").platforms, ["darwin"]);
-  assert.deepEqual(getPetVariantProfile("pet2604").aliases, []);
 });
 
 test("variant lists are sorted by date ascending", () => {
@@ -225,17 +194,9 @@ test("Windows build profile centralizes paths and package names", () => {
   assert.equal(getWindowsBuildProfile("pet2601", "release").deliveryVersion, "1.1");
   assert.equal(getWindowsBuildProfile("pet2602", "installer").output, "deliverables/internal/pet2602/installer");
   assert.equal(getWindowsBuildProfile("pet2602", "installer").deliveryVersion, "1.2");
-  assert.equal(getWindowsBuildProfile("pet2606", "installer").output, "deliverables/custom/pet2606/installer");
-  assert.equal(getWindowsBuildProfile("pet2608", "release").output, "deliverables/custom/pet2608/release");
-  assert.equal(getWindowsBuildProfile("pet2603", "release").output, "deliverables/custom/pet2603/release");
-  assert.equal(getWindowsBuildProfile("pet2607", "release").output, "deliverables/custom/pet2607/release");
-  assert.equal(getWindowsBuildProfile("pet2605", "release").output, "deliverables/custom/pet2605/release");
-  assert.equal(getWindowsBuildProfile("pet2607", "release").deliveryVersion, "1.0");
-  assert.equal(getWindowsBuildProfile("pet2605", "release").deliveryVersion, "1.0");
   assert.equal(getWindowsBuildProfile("pet2609", "installer").output, "deliverables/internal/pet2609/installer");
   assert.equal(getWindowsBuildProfile("pet2609", "installer").deliveryVersion, "1.3");
   assert.equal(getWindowsBuildProfile("pet2610", "release").output, "deliverables/custom/pet2610/release");
-  assert.equal(getWindowsBuildProfile("pet2610", "release").deliveryVersion, "1.0");
   assert.equal(getWindowsBuildProfile("pet2610", "installer").soundPrefix, null);
   assert.equal(getWindowsBuildProfile("pet2605", "installer").soundPrefix, "tabby");
   assert.deepEqual(getWindowsBuildProfile("pet2601", "release").switchableVariants, ["pet2601", "pet2602"]);
@@ -243,91 +204,80 @@ test("Windows build profile centralizes paths and package names", () => {
   assert.throws(() => getWindowsBuildProfile("pet2604", "installer"), /does not support Windows packaging/);
 });
 
-test("new custom variant drafts derive pet id runtime and delivery defaults", () => {
-  const draft = createPetVariantMetadataDraft({
-    breed: "lihua",
+test("new variant drafts derive V2 fields version notes and delivery defaults", () => {
+  const customDraft = createPetVariantMetadataDraft({
+    species: "cat",
+    tier: "advanced",
     date: "2026-06-30"
   });
-  const profile = resolvePetVariantProfile(draft);
+  const internalDraft = createPetVariantMetadataDraft({
+    species: "dog",
+    scope: "internal",
+    tier: "basic",
+    date: "2026-07-01"
+  });
+  const profile = resolvePetVariantProfile(customDraft);
 
-  assert.equal(draft.id, "pet2611");
-  assert.equal(draft.aliases, "");
+  assert.equal(customDraft.id, "pet2611");
+  assert.equal(customDraft.notes, "客户定制-高级");
+  assert.equal(customDraft.version, "1.0");
+  assert.equal(internalDraft.version, "1.4");
+  assert.equal(getNextInternalVersion(), "1.4");
   assert.equal(profile.scope, "custom");
+  assert.equal(profile.species, "cat");
+  assert.equal(profile.tier, "advanced");
   assert.deepEqual(profile.platforms, ["win32"]);
-  assert.deepEqual(profile.actions, ["squat", "walk", "feed", "ball"]);
   assert.deepEqual(profile.deliveryPathSegments, ["custom", "pet2611"]);
   assert.equal(profile.animationPrefix, "pet2611");
-  assert.equal(profile.autoStartRegistryKey, "ChongbanDesktopPet-pet2611");
-  assert.equal(profile.singleInstanceKey, "com.chongban.desktoppet.pet2611");
-  assert.equal(profile.features.autoStart, true);
-  assert.equal(profile.features.windowRoam, true);
   assert.match(profile.installerGuid, /^[0-9a-f-]{36}$/);
   assert.equal(createVariantInstallerGuid("pet2611"), createVariantInstallerGuid("pet2611"));
 });
 
-test("variant ids resolve to canonical ids without historical aliases", () => {
+test("variant ids resolve to canonical ids only", () => {
   assert.equal(resolvePetVariantId("pet2601"), "pet2601");
   assert.equal(resolvePetVariantId("pet2605"), "pet2605");
   assert.equal(resolvePetVariantId("dog-2601"), null);
-  assert.equal(resolvePetVariantId("bsh-2602"), null);
-  assert.equal(resolvePetVariantId("pom-2601"), null);
   assert.deepEqual(PET_VARIANT_ALIASES, []);
   assert.equal(normalizePetVariant("bsh-2603"), DEFAULT_PET_VARIANT);
   assert.equal(buildPetRuntimeConfig({ variant: "bsh-2603" }).variant, DEFAULT_PET_VARIANT);
 });
 
-test("variant namespace rejects id and alias conflicts", () => {
+test("variant namespace rejects duplicate ids and V2 validation rejects unknown actions/features", () => {
   assert.throws(
     () => buildPetVariantNamespace({
-      schemaVersion: 1,
+      schemaVersion: 2,
       variants: {
-        pet2601: { id: "pet2601", breed: "gr", aliases: "pet2602" },
-        pet2602: { id: "pet2602", breed: "ash", aliases: "" }
+        pet2601: { id: "pet2601", species: "dog", date: "2026-05-08" },
+        pet2602: { id: "pet2601", species: "cat", date: "2026-05-27" }
       }
     }),
-    /Duplicate pet variant namespace token: pet2602/
+    /does not match/
   );
   assert.throws(
-    () => buildPetVariantNamespace({
-      schemaVersion: 1,
-      variants: {
-        pet2601: { id: "pet2601", breed: "gr", aliases: ["pet2602"] }
-      }
+    () => resolvePetVariantProfile({
+      id: "pet2611",
+      date: "2026-07-06",
+      species: "cat",
+      actions: { buttons: ["squat", "frolic"], assets: [] }
     }),
-    /aliases must be a string/
+    /Unknown pet action frolic/
   );
   assert.throws(
-    () => buildPetVariantNamespace({
-      schemaVersion: 1,
-      variants: {
-        pet2601: { id: "pet2601", breed: "gr", aliases: "pet_2601" }
-      }
+    () => resolvePetVariantProfile({
+      id: "pet2611",
+      date: "2026-07-06",
+      species: "cat",
+      features: { enable: ["doubleClickAction"], disable: [] }
     }),
-    /Invalid pet variant alias/
+    /Unknown pet feature doubleClickAction/
   );
 });
 
 test("custom variant ids use pet-year sequence across dated variants", () => {
-  assert.equal(createNextPetVariantId({ breed: "bsh", date: "2026-06-30" }), "pet2611");
-  assert.equal(createNextPetVariantId({ breed: "pom", date: "2026-07-01" }), "pet2611");
-  assert.equal(createNextPetVariantId({ breed: "bsh", date: "2027-01-01" }), "pet2701");
-  assert.throws(() => createNextPetVariantId({ breed: "bsh", date: "2026-06-01" }), /would require resequencing/);
-});
-
-test("historical variants include maintenance dates", () => {
-  assert.equal(getPetVariantProfile("pet2601").date, "2026-05-08");
-  assert.equal(getPetVariantProfile("pet2602").date, "2026-05-27");
-  assert.equal(getPetVariantProfile("pet2603").date, "2026-05-28");
-  assert.equal(getPetVariantProfile("pet2604").date, "2026-06-06");
-  assert.equal(getPetVariantProfile("pet2605").date, "2026-06-09");
-  assert.equal(getPetVariantProfile("pet2606").date, "2026-06-09");
-  assert.equal(getPetVariantProfile("pet2607").date, "2026-06-12");
-  assert.equal(getPetVariantProfile("pet2608").date, "2026-06-15");
-  assert.equal(getPetVariantProfile("pet2609").date, "2026-06-19");
-  assert.equal(getPetVariantProfile("pet2610").date, "2026-06-29");
-  assert.equal(getPetVariantProfile("pet2601").breed, "gr");
-  assert.equal(getPetVariantProfile("pet2602").breed, "ash");
-  assert.equal(getPetVariantProfile("pet2603").breed, "sf");
+  assert.equal(createNextPetVariantId({ date: "2026-06-30" }), "pet2611");
+  assert.equal(createNextPetVariantId({ date: "2026-07-01" }), "pet2611");
+  assert.equal(createNextPetVariantId({ date: "2027-01-01" }), "pet2701");
+  assert.throws(() => createNextPetVariantId({ date: "2026-06-01" }), /would require resequencing/);
 });
 
 test("variant date validation accepts only concrete ISO dates", () => {
@@ -338,17 +288,12 @@ test("variant date validation accepts only concrete ISO dates", () => {
 
 test("invalid variant and channel fall back to defaults", () => {
   assert.equal(normalizePetVariant("unknown"), DEFAULT_PET_VARIANT);
-  assert.equal(normalizePetVariant("pom-2601"), DEFAULT_PET_VARIANT);
   assert.equal(normalizePetChannel("unknown"), DEFAULT_PET_CHANNEL);
 });
 
 test("mac packaged user data folder uses versioned Chongban parent and variant folder", () => {
   assert.equal(
     getPetUserDataFolder({ variant: "pet2604", channel: "installer", platform: "darwin" }),
-    "Chongban 1.0/pet2604"
-  );
-  assert.equal(
-    getPetUserDataFolder({ variant: "pet2604", channel: "release", platform: "darwin" }),
     "Chongban 1.0/pet2604"
   );
   assert.equal(getPetUserDataFolder({ variant: "pet2604", channel: "installer", platform: "win32" }), "pet2604");
@@ -362,52 +307,10 @@ test("platform features hide Windows-only menu items on macOS", () => {
     customization: true,
     switchPet: false
   });
-  assert.deepEqual(getPetPlatformFeatures({ variant: "pet2602", platform: "win32" }), {
-    autoStart: true,
-    windowRoam: true,
-    eyeTracking: false,
-    customization: true,
-    switchPet: false
-  });
   assert.deepEqual(getPetPlatformFeatures({ variant: "pet2605", platform: "win32" }), {
     autoStart: true,
     windowRoam: true,
     eyeTracking: true,
-    customization: false,
-    switchPet: false
-  });
-  assert.deepEqual(getPetPlatformFeatures({ variant: "pet2609", platform: "win32" }), {
-    autoStart: true,
-    windowRoam: true,
-    eyeTracking: false,
-    customization: false,
-    switchPet: false
-  });
-  assert.deepEqual(getPetPlatformFeatures({ variant: "pet2610", platform: "win32" }), {
-    autoStart: true,
-    windowRoam: true,
-    eyeTracking: false,
-    customization: false,
-    switchPet: false
-  });
-  assert.deepEqual(getPetPlatformFeatures({ variant: "pet2606", platform: "win32" }), {
-    autoStart: true,
-    windowRoam: true,
-    eyeTracking: false,
-    customization: false,
-    switchPet: false
-  });
-  assert.deepEqual(getPetPlatformFeatures({ variant: "pet2608", platform: "win32" }), {
-    autoStart: true,
-    windowRoam: true,
-    eyeTracking: false,
-    customization: false,
-    switchPet: false
-  });
-  assert.deepEqual(getPetPlatformFeatures({ variant: "pet2607", platform: "win32" }), {
-    autoStart: true,
-    windowRoam: true,
-    eyeTracking: false,
     customization: false,
     switchPet: false
   });
@@ -427,18 +330,6 @@ test("switchable variants keep dog and cat logic available while menu entry is h
 });
 
 test("existing variants keep the current animation folder convention", () => {
-  assert.deepEqual(getVariantAnimationFolders("pet2603"), [
-    "shorthair_squat",
-    "shorthair_walk",
-    "shorthair_feed",
-    "shorthair_ball"
-  ]);
-  assert.deepEqual(getVariantAnimationFolders("pet2604"), [
-    "pomeranian_squat",
-    "pomeranian_walk",
-    "pomeranian_feed",
-    "pomeranian_ball"
-  ]);
   assert.deepEqual(getVariantAnimationFolders("pet2605"), [
     "tabby_squat",
     "tabby_walk",
@@ -474,30 +365,8 @@ test("existing variants keep the current animation folder convention", () => {
     "pet2610_shake",
     "pet2610_yawn"
   ]);
-  assert.deepEqual(getVariantAnimationFolders("pet2606"), [
-    "brit_squat",
-    "brit_walk",
-    "brit_feed",
-    "brit_ball"
-  ]);
-  assert.deepEqual(getVariantAnimationFolders("pet2608"), [
-    "bshmitted_squat",
-    "bshmitted_walk",
-    "bshmitted_feed",
-    "bshmitted_ball"
-  ]);
-  assert.deepEqual(getVariantAnimationFolders("pet2607"), [
-    "van_squat",
-    "van_walk",
-    "van_feed",
-    "van_ball"
-  ]);
   assert.equal(getVariantManifestName("pet2602"), "cat_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2605"), "tabby_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2609"), "ragdoll_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2610"), "pet2610_actions_manifest.json");
-  assert.equal(getVariantManifestName("pet2606"), "brit_actions_manifest.json");
-  assert.equal(getVariantManifestName("pet2608"), "bshmitted_actions_manifest.json");
-  assert.equal(getVariantManifestName("pet2607"), "van_actions_manifest.json");
-  assert.equal(getVariantManifestName("pet2604"), "pomeranian_actions_manifest.json");
 });

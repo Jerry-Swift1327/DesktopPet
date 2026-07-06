@@ -201,6 +201,8 @@ python tools\build_quality_previews.py --actions dog_walk --clean
 
 ## 推荐资源处理流程
 
+新增完整变体时，优先从 `electron-app` 运行 `npm.cmd run variant:bootstrap` 统一编排元数据、源视频复制、资源处理和本地图鉴生成；本脚本仍是实际抽帧、抠像和 manifest 写入入口。
+
 1. 使用 `process_pet_actions.py process` 处理新变体动作。
 2. 检查 `processed_frames`、`transparent_frames` 和 `loop.json`。
 3. 使用 `build_quality_previews.py` 生成预览。

@@ -1,194 +1,348 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "variants": {
     "pet2601": {
       "id": "pet2601",
-      "breed": "gr",
       "date": "2026-05-08",
-      "aliases": "",
       "scope": "internal",
+      "tier": "basic",
+      "species": "dog",
+      "notes": "内部使用-基础",
       "version": "1.1",
       "scale": 1.1,
       "platforms": [
         "win32",
         "darwin"
       ],
-      "animationPrefix": "dog",
+      "assetPrefix": "dog",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
+      },
       "features": {
-        "customization": true,
-        "switchPet": false
+        "enable": [
+          "autoStart",
+          "windowRoam",
+          "customization"
+        ],
+        "disable": [
+          "switchPet"
+        ]
       }
     },
     "pet2602": {
       "id": "pet2602",
-      "breed": "ash",
       "date": "2026-05-27",
-      "aliases": "",
       "scope": "internal",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "内部使用-基础",
       "version": "1.2",
       "scale": 1,
       "platforms": [
         "win32",
         "darwin"
       ],
-      "animationPrefix": "cat",
+      "assetPrefix": "cat",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
+      },
       "features": {
-        "customization": true,
-        "switchPet": false
+        "enable": [
+          "autoStart",
+          "windowRoam",
+          "customization"
+        ],
+        "disable": [
+          "switchPet"
+        ]
       }
     },
     "pet2603": {
       "id": "pet2603",
-      "breed": "sf",
       "date": "2026-05-28",
-      "aliases": "",
       "scope": "custom",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "客户定制-基础",
       "version": "1.0",
       "scale": 1.1,
-      "animationPrefix": "shorthair",
-      "features": {
-        "autoStart": false,
-        "windowRoam": false
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "shorthair",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
       },
-      "tags": [
-        "blue-fold"
-      ]
+      "features": {
+        "enable": [],
+        "disable": [
+          "autoStart",
+          "windowRoam"
+        ]
+      }
     },
     "pet2604": {
       "id": "pet2604",
-      "breed": "pom",
       "date": "2026-06-06",
-      "aliases": "",
       "scope": "custom",
+      "tier": "basic",
+      "species": "dog",
+      "notes": "客户定制-基础",
       "version": "1.0",
       "scale": 1.1,
-      "platform": "darwin",
-      "animationPrefix": "pomeranian",
+      "platforms": [
+        "darwin"
+      ],
+      "assetPrefix": "pomeranian",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
+      },
       "features": {
-        "autoStart": false,
-        "windowRoam": false
+        "enable": [],
+        "disable": [
+          "autoStart",
+          "windowRoam"
+        ]
       }
     },
     "pet2605": {
       "id": "pet2605",
-      "breed": "lihua",
       "date": "2026-06-09",
-      "aliases": "",
       "scope": "custom",
+      "tier": "advanced",
+      "species": "cat",
+      "notes": "客户定制-高级",
       "version": "1.0",
       "scale": 1.1,
-      "animationPrefix": "tabby",
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "tabby",
       "soundPrefix": "tabby",
-      "extraActions": [
-        "lie",
-        "lick",
-        "belly",
-        "stretch"
-      ],
-      "extraAssets": [
-        "look",
-        "shake",
-        "yawn",
-        "sleep",
-        "hiss"
-      ],
-      "features": {
-        "eyeTracking": true,
-        "idleYawn": true,
-        "sleepPoseSwitch": true,
-        "wakeHiss": true,
-        "dockShake": true
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball",
+          "lie",
+          "lick",
+          "belly",
+          "stretch"
+        ],
+        "assets": [
+          "look",
+          "shake",
+          "yawn",
+          "sleep",
+          "hiss"
+        ]
       },
-      "tags": [
-        "tabby"
-      ]
+      "features": {
+        "enable": [
+          "autoStart",
+          "windowRoam",
+          "eyeTracking",
+          "idleYawn",
+          "sleepPoseSwitch",
+          "wakeHiss",
+          "dockShake"
+        ],
+        "disable": []
+      }
     },
     "pet2606": {
       "id": "pet2606",
-      "breed": "bsh",
       "date": "2026-06-09",
-      "aliases": "",
       "scope": "custom",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "客户定制-基础",
       "version": "1.0",
       "scale": 1.1,
-      "animationPrefix": "brit",
-      "tags": [
-        "blue-bicolor"
-      ]
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "brit",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "windowRoam"
+        ],
+        "disable": []
+      }
     },
     "pet2607": {
       "id": "pet2607",
-      "breed": "bsh",
       "date": "2026-06-12",
-      "aliases": "",
       "scope": "custom",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "客户定制-基础",
       "version": "1.0",
       "scale": 1.1,
-      "animationPrefix": "van",
-      "tags": [
-        "red-van"
-      ]
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "van",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "windowRoam"
+        ],
+        "disable": []
+      }
     },
     "pet2608": {
       "id": "pet2608",
-      "breed": "bsh",
       "date": "2026-06-15",
-      "aliases": "",
       "scope": "custom",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "客户定制-基础",
       "version": "1.0",
       "scale": 1.1,
-      "animationPrefix": "bshmitted",
-      "tags": [
-        "blue-mitted"
-      ]
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "bshmitted",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "windowRoam"
+        ],
+        "disable": []
+      }
     },
     "pet2609": {
       "id": "pet2609",
-      "breed": "ragdoll",
       "date": "2026-06-19",
-      "aliases": "",
       "scope": "internal",
+      "tier": "advanced",
+      "species": "cat",
+      "notes": "内部使用-高级",
       "version": "1.3",
       "scale": 1.1,
-      "animationPrefix": "ragdoll",
-      "extraActions": [
-        "spin",
-        "lick",
-        "stretch",
-        "splits"
+      "platforms": [
+        "win32"
       ],
-      "extraAssets": [
-        "yawn",
-        "hiss"
-      ],
+      "assetPrefix": "ragdoll",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball",
+          "spin",
+          "lick",
+          "stretch",
+          "splits"
+        ],
+        "assets": [
+          "yawn",
+          "hiss"
+        ]
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "windowRoam",
+          "idleYawn",
+          "wakeHiss"
+        ],
+        "disable": []
+      },
       "actionStatEffects": {
         "splits": {
           "healthDelta": 2,
           "fullnessDelta": -1
         }
-      },
-      "features": {
-        "idleYawn": true,
-        "wakeHiss": true
       }
     },
     "pet2610": {
       "id": "pet2610",
-      "breed": "lihua",
       "date": "2026-06-29",
-      "aliases": "",
       "scope": "custom",
+      "tier": "advanced",
+      "species": "cat",
+      "notes": "客户定制-高级",
       "version": "1.0",
       "scale": 1.1,
-      "platform": "win32",
-      "extraActions": [],
-      "extraAssets": [
-        "shake",
-        "yawn"
+      "platforms": [
+        "win32"
       ],
+      "assetPrefix": "pet2610",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": [
+          "shake",
+          "yawn"
+        ]
+      },
       "features": {
-        "idleYawn": true,
-        "dockShake": true
+        "enable": [
+          "autoStart",
+          "windowRoam",
+          "idleYawn",
+          "dockShake"
+        ],
+        "disable": []
       }
     }
   }

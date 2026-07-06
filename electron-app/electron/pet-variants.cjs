@@ -1,5 +1,17 @@
 const crypto = require("crypto");
 const path = require("path");
+const {
+  ACTION_POOL,
+  FEATURE_POOL,
+  NOTES_POOL,
+  PET_SPECIES_PROFILES,
+  TIER_PROFILES,
+  getActionPool,
+  getFeaturePool,
+  getNotesPool,
+  getSpeciesProfiles,
+  getTierProfiles
+} = require("./pet-catalog.cjs");
 
 const PET_VARIANT_CONFIG_FILE = "pet_variant.json";
 const PREFERRED_VARIANT_FILE = "preferred-variant.json";
@@ -7,46 +19,21 @@ const DEFAULT_PET_VARIANT = "pet2601";
 const DEFAULT_PET_CHANNEL = "release";
 const DEFAULT_PET_PLATFORM = "win32";
 const DEFAULT_PET_SCOPE = "custom";
+const DEFAULT_PET_TIER = "basic";
+const DEFAULT_PET_SPECIES = "cat";
 const MAC_USER_DATA_PARENT = "Chongban 1.0";
 const SWITCHABLE_VARIANTS = Object.freeze(["pet2601", "pet2602"]);
 const PET_VARIANT_METADATA_FILE = path.join(__dirname, "pet-variant-metadata.json");
 const INSTALLER_GUID_NAMESPACE = "6d0c98fd-153d-40cf-9738-77c241c1e064";
 const PET_VARIANT_NAMESPACE_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const PET_VARIANT_ID_PATTERN = /^pet\d{4}$/;
+const PET_ACTION_ORDER = Object.freeze(TIER_PROFILES.basic.actionButtons.slice());
 
-const PET_ACTIONS = Object.freeze({
-  squat: Object.freeze({ id: "petSquat", asset: "squat" }),
-  walk: Object.freeze({ id: "petWalk", asset: "walk" }),
-  feed: Object.freeze({ id: "petFeed", asset: "feed" }),
-  ball: Object.freeze({ id: "petBall", asset: "ball" }),
-  lie: Object.freeze({ id: "petLie", asset: "lie" }),
-  spin: Object.freeze({ id: "petSpin", asset: "spin" }),
-  lick: Object.freeze({ id: "petLick", asset: "lick" }),
-  belly: Object.freeze({ id: "petBelly", asset: "belly" }),
-  stretch: Object.freeze({ id: "petStretch", asset: "stretch" }),
-  splits: Object.freeze({ id: "petSplits", asset: "splits" }),
-  shake: Object.freeze({ id: "petShake", asset: "shake" }),
-  yawn: Object.freeze({ id: "petYawn", asset: "yawn" }),
-  sleep: Object.freeze({ id: "petSleep", asset: "sleep" }),
-  hiss: Object.freeze({ id: "petHiss", asset: "hiss" })
-});
-
-const PET_ACTION_ORDER = Object.freeze(["squat", "walk", "feed", "ball"]);
-
-const PET_BREED_PROFILES = Object.freeze({
-  ash: Object.freeze({ id: "ash", species: "cat", baseVariant: "pet2602" }),
-  bsh: Object.freeze({ id: "bsh", species: "cat", baseVariant: "pet2602" }),
-  gr: Object.freeze({ id: "gr", species: "dog", baseVariant: "pet2601" }),
-  lihua: Object.freeze({ id: "lihua", species: "cat", baseVariant: "pet2602" }),
-  ragdoll: Object.freeze({ id: "ragdoll", species: "cat", baseVariant: "pet2602" }),
-  pom: Object.freeze({ id: "pom", species: "dog", baseVariant: "pet2601" }),
-  sf: Object.freeze({ id: "sf", species: "cat", baseVariant: "pet2602" })
-});
-
-const DEFAULT_FEATURES = Object.freeze({
-  autoStart: true,
-  windowRoam: true
-});
+const PET_ACTIONS = Object.freeze(Object.fromEntries(
+  Object.entries(ACTION_POOL)
+    .filter(([, action]) => action.id)
+    .map(([key, action]) => [key, Object.freeze({ id: action.id, asset: action.asset })])
+));
 
 const RAW_PET_VARIANT_METADATA = require("./pet-variant-metadata.json");
 
@@ -76,7 +63,7 @@ function deepFreeze(value) {
 
 function normalizeVariantMetadata(metadata) {
   return {
-    schemaVersion: metadata.schemaVersion || 1,
+    schemaVersion: metadata.schemaVersion || 2,
     variants: metadata.variants || metadata
   };
 }
@@ -128,9 +115,123 @@ function normalizePlatforms(raw = {}) {
 }
 
 function assertKnownAction(action, variantId) {
-  if (!Object.prototype.hasOwnProperty.call(PET_ACTIONS, action)) {
-    throw new Error(`Unknown pet action ${action} in variant ${variantId}.`);
+  if (!Object.prototype.hasOwnProperty.call(ACTION_POOL, action)) {
+    throw new Error(`Unknown pet action ${action} in variant ${variantId}. Register it in ACTION_POOL first.`);
   }
+}
+
+function assertActionHasState(action, variantId) {
+  assertKnownAction(action, variantId);
+  if (!ACTION_POOL[action].id) {
+    throw new Error(`Pet action ${action} in variant ${variantId} does not have a runtime state id.`);
+  }
+}
+
+function assertKnownFeature(feature, variantId) {
+  if (!Object.prototype.hasOwnProperty.call(FEATURE_POOL, feature)) {
+    throw new Error(`Unknown pet feature ${feature} in variant ${variantId}. Register it in FEATURE_POOL first.`);
+  }
+  if (!FEATURE_POOL[feature].implemented) {
+    throw new Error(`Pet feature ${feature} in variant ${variantId} is not implemented.`);
+  }
+}
+
+function assertKnownSpecies(species) {
+  if (!Object.prototype.hasOwnProperty.call(PET_SPECIES_PROFILES, species)) {
+    throw new Error(`Unknown species: ${species}. Available species: ${Object.keys(PET_SPECIES_PROFILES).join(", ")}`);
+  }
+}
+
+function assertKnownTier(tier) {
+  if (!Object.prototype.hasOwnProperty.call(TIER_PROFILES, tier)) {
+    throw new Error(`Unknown tier: ${tier}. Available tiers: ${Object.keys(TIER_PROFILES).join(", ")}`);
+  }
+}
+
+function assertKnownScope(scope) {
+  if (!Object.prototype.hasOwnProperty.call(NOTES_POOL, scope)) {
+    throw new Error(`Unknown scope: ${scope}. Available scopes: ${Object.keys(NOTES_POOL).join(", ")}`);
+  }
+}
+
+function normalizeStringArray(value, label, variantId) {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Pet variant ${variantId} ${label} must be an array.`);
+  }
+  return value.map((item) => String(item));
+}
+
+function uniqueList(values) {
+  return Array.from(new Set(values));
+}
+
+function getDefaultNotes(scope, tier) {
+  assertKnownScope(scope);
+  assertKnownTier(tier);
+  return NOTES_POOL[scope][tier];
+}
+
+function normalizeActionConfig(rawProfile = {}, variantId = "") {
+  const tier = rawProfile.tier || DEFAULT_PET_TIER;
+  assertKnownTier(tier);
+  const tierProfile = TIER_PROFILES[tier];
+  const rawActions = rawProfile.actions || {};
+  if (!rawActions || typeof rawActions !== "object" || Array.isArray(rawActions)) {
+    throw new Error(`Pet variant ${variantId} actions must be an object.`);
+  }
+
+  const buttons = normalizeStringArray(
+    rawActions.buttons === undefined ? tierProfile.actionButtons : rawActions.buttons,
+    "actions.buttons",
+    variantId
+  );
+  const assets = normalizeStringArray(
+    rawActions.assets === undefined ? tierProfile.actionAssets : rawActions.assets,
+    "actions.assets",
+    variantId
+  );
+
+  for (const action of buttons) {
+    assertActionHasState(action, variantId);
+  }
+  for (const action of assets) {
+    assertKnownAction(action, variantId);
+  }
+
+  return {
+    buttons: uniqueList(buttons),
+    assets: uniqueList(assets)
+  };
+}
+
+function normalizeFeatureConfig(rawProfile = {}, variantId = "") {
+  const tier = rawProfile.tier || DEFAULT_PET_TIER;
+  assertKnownTier(tier);
+  const tierFeatures = TIER_PROFILES[tier].features || {};
+  const rawFeatures = rawProfile.features || {};
+  if (!rawFeatures || typeof rawFeatures !== "object" || Array.isArray(rawFeatures)) {
+    throw new Error(`Pet variant ${variantId} features must be an object.`);
+  }
+
+  const enabled = normalizeStringArray(tierFeatures.enable, "tier.features.enable", variantId);
+  const disabled = normalizeStringArray(tierFeatures.disable, "tier.features.disable", variantId);
+  const explicitEnable = normalizeStringArray(rawFeatures.enable, "features.enable", variantId);
+  const explicitDisable = normalizeStringArray(rawFeatures.disable, "features.disable", variantId);
+  const featureState = {};
+
+  for (const feature of enabled.concat(explicitEnable)) {
+    assertKnownFeature(feature, variantId);
+    featureState[feature] = true;
+  }
+  for (const feature of disabled.concat(explicitDisable)) {
+    assertKnownFeature(feature, variantId);
+    featureState[feature] = false;
+  }
+
+  return featureState;
 }
 
 function normalizeActionLabelOverrides(rawProfile = {}, variantId = "") {
@@ -140,7 +241,7 @@ function normalizeActionLabelOverrides(rawProfile = {}, variantId = "") {
   }
   const result = {};
   for (const [action, label] of Object.entries(overrides)) {
-    assertKnownAction(action, variantId);
+    assertActionHasState(action, variantId);
     if (typeof label !== "string" || !label.trim()) {
       throw new Error(`Pet variant ${variantId} action label override for ${action} must be a non-empty string.`);
     }
@@ -156,7 +257,7 @@ function normalizeActionStatEffects(rawProfile = {}, variantId = "") {
   }
   const result = {};
   for (const [action, effect] of Object.entries(effects)) {
-    assertKnownAction(action, variantId);
+    assertActionHasState(action, variantId);
     if (!effect || typeof effect !== "object" || Array.isArray(effect)) {
       throw new Error(`Pet variant ${variantId} action stat effect for ${action} must be an object.`);
     }
@@ -170,24 +271,9 @@ function normalizeActionStatEffects(rawProfile = {}, variantId = "") {
         normalized[key] = value;
       }
     }
-    result[PET_ACTIONS[action].id] = normalized;
+    result[ACTION_POOL[action].id] = normalized;
   }
   return result;
-}
-
-function getVariantAliases(rawProfile = {}) {
-  if (rawProfile.aliases === undefined || rawProfile.aliases === null || rawProfile.aliases === "-") {
-    return [];
-  }
-  if (typeof rawProfile.aliases !== "string") {
-    throw new Error(`Pet variant ${rawProfile.id || "<unknown>"} aliases must be a string.`);
-  }
-  const aliases = rawProfile.aliases
-    .split(",")
-    .map((alias) => alias.trim())
-    .filter(Boolean)
-    .filter((alias) => alias !== "-");
-  return aliases;
 }
 
 function assertVariantNamespaceToken(token, kind, variantId) {
@@ -244,9 +330,6 @@ function buildPetVariantNamespace(metadata = PET_VARIANT_METADATA) {
     }
     assertPetVariantId(id);
     register(id, id, "id");
-    for (const alias of getVariantAliases({ ...rawProfile, id })) {
-      register(alias, id, "alias");
-    }
   }
 
   return deepFreeze(namespace);
@@ -254,52 +337,46 @@ function buildPetVariantNamespace(metadata = PET_VARIANT_METADATA) {
 
 function resolvePetVariantProfile(rawProfile) {
   const id = rawProfile.id;
-  const breed = rawProfile.breed;
-  const breedProfile = PET_BREED_PROFILES[breed];
   if (!id) {
     throw new Error("Pet variant metadata is missing id.");
   }
   assertPetVariantIdMatchesDate(id, rawProfile.date);
-  if (!breedProfile) {
-    throw new Error(`Pet variant ${id} uses unknown breed: ${breed}`);
-  }
 
   const scope = rawProfile.scope || DEFAULT_PET_SCOPE;
-  const extraActions = (rawProfile.extraActions || rawProfile.additionalActions || []).slice();
-  for (const action of extraActions) {
-    assertKnownAction(action, id);
-  }
-  const aliases = getVariantAliases(rawProfile);
-  const actions = PET_ACTION_ORDER.concat(extraActions);
-  const extraAssets = (rawProfile.extraAssets || rawProfile.extraAnimationAssets || []).slice();
-  const features = Object.assign({}, DEFAULT_FEATURES, rawProfile.features || {});
+  const tier = rawProfile.tier || DEFAULT_PET_TIER;
+  const species = rawProfile.species || DEFAULT_PET_SPECIES;
+  assertKnownScope(scope);
+  assertKnownTier(tier);
+  assertKnownSpecies(species);
+
+  const actionConfig = normalizeActionConfig({ ...rawProfile, tier }, id);
+  const features = normalizeFeatureConfig({ ...rawProfile, tier }, id);
   const actionLabelOverrides = normalizeActionLabelOverrides(rawProfile, id);
   const actionStatEffects = normalizeActionStatEffects(rawProfile, id);
-  const version = rawProfile.version || rawProfile.deliveryVersion || "1.0";
+  const version = rawProfile.version || rawProfile.deliveryVersion || createDefaultVersion({ metadata: PET_VARIANT_METADATA, scope });
   const scale = Number(rawProfile.scale ?? rawProfile.defaultScale ?? 1.1);
   const deliveryPathSegments = rawProfile.deliveryPathSegments || [scope, id];
+  const assetPrefix = rawProfile.assetPrefix || id;
 
   return deepFreeze({
     id,
-    breed,
     date: rawProfile.date || null,
-    aliases,
     scope,
-    species: rawProfile.species || breedProfile.species,
-    audience: scope,
-    baseVariant: rawProfile.baseVariant || breedProfile.baseVariant,
-    breedGroup: breed,
-    tags: (rawProfile.tags || []).slice(),
+    tier,
+    species,
+    notes: rawProfile.notes || getDefaultNotes(scope, tier),
+    baseVariant: rawProfile.baseVariant || PET_SPECIES_PROFILES[species].baseVariant,
     platforms: normalizePlatforms(rawProfile),
     deliveryPathSegments: deliveryPathSegments.slice(),
     version,
     deliveryVersion: version,
-    animationPrefix: rawProfile.assetPrefix || rawProfile.animationPrefix || id,
+    assetPrefix,
+    animationPrefix: assetPrefix,
     soundPrefix: rawProfile.soundPrefix || null,
-    actions,
-    extraActions,
-    extraAnimationAssets: extraAssets,
-    extraAssets,
+    actions: actionConfig.buttons.slice(),
+    actionButtons: actionConfig.buttons.slice(),
+    actionAssets: actionConfig.assets.slice(),
+    extraAnimationAssets: actionConfig.assets.slice(),
     actionLabelOverrides,
     actionStatEffects,
     defaultScale: scale,
@@ -396,11 +473,7 @@ function getPetActionIds() {
 
 function getPetActionOrder(value) {
   const order = getPetVariantProfile(value).actions || PET_ACTION_ORDER;
-  return order.map((key) => PET_ACTIONS[key].id);
-}
-
-function getPetBreedProfiles() {
-  return clonePlainObject(PET_BREED_PROFILES);
+  return order.map((key) => ACTION_POOL[key].id);
 }
 
 function getPetVariantMetadata(value) {
@@ -470,11 +543,10 @@ function getPetPlatformFeatures(config = {}) {
 
 function getVariantAnimationFolders(value) {
   const profile = getPetVariantProfile(value);
-  const extras = profile.extraAnimationAssets || [];
-  return (profile.actions || PET_ACTION_ORDER)
-    .map((key) => PET_ACTIONS[key].asset)
-    .concat(extras)
-    .map((asset) => `${profile.animationPrefix}_${asset}`);
+  const assets = (profile.actionButtons || profile.actions || PET_ACTION_ORDER)
+    .map((key) => ACTION_POOL[key].asset)
+    .concat((profile.actionAssets || profile.extraAnimationAssets || []).map((key) => ACTION_POOL[key].asset));
+  return assets.map((asset) => `${profile.animationPrefix}_${asset}`);
 }
 
 function getVariantManifestName(value) {
@@ -563,46 +635,86 @@ function getNextPetVariantSequence({ date, metadata = PET_VARIANT_METADATA }) {
   return sequence;
 }
 
-function createNextPetVariantId({ breed, date, metadata = PET_VARIANT_METADATA }) {
-  return createPetVariantId(date, getNextPetVariantSequence({ breed, date, metadata }));
+function createNextPetVariantId({ date, metadata = PET_VARIANT_METADATA }) {
+  return createPetVariantId(date, getNextPetVariantSequence({ date, metadata }));
+}
+
+function getNextInternalVersion(metadata = PET_VARIANT_METADATA) {
+  const variants = Object.values(normalizeVariantMetadata(metadata).variants);
+  let maxTenths = 10;
+  for (const profile of variants) {
+    if (profile.scope !== "internal" || !profile.version) {
+      continue;
+    }
+    const match = String(profile.version).match(/^(\d+)\.(\d+)$/);
+    if (!match) {
+      continue;
+    }
+    maxTenths = Math.max(maxTenths, Number(match[1]) * 10 + Number(match[2]));
+  }
+  const next = maxTenths + 1;
+  return `${Math.floor(next / 10)}.${next % 10}`;
+}
+
+function createDefaultVersion({ metadata = PET_VARIANT_METADATA, scope = DEFAULT_PET_SCOPE } = {}) {
+  return scope === "internal" ? getNextInternalVersion(metadata) : "1.0";
 }
 
 function createPetVariantMetadataDraft({
-  breed,
+  species = DEFAULT_PET_SPECIES,
   date,
   id,
   metadata = PET_VARIANT_METADATA,
   scope = DEFAULT_PET_SCOPE,
-  version = "1.0",
+  tier = DEFAULT_PET_TIER,
+  version = null,
   scale = 1.1,
-  platform = DEFAULT_PET_PLATFORM
+  platform = DEFAULT_PET_PLATFORM,
+  platforms = null,
+  assetPrefix = null,
+  notes = null,
+  actions = null,
+  features = null
 }) {
-  if (!Object.prototype.hasOwnProperty.call(PET_BREED_PROFILES, breed)) {
-    throw new Error(`Unknown breed: ${breed}`);
-  }
+  assertKnownSpecies(species);
+  assertKnownScope(scope);
+  assertKnownTier(tier);
   if (!isValidVariantDate(date)) {
     throw new Error(`Invalid variant date: ${date}. Use YYYY-MM-DD.`);
   }
-  const variantId = id || createNextPetVariantId({ breed, date, metadata });
+  const variantId = id || createNextPetVariantId({ date, metadata });
   assertVariantNamespaceToken(variantId, "id", variantId);
   assertPetVariantId(variantId);
   const namespace = buildPetVariantNamespace(metadata);
   if (Object.prototype.hasOwnProperty.call(namespace, variantId)) {
     throw new Error(`Variant namespace token already exists: ${variantId}`);
   }
-  return {
+
+  const tierProfile = TIER_PROFILES[tier];
+  const draft = {
     id: variantId,
-    breed,
     date,
-    aliases: "",
     scope,
-    version,
+    tier,
+    species,
+    notes: notes || getDefaultNotes(scope, tier),
+    version: version || createDefaultVersion({ metadata, scope }),
     scale: Number(scale),
-    platform,
-    extraActions: [],
-    extraAssets: [],
-    features: {}
+    platforms: Array.isArray(platforms) && platforms.length > 0 ? platforms.slice() : [platform],
+    assetPrefix: assetPrefix || variantId,
+    actions: actions || {
+      buttons: tierProfile.actionButtons.slice(),
+      assets: tierProfile.actionAssets.slice()
+    },
+    features: features || {
+      enable: (tierProfile.features.enable || []).slice(),
+      disable: (tierProfile.features.disable || []).slice()
+    }
   };
+
+  normalizeActionConfig(draft, variantId);
+  normalizeFeatureConfig(draft, variantId);
+  return draft;
 }
 
 module.exports = {
@@ -612,13 +724,15 @@ module.exports = {
   DEFAULT_PET_CHANNEL,
   DEFAULT_PET_PLATFORM,
   DEFAULT_PET_SCOPE,
+  DEFAULT_PET_TIER,
+  DEFAULT_PET_SPECIES,
   MAC_USER_DATA_PARENT,
   SWITCHABLE_VARIANTS,
   PET_VARIANT_METADATA_FILE,
   PET_VARIANT_NAMESPACE_PATTERN,
   PET_VARIANT_IDS: Object.freeze(Object.values(PET_VARIANT_PROFILES).sort(comparePetVariantProfiles).map((profile) => profile.id)),
-  PET_VARIANT_ALIASES: Object.freeze(Object.keys(PET_VARIANT_NAMESPACE).filter((token) => PET_VARIANT_NAMESPACE[token].kind === "alias")),
-  PET_BREED_IDS: Object.freeze(Object.keys(PET_BREED_PROFILES)),
+  PET_VARIANT_ALIASES: Object.freeze([]),
+  PET_SPECIES_IDS: Object.freeze(Object.keys(PET_SPECIES_PROFILES)),
   PET_CHANNEL_IDS: Object.freeze(Object.keys(PET_CHANNEL_PROFILES)),
   PET_ACTION_ORDER,
   resolvePetVariantId,
@@ -628,7 +742,11 @@ module.exports = {
   getPetActions,
   getPetActionIds,
   getPetActionOrder,
-  getPetBreedProfiles,
+  getActionPool,
+  getFeaturePool,
+  getTierProfiles,
+  getSpeciesProfiles,
+  getNotesPool,
   getPetVariantMetadata,
   getPetVariantMetadataList,
   getPetVariantProfile,
@@ -646,6 +764,8 @@ module.exports = {
   getNextPetVariantSequence,
   createNextPetVariantId,
   createPetVariantId,
+  getNextInternalVersion,
+  createDefaultVersion,
   createPetVariantMetadataDraft,
   createVariantInstallerGuid
 };

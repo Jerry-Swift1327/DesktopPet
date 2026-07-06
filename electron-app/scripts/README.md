@@ -6,7 +6,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `variant-cli.cjs` | 查询变体、按品种和日期筛选、新建定制变体、复制并重命名动作源视频 |
+| `variant-cli.cjs` | 查询变体、按 species/tier/date 筛选、新建 V2 变体、bootstrap 动作源视频和生成本地图鉴 |
 
 ## 使用方式
 
@@ -15,14 +15,20 @@ cd electron-app
 npm.cmd run variant:list
 npm.cmd run variant:show -- --id pet2605
 npm.cmd run variant:show -- --id pet2606
-npm.cmd run variant:query -- --breed bsh
-npm.cmd run variant:new -- --breed lihua --date 2026-06-30
+npm.cmd run variant:query -- --species cat --tier advanced
+npm.cmd run variant:new -- --species cat --scope custom --tier basic --date 2026-07-06
+npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --date 2026-07-06 --source C:\path\to\source-videos
+npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --date 2026-07-06 --source C:\path\to\source-videos --apply
 npm.cmd run variant:rename-assets -- --id pet2610 --from C:\path\to\source-videos
+npm.cmd run variant:gallery
+npm.cmd run variant:species
 ```
 
-新增变体时，`variant:new` 只写入精简元数据并按日期生成 `pet<yy><seq>` id；新变体默认 `aliases: ""`，CLI 以 `-` 显示空 aliases。动作视频进入项目前后续用 `variant:rename-assets` 复制到 `assets/animations/<id>_<action>/<id>_<action>.mp4`。
+`variant:bootstrap` 默认 dry-run，只有传入 `--apply` 后才写入元数据、复制视频并调用 `../../tools/process_pet_actions.py`。源视频默认从 Downloads 查找，也可以用 `--source` 指定目录；视频名支持 `squat.mp4` 或 `<任意前缀>_squat.mp4`。未知动作会严格报错，需要先注册到动作池。
+
+变体元数据使用 V2 字段：`species`、`scope`、`tier`、`notes`、`assetPrefix`、`actions.buttons`、`actions.assets` 和 `features.enable/disable`。`notes` 由 `scope + tier` 自动生成，custom 默认版本 `1.0`，internal 版本按当前最大 internal 版本递增。
 
 ## 修改注意
 
 - 新增 CLI 子命令时同步更新 `../README.md`、`../../docs/PROJECT_MAP.md` 和相关测试。
-- 脚本默认不处理视频帧；视频抽帧和抠像仍由 `../../tools/process_pet_actions.py` 完成。
+- `variant:bootstrap` 只负责编排；视频抽帧、抠像、循环选取和 manifest 写入仍由 `../../tools/process_pet_actions.py` 完成。
