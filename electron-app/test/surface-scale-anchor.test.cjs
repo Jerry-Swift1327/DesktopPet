@@ -837,3 +837,115 @@ test("groundPetToSurface preserves the current window walk X track when bounds l
   assert.equal(bounds.x, 220);
   assert.equal(walkTrackX, 220);
 });
+
+test("applySurfaceScale preserves the current window walk X track while correcting stale bounds size", () => {
+  for (const direction of [-1, 1]) {
+    let bounds = { x: 216, y: 200, width: 181, height: 179 };
+    let currentSurface = {
+      type: "window",
+      left: 80,
+      right: 520,
+      groundY: 320,
+      workArea: { x: 0, y: 0, width: 800, height: 600 }
+    };
+    let walkTrackX = 220;
+    let taskbarRunway = null;
+    const setBoundsCalls = [];
+    const syncCalls = [];
+
+    function visibleRectFromBounds(nextBounds) {
+      return {
+        x: Math.round(nextBounds.x + (direction < 0 ? 20 : 36)),
+        y: Math.round(nextBounds.y + 30),
+        width: 80,
+        height: 90
+      };
+    }
+
+    const controller = createSurfaceScaleController({
+      clampPetScale: (value) => Math.round(Math.min(Math.max(Number(value) || 1, 0.75), 1.6) * 100) / 100,
+      getPetWindowWidth: () => 180,
+      getPetWindowHeight: () => 180,
+      getPetSpriteSize: () => 128,
+      getSpriteLocalXForWindowWidth: () => 26,
+      getSurfaceWorkArea: () => currentSurface.workArea,
+      getVisibleSpriteInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }),
+      getGroundedWindowYForSurface: () => 200,
+      clampPetWindowPositionToSurface: (x, y) => ({ x: Math.round(x), y: Math.round(y) }),
+      getTaskbarWalkCenterLimits: () => ({ left: 0, right: 800 }),
+      ensureTaskbarWalkRunwayForCenter: () => null,
+      isTaskbarWalkActive: () => false,
+      clearPetWindowHitRegion: () => {},
+      getWalkVisibleCenterFromWindowX: (x) => x,
+      getTaskbarWalkRunwayWindowWidth: () => 800,
+      setPetWindowPosition: (x, y) => {
+        bounds = { ...bounds, x: Math.round(x), y: Math.round(y) };
+      },
+      syncWalkTrackX: (x) => {
+        syncCalls.push(Math.round(x));
+        walkTrackX = Math.round(x);
+      },
+      updatePetWindowMousePassthrough: () => {},
+      scheduleWalkLoopTimeout: () => {},
+      resetToTaskbarSurface: () => currentSurface,
+      setCurrentSurface: (surface) => {
+        currentSurface = surface;
+        return currentSurface;
+      },
+      getCurrentSurface: () => currentSurface,
+      getVisiblePetRectFromBounds: visibleRectFromBounds,
+      getWindowXForVisibleCenter: (centerX) => Math.round(centerX - (direction < 0 ? 60 : 76)),
+      setWalkWindowPosition: (x, y) => {
+        bounds = { ...bounds, x: Math.round(x), y: Math.round(y) };
+        walkTrackX = Math.round(x);
+        return bounds.x;
+      },
+      setTaskbarWalkWindowPositionForCenter: () => null,
+      isWalkingState: () => true,
+      refreshMenuAnchorAfterScale: () => {},
+      refreshHoverAnchorAfterScale: () => {},
+      refreshCustomizationAnchorAfterScale: () => {},
+      repositionStartupBubbleWindow: () => {},
+      sendScaleChanged: () => {},
+      preferencesStore: {
+        readPetScalePreference: () => {},
+        getPetScale: () => 1,
+        getPreferredPetScale: () => 1,
+        setPreferredPetScale: () => {},
+        writePetScalePreference: () => {}
+      },
+      getPetWindow: () => ({
+        isDestroyed: () => false,
+        getBounds: () => ({ ...bounds }),
+        setBounds: (nextBounds) => {
+          setBoundsCalls.push({ ...nextBounds });
+          bounds = { ...bounds, ...nextBounds };
+        }
+      }),
+      getActiveState: () => "petWalk",
+      getWalkDirection: () => direction,
+      getTaskbarWalkRunway: () => taskbarRunway,
+      setTaskbarWalkRunway: (value) => { taskbarRunway = value; },
+      getWalkTrackX: () => walkTrackX,
+      setWalkTrackX: (value) => { walkTrackX = value; },
+      log: () => {},
+      DEFAULT_PET_SCALE: 1,
+      PET_SCALE_MIN: 0.75,
+      PET_SCALE_MAX: 1.6,
+      PET_SCALE_STEP: 0.08,
+      VISIBLE_TOP_GAP: 0,
+      WINDOW_DOCK_DEBUG: false,
+      WINDOW_DOCK_COARSE_CORRECTION_LIMIT: 28,
+      WINDOW_DOCK_FINE_CORRECTION_LIMIT: 2
+    });
+
+    controller.applySurfaceScale(currentSurface, "petWalk", direction);
+
+    assert.deepEqual(setBoundsCalls, [{ x: 220, y: 200, width: 180, height: 180 }]);
+    assert.deepEqual(syncCalls, [220]);
+    assert.equal(bounds.x, 220);
+    assert.equal(bounds.width, 180);
+    assert.equal(bounds.height, 180);
+    assert.equal(walkTrackX, 220);
+  }
+});

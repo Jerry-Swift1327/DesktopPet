@@ -147,11 +147,18 @@ function createSurfaceScaleController(context) {
       }
       if (needsResize) {
         const shouldSyncWindowTrack = surface?.type === "window" && isWalkingState();
-        const anchorX = getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
-          ?? bounds.x + Math.round(bounds.width / 2);
+        const shouldUseWindowTrackAnchor = shouldSyncWindowTrack && !wasRunwayActive;
         const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
+        const targetX = shouldUseWindowTrackAnchor
+          ? (Number.isFinite(getWalkTrackX()) ? Math.round(getWalkTrackX()) : bounds.x)
+          : getWindowXForVisibleCenterAnchor(
+            getVisibleCenterAnchorFromBounds(bounds, stateId, direction)
+              ?? bounds.x + Math.round(bounds.width / 2),
+            stateId,
+            direction
+          );
         const next = clampPetWindowPositionToSurface(
-          getWindowXForVisibleCenterAnchor(anchorX, stateId, direction),
+          targetX,
           groundedY,
           surface,
           stateId,
