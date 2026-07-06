@@ -13,8 +13,10 @@ Thumbs.db
 *.rar
 
 # Codex/local temporary directories
+.worktrees/
 .tmp/
 .codex-temp/
+docs/superpowers/
 tools/__pycache__/
 tools/pet_actions/__pycache__/
 quality_previews/
@@ -40,6 +42,7 @@ electron-app/.electron-cache/
 electron-app/.electron-builder-cache/
 electron-app/.npm-cache*/
 electron-app/.mac-builder-cache/
+electron-app/.devtools-staging/
 electron-app/logs/
 
 # Build and installer outputs
