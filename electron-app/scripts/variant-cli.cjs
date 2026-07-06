@@ -343,7 +343,7 @@ function assertSourceVideosAreRegistered(sourceDir) {
   }
 }
 
-function getProcessArgs(assetPrefix, action) {
+function getProcessArgs(assetPrefix, action, options = {}) {
   const processArgs = [
     "tools\\process_pet_actions.py",
     "process",
@@ -360,6 +360,9 @@ function getProcessArgs(assetPrefix, action) {
     processArgs.push("--align-reference-center-x", "--align-reference-bottom");
   } else if (preset === "direction64") {
     processArgs.push("--direction-count", "64");
+  }
+  if (options.useFullRange && preset !== "direction64") {
+    processArgs.push("--use-full-range");
   }
   return processArgs;
 }
@@ -409,7 +412,9 @@ function buildBootstrapPlan(args, options = {}) {
     action,
     cwd: projectRoot,
     command: "python",
-    args: getProcessArgs(draft.assetPrefix, action)
+    args: getProcessArgs(draft.assetPrefix, action, {
+      useFullRange: Boolean(args["use-full-range"])
+    })
   }));
   const preflightCommands = ["release", "installer"].map((channel) => ({
     channel,
@@ -749,7 +754,7 @@ function printHelp() {
   node scripts/variant-cli.cjs show --id <variant>
   node scripts/variant-cli.cjs query [--id <variant>] [--species cat] [--tier basic] [--date YYYY-MM-DD] [--scope custom]
   node scripts/variant-cli.cjs new --species cat --scope custom --tier basic --date YYYY-MM-DD
-  node scripts/variant-cli.cjs bootstrap --scope custom --species cat --tier advanced --date YYYY-MM-DD [--source <source-dir>] [--apply]
+   node scripts/variant-cli.cjs bootstrap --scope custom --species cat --tier advanced --date YYYY-MM-DD [--source <source-dir>] [--use-full-range] [--apply]
   node scripts/variant-cli.cjs check --id <variant>
   node scripts/variant-cli.cjs rename-assets --id <variant> --from <source-dir>
   node scripts/variant-cli.cjs gallery

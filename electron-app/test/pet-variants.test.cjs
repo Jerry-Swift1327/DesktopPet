@@ -233,6 +233,24 @@ test("new variant drafts derive V2 fields version notes and delivery defaults", 
   assert.equal(createVariantInstallerGuid("pet2611"), createVariantInstallerGuid("pet2611"));
 });
 
+test("explicit feature draft overrides do not inherit tier feature defaults", () => {
+  const draft = createPetVariantMetadataDraft({
+    species: "cat",
+    tier: "advanced",
+    date: "2026-07-06",
+    features: {
+      enable: ["autoStart", "windowRoam"],
+      disable: []
+    }
+  });
+  const profile = resolvePetVariantProfile(draft);
+
+  assert.equal(profile.features.autoStart, true);
+  assert.equal(profile.features.windowRoam, true);
+  assert.equal(Boolean(profile.features.idleYawn), false);
+  assert.equal(Boolean(profile.features.wakeHiss), false);
+});
+
 test("variant ids resolve to canonical ids only", () => {
   assert.equal(resolvePetVariantId("pet2601"), "pet2601");
   assert.equal(resolvePetVariantId("pet2605"), "pet2605");

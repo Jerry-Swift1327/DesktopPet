@@ -80,6 +80,8 @@ npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --dat
 npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --date 2026-07-06 --source C:\path\to\source-videos --apply
 ```
 
+如果运行帧需要直接使用素材池完整帧范围，可在 bootstrap 参数中追加 `--use-full-range`；未追加时沿用自动选取最佳循环片段。
+
 处理方向采样动作（如 tabby_look）：
 
 ```powershell

@@ -37,6 +37,21 @@ const streamLabels = {
   error: "错误"
 };
 
+const defaultActionButtons = ["squat", "walk", "feed", "ball"];
+const defaultEnabledFeatures = ["autoStart", "windowRoam"];
+
+const featureLabels = {
+  autoStart: "开机自启",
+  windowRoam: "窗口漫游",
+  customization: "自定义",
+  switchPet: "切换宠物",
+  eyeTracking: "视线追踪",
+  idleYawn: "闲置打哈欠",
+  sleepPoseSwitch: "睡姿切换",
+  wakeHiss: "唤醒哈气",
+  dockShake: "Dock 抖动"
+};
+
 const state = {
   options: null,
   form: {
@@ -47,7 +62,13 @@ const state = {
     date: new Date().toISOString().slice(0, 10),
     sourceFolder: "",
     actionVideos: {},
-    advanced: {},
+    autoSelectLoop: false,
+    advanced: {
+      actionButtons: defaultActionButtons.slice(),
+      actionAssets: [],
+      features: defaultEnabledFeatures.slice(),
+      disableFeatures: []
+    },
     force: false,
     skipProcessing: false,
     skipPreflight: false,
@@ -92,10 +113,6 @@ function renderJson(value) {
   return escapeHtml(JSON.stringify(value, null, 2));
 }
 
-function getTierProfile() {
-  return state.options.tiers[state.form.tier] || { actionButtons: [], actionAssets: [], features: { enable: [] } };
-}
-
 function getNotesValue() {
   return (state.options.notes[state.form.scope] || {})[state.form.tier] || "";
 }
@@ -116,6 +133,36 @@ function actionLabel(action) {
   return item ? `${action} / ${item.label || item.asset || "动作"}` : action;
 }
 
+function featureLabel(feature) {
+  return `${feature} / ${featureLabels[feature] || "功能"}`;
+}
+
+function baseActionButtons() {
+  const basic = state.options && state.options.tiers.basic;
+  return basic && Array.isArray(basic.actionButtons) ? basic.actionButtons : defaultActionButtons;
+}
+
+function selectedActionButtons() {
+  const selected = parseList(state.form.advanced.actionButtons);
+  return selected.length > 0 ? selected : baseActionButtons();
+}
+
+function selectedActionAssets() {
+  return parseList(state.form.advanced.actionAssets);
+}
+
+function selectedEnabledFeatures() {
+  const value = state.form.advanced.features;
+  if (value === undefined || value === null) {
+    return defaultEnabledFeatures;
+  }
+  return parseList(value);
+}
+
+function selectedDisabledFeatures() {
+  return parseList(state.form.advanced.disableFeatures);
+}
+
 function stageLabel(stage) {
   return stageLabels[stage] || stage;
 }
@@ -129,12 +176,7 @@ function streamLabel(stream) {
 }
 
 function requiredActions() {
-  const tier = getTierProfile();
-  const advancedButtons = parseList(state.form.advanced.actionButtons);
-  const advancedAssets = parseList(state.form.advanced.actionAssets);
-  const buttons = advancedButtons.length > 0 ? advancedButtons : tier.actionButtons || [];
-  const assets = advancedAssets.length > 0 ? advancedAssets : tier.actionAssets || [];
-  return Array.from(new Set(buttons.concat(assets)));
+  return Array.from(new Set(selectedActionButtons().concat(selectedActionAssets())));
 }
 
 function selectedPath(action) {
@@ -166,6 +208,44 @@ function setAdvancedField(name, value) {
   state.form.advanced[name] = value;
   clearPreview();
   render();
+}
+
+function setAdvancedList(name, values) {
+  if (state.running || state.previewPending) {
+    return;
+  }
+  state.form.advanced[name] = Array.from(new Set(values));
+  clearPreview();
+  render();
+}
+
+function toggleAction(action, kind, checked) {
+  const name = kind === "asset" ? "actionAssets" : "actionButtons";
+  const locked = kind === "button" ? new Set(baseActionButtons()) : new Set();
+  const selected = new Set(parseList(state.form.advanced[name]));
+  if (checked || locked.has(action)) {
+    selected.add(action);
+  } else {
+    selected.delete(action);
+  }
+  for (const item of locked) {
+    selected.add(item);
+  }
+  setAdvancedList(name, Array.from(selected));
+}
+
+function toggleFeature(name, feature, checked) {
+  const selected = new Set(parseList(state.form.advanced[name]));
+  const oppositeName = name === "features" ? "disableFeatures" : "features";
+  const opposite = new Set(parseList(state.form.advanced[oppositeName]));
+  if (checked) {
+    selected.add(feature);
+    opposite.delete(feature);
+  } else {
+    selected.delete(feature);
+  }
+  state.form.advanced[oppositeName] = Array.from(opposite);
+  setAdvancedList(name, Array.from(selected));
 }
 
 function setRunOption(name, value) {
@@ -205,10 +285,76 @@ function renderPlatformToggles() {
   }).join("");
 }
 
+function renderActionOption(action, kind, checked, locked = false) {
+  const disabled = state.running || state.previewPending || locked ? " disabled" : "";
+  const checkedAttr = checked ? " checked" : "";
+  const lockedText = locked ? `<span class="option-note">必选</span>` : "";
+  return `<label class="option-check">
+    <input type="checkbox" data-action-toggle="${escapeHtml(action)}" data-action-kind="${escapeHtml(kind)}"${checkedAttr}${disabled}>
+    <span>${escapeHtml(actionLabel(action))}</span>
+    ${lockedText}
+  </label>`;
+}
+
+function renderFeatureOption(feature, name, checked) {
+  const disabled = state.running || state.previewPending ? " disabled" : "";
+  const checkedAttr = checked ? " checked" : "";
+  return `<label class="option-check">
+    <input type="checkbox" data-feature-toggle="${escapeHtml(feature)}" data-feature-list="${escapeHtml(name)}"${checkedAttr}${disabled}>
+    <span>${escapeHtml(featureLabel(feature))}</span>
+  </label>`;
+}
+
+function renderActionPicker() {
+  const baseButtons = new Set(baseActionButtons());
+  const buttons = new Set(selectedActionButtons());
+  const assets = new Set(selectedActionAssets());
+  const entries = Object.entries(state.options.actions);
+  const extraButtons = entries
+    .filter(([action, item]) => item.kind === "button" && !baseButtons.has(action))
+    .map(([action]) => renderActionOption(action, "button", buttons.has(action)));
+  const assetOptions = entries
+    .filter(([, item]) => item.kind === "asset")
+    .map(([action]) => renderActionOption(action, "asset", assets.has(action)));
+
+  return `<div class="option-section">
+    <h3>动作选择</h3>
+    <p class="muted">基础动作固定包含；勾选额外动作后，下方才会出现对应源视频卡片。</p>
+    <div class="option-group">
+      <strong>基础按钮动作</strong>
+      <div class="option-grid">${Array.from(baseButtons).map((action) => renderActionOption(action, "button", true, true)).join("")}</div>
+    </div>
+    <div class="option-group">
+      <strong>额外按钮动作</strong>
+      <div class="option-grid">${extraButtons.join("") || `<span class="muted">暂无可选动作</span>`}</div>
+    </div>
+    <div class="option-group">
+      <strong>资源动作</strong>
+      <div class="option-grid">${assetOptions.join("") || `<span class="muted">暂无可选资源动作</span>`}</div>
+    </div>
+  </div>`;
+}
+
+function renderFeaturePicker() {
+  const enabled = new Set(selectedEnabledFeatures());
+  const disabled = new Set(selectedDisabledFeatures());
+  const features = Object.keys(state.options.features);
+  return `<div class="option-section">
+    <h3>功能选择</h3>
+    <div class="option-group">
+      <strong>启用功能</strong>
+      <div class="option-grid">${features.map((feature) => renderFeatureOption(feature, "features", enabled.has(feature))).join("")}</div>
+    </div>
+    <div class="option-group">
+      <strong>禁用功能</strong>
+      <div class="option-grid">${features.map((feature) => renderFeatureOption(feature, "disableFeatures", disabled.has(feature))).join("")}</div>
+    </div>
+  </div>`;
+}
+
 function renderDerivedSummary() {
-  const tier = getTierProfile();
-  const enable = (tier.features && tier.features.enable) || [];
-  const disable = (tier.features && tier.features.disable) || [];
+  const enable = selectedEnabledFeatures();
+  const disable = selectedDisabledFeatures();
 
   return `<div class="summary-grid">
     <div><span>变体 ID id</span><strong>${escapeHtml(getDerivedDraftValue("id"))}</strong></div>
@@ -305,17 +451,15 @@ function renderAdvancedControls() {
   const advanced = state.form.advanced;
   const disabled = state.running || state.previewPending ? " disabled" : "";
   return `<details class="advanced"${state.advancedOpen ? " open" : ""}>
-    <summary>高级覆盖（谨慎使用）</summary>
+    <summary>高级设置（谨慎使用）</summary>
     <div class="form-grid">
       <label>变体 ID id <input type="text" data-advanced="id" value="${escapeHtml(advanced.id || "")}"${disabled}></label>
       <label>资源前缀 assetPrefix <input type="text" data-advanced="assetPrefix" value="${escapeHtml(advanced.assetPrefix || "")}"${disabled}></label>
       <label>缩放 scale <input type="number" min="0.4" max="2" step="0.05" data-advanced="scale" value="${escapeHtml(advanced.scale || "")}"${disabled}></label>
       <label>版本 version <input type="text" data-advanced="version" value="${escapeHtml(advanced.version || "")}"${disabled}></label>
-      <label>按钮动作 action buttons <input type="text" data-advanced="actionButtons" value="${escapeHtml(advanced.actionButtons || "")}"${disabled}></label>
-      <label>资源动作 action assets <input type="text" data-advanced="actionAssets" value="${escapeHtml(advanced.actionAssets || "")}"${disabled}></label>
-      <label>启用功能 features on <input type="text" data-advanced="features" value="${escapeHtml(advanced.features || "")}"${disabled}></label>
-      <label>禁用功能 features off <input type="text" data-advanced="disableFeatures" value="${escapeHtml(advanced.disableFeatures || "")}"${disabled}></label>
     </div>
+    ${renderActionPicker()}
+    ${renderFeaturePicker()}
     <div class="check-row">
       <label class="check"><input type="checkbox" data-run-option="force"${state.form.force ? " checked" : ""}${disabled}>强制覆盖资源</label>
       <label class="check"><input type="checkbox" data-run-option="skipProcessing"${state.form.skipProcessing ? " checked" : ""}${disabled}>跳过视频处理</label>
@@ -343,6 +487,10 @@ function renderMain() {
         <label>日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${state.running || state.previewPending ? " disabled" : ""}></label>
       </div>
       <div class="platforms">${renderPlatformToggles()}</div>
+      <div class="check-row processing-options">
+        <label class="check"><input type="checkbox" data-run-option="autoSelectLoop"${state.form.autoSelectLoop ? " checked" : ""}${state.running || state.previewPending ? " disabled" : ""}>自动选取最佳运行帧段</label>
+        <span class="muted">未勾选时，运行帧使用素材池完整帧范围。</span>
+      </div>
       ${renderDerivedSummary()}
       ${renderAdvancedControls()}
     </section>
@@ -430,11 +578,19 @@ appNode.addEventListener("change", (event) => {
   const advanced = event.target.dataset.advanced;
   const platform = event.target.dataset.platform;
   const runOption = event.target.dataset.runOption;
+  const actionToggle = event.target.dataset.actionToggle;
+  const actionKind = event.target.dataset.actionKind;
+  const featureToggle = event.target.dataset.featureToggle;
+  const featureList = event.target.dataset.featureList;
 
   if (field) {
     setField(field, event.target.value);
   } else if (advanced) {
     setAdvancedField(advanced, event.target.value);
+  } else if (actionToggle) {
+    toggleAction(actionToggle, actionKind, event.target.checked);
+  } else if (featureToggle) {
+    toggleFeature(featureList, featureToggle, event.target.checked);
   } else if (platform) {
     const next = new Set(state.form.platforms);
     if (event.target.checked) {

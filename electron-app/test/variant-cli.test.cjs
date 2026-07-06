@@ -160,7 +160,26 @@ test("bootstrap dry-run builds a plan without writing metadata", () => {
   assert.equal(plan.draft.id, "pet2601");
   assert.equal(plan.copied.length, 4);
   assert.equal(plan.processCommands[0].args.includes("--trim-ground-alpha-auto"), true);
+  assert.equal(plan.processCommands[0].args.includes("--use-full-range"), false);
   assert.deepEqual(metadata.variants, {});
+});
+
+test("bootstrap can use the full processed frame range for runtime frames", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const sourceDir = path.join(tempDir, "downloads");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const plan = buildBootstrapPlan(
+    { species: "cat", scope: "custom", tier: "basic", date: "2026-06-30", source: sourceDir, "use-full-range": true },
+    { metadataFile, animationsRoot }
+  );
+
+  assert.equal(plan.processCommands.length, 4);
+  assert.equal(plan.processCommands.every((command) => command.args.includes("--use-full-range")), true);
 });
 
 test("bootstrap apply writes V2 metadata and copies videos when processing is skipped", () => {

@@ -86,7 +86,7 @@ npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --dat
 - `loop.json`
 - `<variant>_actions_manifest.json`
 
-新增 custom 变体推荐通过 `variant:bootstrap` 生成 `pet<yy><seq>` ID 并接入资源，Windows 产物路径派生为 `deliverables/<scope>/<id>/<channel>`。变体只按真实 id 解析，不再使用 aliases。
+新增 custom 变体推荐通过 `variant:bootstrap` 生成 `pet<yy><seq>` ID 并接入资源，Windows 产物路径派生为 `deliverables/<scope>/<id>/<channel>`。需要让运行帧使用完整素材池范围时，可给 bootstrap 追加 `--use-full-range`。变体只按真实 id 解析，不再使用 aliases。
 
 ## 工具脚本
 

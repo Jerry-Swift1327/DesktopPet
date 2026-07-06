@@ -93,6 +93,37 @@ test("devtools preview stages manual videos and reuses bootstrap draft rules", (
   assert.equal(fs.readFileSync(path.join(stagingRoot, "preview-a", "source", "squat.mp4"), "utf8"), "squat");
   assert.equal(preview.copied.length, 4);
   assert.equal(preview.processCommands.length, 4);
+  assert.equal(preview.processCommands.every((command) => command.args.includes("--use-full-range")), true);
+});
+
+test("devtools preview can keep automatic runtime loop selection enabled", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const stagingRoot = path.join(tempDir, "staging");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+
+  const sourceDir = path.join(tempDir, "source");
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    stagingRoot,
+    idFactory: () => "preview-auto-loop"
+  });
+  const preview = workflow.buildNewVariantPreview({
+    scope: "custom",
+    tier: "basic",
+    species: "cat",
+    platforms: ["win32"],
+    date: "2026-07-06",
+    sourceFolder: sourceDir,
+    autoSelectLoop: true
+  });
+
+  assert.equal(preview.processCommands.every((command) => !command.args.includes("--use-full-range")), true);
 });
 
 test("devtools preview stages advanced action button additions", () => {
@@ -132,6 +163,47 @@ test("devtools preview stages advanced action button additions", () => {
 
   assert.equal(fs.readFileSync(path.join(stagingRoot, "preview-add-action", "source", "lie.mp4"), "utf8"), "lie");
   assert.equal(preview.processCommands.some((command) => command.action === "lie"), true);
+});
+
+test("devtools preview supports selected advanced actions and feature overrides", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const stagingRoot = path.join(tempDir, "staging");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+
+  const sourceDir = path.join(tempDir, "source");
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball", "spin", "splits", "yawn"]);
+
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    stagingRoot,
+    idFactory: () => "preview-advanced-selected"
+  });
+  const preview = workflow.buildNewVariantPreview({
+    scope: "internal",
+    tier: "advanced",
+    species: "cat",
+    platforms: ["win32"],
+    date: "2026-07-06",
+    sourceFolder: sourceDir,
+    advanced: {
+      actionButtons: ["squat", "walk", "feed", "ball", "spin", "splits"],
+      actionAssets: ["yawn"],
+      features: ["autoStart", "windowRoam"],
+      disableFeatures: []
+    }
+  });
+
+  assert.deepEqual(preview.draft.actions.buttons, ["squat", "walk", "feed", "ball", "spin", "splits"]);
+  assert.deepEqual(preview.draft.actions.assets, ["yawn"]);
+  assert.deepEqual(preview.draft.features.enable, ["autoStart", "windowRoam"]);
+  assert.deepEqual(preview.draft.features.disable, []);
+  assert.deepEqual(Object.keys(preview.stagedVideos), ["squat", "walk", "feed", "ball", "spin", "splits", "yawn"]);
+  assert.equal(preview.processCommands.some((command) => command.action === "spin"), true);
+  assert.equal(preview.processCommands.some((command) => command.action === "splits"), true);
 });
 
 test("devtools preview stages only effective advanced action buttons", () => {

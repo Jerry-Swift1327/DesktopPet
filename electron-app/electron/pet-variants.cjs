@@ -216,8 +216,16 @@ function normalizeFeatureConfig(rawProfile = {}, variantId = "") {
     throw new Error(`Pet variant ${variantId} features must be an object.`);
   }
 
-  const enabled = normalizeStringArray(tierFeatures.enable, "tier.features.enable", variantId);
-  const disabled = normalizeStringArray(tierFeatures.disable, "tier.features.disable", variantId);
+  const enabled = normalizeStringArray(
+    rawFeatures.enable === undefined ? tierFeatures.enable : [],
+    "tier.features.enable",
+    variantId
+  );
+  const disabled = normalizeStringArray(
+    rawFeatures.disable === undefined ? tierFeatures.disable : [],
+    "tier.features.disable",
+    variantId
+  );
   const explicitEnable = normalizeStringArray(rawFeatures.enable, "features.enable", variantId);
   const explicitDisable = normalizeStringArray(rawFeatures.disable, "features.disable", variantId);
   const featureState = {};

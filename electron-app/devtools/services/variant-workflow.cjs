@@ -174,6 +174,10 @@ function resolveActionVideos(formState, requiredActions) {
 
 function normalizeFormState(formState = {}) {
   const advanced = formState.advanced || {};
+  const hasFeatureOverride = Object.prototype.hasOwnProperty.call(advanced, "features")
+    || Object.prototype.hasOwnProperty.call(formState, "features")
+    || Object.prototype.hasOwnProperty.call(advanced, "disableFeatures")
+    || Object.prototype.hasOwnProperty.call(formState, "disableFeatures");
   const tier = formState.tier || "basic";
   const scope = formState.scope || "custom";
   const species = formState.species || "cat";
@@ -188,6 +192,7 @@ function normalizeFormState(formState = {}) {
     platforms,
     sourceFolder: formState.sourceFolder || null,
     actionVideos: formState.actionVideos || {},
+    autoSelectLoop: Boolean(formState.autoSelectLoop),
     force: Boolean(formState.force || advanced.force),
     skipProcessing: Boolean(formState.skipProcessing),
     skipPreflight: Boolean(formState.skipPreflight),
@@ -200,7 +205,8 @@ function normalizeFormState(formState = {}) {
       actionButtons: asArray(advanced.actionButtons || formState.actionButtons),
       actionAssets: asArray(advanced.actionAssets || formState.actionAssets),
       features: asArray(advanced.features || formState.features),
-      disableFeatures: asArray(advanced.disableFeatures || formState.disableFeatures)
+      disableFeatures: asArray(advanced.disableFeatures || formState.disableFeatures),
+      hasFeatureOverride
     }
   };
 }
@@ -227,17 +233,20 @@ function buildBootstrapArgs(formState, stagingSource) {
   if (formState.advanced.version) {
     args.version = formState.advanced.version;
   }
-  if (formState.advanced.actionButtons.length > 0) {
+  const hasActionOverride = formState.advanced.actionButtons.length > 0 || formState.advanced.actionAssets.length > 0;
+  if (hasActionOverride) {
     args["action-buttons"] = formState.advanced.actionButtons;
-  }
-  if (formState.advanced.actionAssets.length > 0) {
     args["action-assets"] = formState.advanced.actionAssets;
   }
-  if (formState.advanced.features.length > 0) {
+  const hasFeatureOverride = formState.advanced.hasFeatureOverride
+    || formState.advanced.features.length > 0
+    || formState.advanced.disableFeatures.length > 0;
+  if (hasFeatureOverride) {
     args.features = formState.advanced.features;
-  }
-  if (formState.advanced.disableFeatures.length > 0) {
     args["disable-features"] = formState.advanced.disableFeatures;
+  }
+  if (!formState.autoSelectLoop) {
+    args["use-full-range"] = true;
   }
 
   return args;

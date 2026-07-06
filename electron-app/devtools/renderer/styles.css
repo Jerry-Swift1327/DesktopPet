@@ -170,6 +170,10 @@ select {
   width: auto;
 }
 
+.processing-options {
+  align-items: center;
+}
+
 .summary-grid {
   margin-top: 14px;
 }
@@ -203,6 +207,60 @@ select {
 .advanced summary {
   cursor: pointer;
   margin-bottom: 12px;
+}
+
+.option-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.option-section h3 {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.option-group {
+  display: grid;
+  gap: 8px;
+}
+
+.option-group strong {
+  color: #475467;
+  font-size: 12px;
+}
+
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.option-check {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8dde6;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fbfcfe;
+  color: #202124;
+}
+
+.option-check input {
+  width: auto;
+}
+
+.option-check span {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.option-note {
+  margin-left: auto;
+  color: #667085;
+  font-size: 11px;
 }
 
 .source-path {
