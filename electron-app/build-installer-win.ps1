@@ -13,6 +13,7 @@ $packageJsonPath = Join-Path $appRoot "package.json"
 $rceditExe = Join-Path $appRoot "node_modules\rcedit\bin\rcedit-x64.exe"
 $appIcon = Join-Path $appRoot "build\app_icon.ico"
 $installerVariantInclude = Join-Path $appRoot "build\installer-variant.nsh"
+$runtimePruneScript = Join-Path $appRoot "scripts\prune-packaged-runtime.cjs"
 $petVariantsModule = (Join-Path $appRoot "electron\pet-variants.cjs") -replace '\\', '/'
 $buildProfileJson = & node -e "const { getWindowsBuildProfile } = require(process.argv[1]); process.stdout.write(JSON.stringify(getWindowsBuildProfile(process.argv[2], 'installer')));" $petVariantsModule $PetVariant
 if ($LASTEXITCODE -ne 0) {
@@ -150,6 +151,10 @@ try {
     }
     if (!(Test-Path $unpackedExe)) {
       throw "Unpacked executable was not found: $unpackedExe"
+    }
+    & node $runtimePruneScript --root $unpackedRoot
+    if ($LASTEXITCODE -ne 0) {
+      throw "Could not prune packaged Electron runtime locales."
     }
 
     & $rceditExe $unpackedExe `

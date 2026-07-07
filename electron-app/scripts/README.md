@@ -6,6 +6,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
+| `prune-packaged-runtime.cjs` | 精简已生成的 Windows Electron 运行时产物，默认只保留 `locales/zh-CN.pak` |
 | `variant-cli.cjs` | 查询变体、按 species/tier/date/scope 筛选、新建 V2 变体、bootstrap 动作源视频、资源检查、维护预览/应用纯函数和生成本地图鉴 |
 
 ## 使用方式
@@ -23,7 +24,10 @@ npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --dat
 npm.cmd run variant:rename-assets -- --id pet2610 --from C:\path\to\source-videos
 npm.cmd run variant:gallery
 npm.cmd run variant:species
+node scripts/prune-packaged-runtime.cjs --root installer/win-unpacked
 ```
+
+`prune-packaged-runtime.cjs` 只处理已生成的打包目录，不修改 `node_modules/electron/dist` 或源资源；如果目标目录缺少 `locales/zh-CN.pak` 会直接报错，避免生成语言资源不完整的 Windows 产物。
 
 `variant:bootstrap` 默认 dry-run，只有传入 `--apply` 后才写入元数据、复制视频并调用 `../../tools/process_pet_actions.py`。源视频默认从 Downloads 查找，也可以用 `--source` 指定目录；视频名支持 `squat.mp4` 或 `<任意前缀>_squat.mp4`。未知动作会严格报错，需要先注册到动作池。
 

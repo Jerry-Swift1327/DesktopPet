@@ -14,6 +14,7 @@ $electronDist = Join-Path $appRoot "node_modules\electron\dist"
 $electronExe = Join-Path $electronDist "electron.exe"
 $appIcon = Join-Path $projectRoot "app_icon.ico"
 $rceditExe = Join-Path $appRoot "node_modules\rcedit\bin\rcedit-x64.exe"
+$runtimePruneScript = Join-Path $appRoot "scripts\prune-packaged-runtime.cjs"
 $petVariantsModule = (Join-Path $appRoot "electron\pet-variants.cjs") -replace '\\', '/'
 $buildProfileJson = & node -e "const { getWindowsBuildProfile } = require(process.argv[1]); process.stdout.write(JSON.stringify(getWindowsBuildProfile(process.argv[2], 'release')));" $petVariantsModule $PetVariant
 if ($LASTEXITCODE -ne 0) {
@@ -98,6 +99,10 @@ if (!$reuseExistingRuntime -or !(Test-Path $outDir)) {
   Copy-Item -LiteralPath $electronDist -Destination $outDir -Recurse -Force
 } else {
   Copy-RuntimeTree -SourceRoot $electronDist -DestinationRoot $outDir
+}
+& node $runtimePruneScript --root $outDir
+if ($LASTEXITCODE -ne 0) {
+  throw "Could not prune packaged Electron runtime locales."
 }
 
 $releasedElectronExe = Join-Path $outDir "electron.exe"

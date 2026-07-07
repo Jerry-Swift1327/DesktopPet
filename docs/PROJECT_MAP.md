@@ -51,6 +51,7 @@
 | `electron-app/build-electron-win.ps1` | 在 Windows 上组装 Windows 便携版目录包 |
 | `electron-app/build-installer-win.ps1` | 在 Windows 上构建 Windows NSIS 安装向导 |
 | `electron-app/build-installer-mac.cjs` | 在 macOS 上构建 `.app` 和 `.dmg` |
+| `electron-app/scripts/prune-packaged-runtime.cjs` | 精简 Windows Electron 运行时产物，默认只保留 `locales/zh-CN.pak` |
 
 常用 npm 命令：
 

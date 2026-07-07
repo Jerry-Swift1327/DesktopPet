@@ -84,7 +84,7 @@ npm install
 npm run installer:mac -- --pet-variant=pet2604
 ```
 
-Windows 打包脚本只能在 Windows 上执行，可通过 `-PetVariant` 指定任一支持 Windows 的变体 ID。可用变体可通过 `cd electron-app; npm.cmd run variant:list` 查询。`PET_VARIANT` 本地启动调试不受打包平台限制。macOS 打包说明见 `docs/MAC_BUILD.md`。
+Windows 打包脚本只能在 Windows 上执行，可通过 `-PetVariant` 指定任一支持 Windows 的变体 ID。可用变体可通过 `cd electron-app; npm.cmd run variant:list` 查询。Windows 产物会在打包后只保留 Electron `locales/zh-CN.pak`，用于降低便携版和安装包体积；`PET_VARIANT` 本地启动调试不受打包平台限制。macOS 打包说明见 `docs/MAC_BUILD.md`。
 
 ## 变体管理
 
