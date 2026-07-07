@@ -890,7 +890,7 @@ function renderPetCatalog() {
         <div class="panel-header">
           <div>
             <h2>图鉴</h2>
-            <p class="muted">生成本地 `.variant-gallery/index.html`。</p>
+            <p class="muted">生成本地 <code>.variant-gallery/index.html</code>。</p>
           </div>
           <div class="button-row">
             <button type="button" data-generate-gallery${disabled}>${state.catalog.galleryPending ? "生成中" : "生成图鉴"}</button>

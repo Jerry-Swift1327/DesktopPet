@@ -2,6 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
+const {
+  getActionPool,
+  getFeaturePool,
+  getNotesPool,
+  getSpeciesProfiles,
+  getTierProfiles
+} = require("../electron/pet-catalog.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const appSource = fs.readFileSync(path.join(ROOT, "devtools", "renderer", "app.js"), "utf8");
@@ -10,6 +18,141 @@ const stylesSource = fs.readFileSync(path.join(ROOT, "devtools", "renderer", "st
 function cssBlock(selector) {
   const pattern = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([\\s\\S]*?)\\n\\}`, "m");
   return stylesSource.match(pattern)?.[1] || "";
+}
+
+function createFakeNode(className = "") {
+  return {
+    className,
+    html: "",
+    isConnected: true,
+    scrollTop: 0,
+    scrollLeft: 0,
+    addEventListener() {},
+    querySelector(selector) {
+      if (selector === ".wizard-left" && this.html.includes("wizard-left")) {
+        return createFakeNode("wizard-left");
+      }
+      if (selector === ".wizard-right" && this.html.includes("wizard-right")) {
+        return createFakeNode("wizard-right");
+      }
+      return null;
+    },
+    set innerHTML(value) {
+      this.html = String(value);
+    },
+    get innerHTML() {
+      return this.html;
+    }
+  };
+}
+
+function createRendererHarness() {
+  const appNode = createFakeNode("");
+  const sidebarNode = createFakeNode("sidebar");
+  const workspaceNode = createFakeNode("workspace");
+  const variants = [
+    {
+      id: "pet2601",
+      notes: "内部使用-基础",
+      species: "dog",
+      tier: "basic",
+      date: "2026-05-08",
+      scope: "internal",
+      platforms: ["win32"],
+      version: "1.1",
+      actions: ["squat", "walk", "feed", "ball"],
+      actionAssets: [],
+      features: { autoStart: true, windowRoam: true },
+      enabledFeatures: ["autoStart", "windowRoam"],
+      assetPrefix: "dog"
+    },
+    {
+      id: "pettest001",
+      notes: "测试变体-基础",
+      species: "cat",
+      tier: "basic",
+      date: "2026-07-07",
+      scope: "test",
+      platforms: ["win32"],
+      version: "0.1",
+      actions: ["squat", "walk", "feed", "ball"],
+      actionAssets: [],
+      features: { autoStart: true },
+      enabledFeatures: ["autoStart"],
+      assetPrefix: "testcat"
+    }
+  ];
+  const detailsFor = (id) => {
+    const variant = variants.find((item) => item.id === id) || variants[0];
+    return {
+      ...variant,
+      profile: {
+        ...variant,
+        actionButtons: variant.actions,
+        actionAssets: variant.actionAssets
+      },
+      resources: {
+        animationFolders: [],
+        manifest: `${variant.assetPrefix}_actions_manifest.json`,
+        existingPaths: []
+      }
+    };
+  };
+  const api = {
+    getCatalogOptions: () => Promise.resolve({
+      species: getSpeciesProfiles(),
+      tiers: getTierProfiles(),
+      actions: getActionPool(),
+      features: getFeaturePool(),
+      notes: getNotesPool()
+    }),
+    listVariants: () => Promise.resolve(variants),
+    getVariantDetails: (id) => Promise.resolve(detailsFor(id)),
+    checkVariant: (id) => Promise.resolve({ id, ok: true }),
+    generateGallery: () => Promise.resolve({ index: ".variant-gallery/index.html" }),
+    openGallery: () => Promise.resolve(null),
+    chooseSourceFolder: () => Promise.resolve(null),
+    chooseActionVideo: () => Promise.resolve(null),
+    buildNewVariantPreview: () => Promise.resolve({}),
+    runNewVariant: () => Promise.resolve({}),
+    buildReplaceActionPreview: () => Promise.resolve({}),
+    runReplaceAction: () => Promise.resolve({}),
+    buildRenameAssetsPreview: () => Promise.resolve({}),
+    runRenameAssets: () => Promise.resolve({}),
+    buildMetadataEditPreview: () => Promise.resolve({}),
+    applyMetadataEdit: () => Promise.resolve({}),
+    buildDeleteVariantPreview: () => Promise.resolve({ previewId: "delete-preview", canDelete: true, paths: [] }),
+    deleteTestVariant: () => Promise.resolve({}),
+    onTaskLog: () => {},
+    onTaskStatus: () => {}
+  };
+  const context = {
+    window: { variantDevtools: api, confirm: () => true },
+    document: {
+      getElementById: (id) => (id === "app" ? appNode : null),
+      querySelector: (selector) => {
+        if (selector === ".sidebar") {
+          return sidebarNode;
+        }
+        if (selector === ".workspace") {
+          return workspaceNode;
+        }
+        return null;
+      }
+    },
+    console,
+    Promise
+  };
+
+  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, appNode, sidebarNode };`, context, {
+    filename: "devtools/renderer/app.js"
+  });
+  return context.__rendererHarness;
+}
+
+async function flushRendererPromises() {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
 }
 
 test("devtools renderNewVariant groups panels into left and right dashboard columns", () => {
@@ -81,6 +224,23 @@ test("devtools pet catalog exposes list filters, checks, and gallery controls", 
   assert.match(renderPetCatalogBody, /<h2>详情 \/ 检查<\/h2>/);
   assert.doesNotMatch(renderPetCatalogBody, /<h1>新增宠物<\/h1>/);
   assert.doesNotMatch(renderPetCatalogBody, /<\/details>`;/);
+});
+
+test("devtools navigation replaces delete page with rendered pet catalog", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+
+  await harness.switchView("deleteVariant");
+  assert.equal(harness.state.view, "deleteVariant");
+  assert.match(harness.appNode.innerHTML, /data-current-view="deleteVariant"/);
+  assert.match(harness.appNode.innerHTML, /<h1>删除宠物<\/h1>/);
+
+  await harness.switchView("petCatalog");
+  assert.equal(harness.state.view, "petCatalog");
+  assert.match(harness.sidebarNode.innerHTML, /data-nav-view="petCatalog">宠物库<\/button>/);
+  assert.match(harness.appNode.innerHTML, /data-current-view="petCatalog"/);
+  assert.match(harness.appNode.innerHTML, /<h1>宠物库<\/h1>/);
+  assert.doesNotMatch(harness.appNode.innerHTML, /<h1>删除宠物<\/h1>/);
 });
 
 test("devtools new pet form keeps action and feature choices collapsible outside advanced settings", () => {
