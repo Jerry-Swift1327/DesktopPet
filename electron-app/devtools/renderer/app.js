@@ -73,6 +73,8 @@ const navItems = [
   { view: "deleteVariant", label: "删除宠物" }
 ];
 
+const navHoverColors = ["#eef8ff", "#f0fdf4", "#fff7ed", "#f5f3ff", "#fef2f2", "#ecfeff"];
+
 function localDateString(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -118,6 +120,8 @@ const state = {
   running: false,
   activeOperation: "newVariant",
   advancedOpen: false,
+  actionPickerOpen: false,
+  featurePickerOpen: false,
   logs: [],
   stages: {},
   catalog: {
@@ -406,7 +410,7 @@ function setField(name, value) {
   }
   state.form[name] = value;
   clearNewPreview();
-  render();
+  renderPreservingScroll();
 }
 
 function setAdvancedField(name, value) {
@@ -415,7 +419,7 @@ function setAdvancedField(name, value) {
   }
   state.form.advanced[name] = value;
   clearNewPreview();
-  render();
+  renderPreservingScroll();
 }
 
 function setAdvancedList(name, values) {
@@ -424,7 +428,7 @@ function setAdvancedList(name, values) {
   }
   state.form.advanced[name] = Array.from(new Set(values));
   clearNewPreview();
-  render();
+  renderPreservingScroll();
 }
 
 function toggleAction(action, kind, checked) {
@@ -462,7 +466,7 @@ function setRunOption(name, value) {
   }
   state.form[name] = value;
   clearNewPreview();
-  render();
+  renderPreservingScroll();
 }
 
 function setLoopMode(action, patch) {
@@ -474,7 +478,7 @@ function setLoopMode(action, patch) {
     ...patch
   };
   clearNewPreview();
-  render();
+  renderPreservingScroll();
 }
 
 function setActionVideo(action, filePath) {
@@ -483,7 +487,7 @@ function setActionVideo(action, filePath) {
   }
   state.form.actionVideos[action] = filePath;
   clearNewPreview();
-  render();
+  renderPreservingScroll();
 }
 
 function resetNewVariantForm() {
@@ -494,6 +498,32 @@ function resetNewVariantForm() {
   state.logs = [];
   state.stages = {};
   render();
+}
+
+function readScrollSnapshot() {
+  return [document.querySelector(".workspace"), appNode.querySelector(".wizard-left"), appNode.querySelector(".wizard-right")]
+    .filter(Boolean)
+    .map((node) => ({
+      node,
+      className: node.className,
+      scrollTop: node.scrollTop,
+      scrollLeft: node.scrollLeft
+    }));
+}
+
+function restoreScrollSnapshot(snapshot) {
+  for (const item of snapshot || []) {
+    const selector = item.className ? `.${String(item.className).split(/\s+/).filter(Boolean).join(".")}` : null;
+    const node = item.node.isConnected ? item.node : (selector ? document.querySelector(selector) : null);
+    if (node) {
+      node.scrollTop = item.scrollTop;
+      node.scrollLeft = item.scrollLeft;
+    }
+  }
+}
+
+function renderPreservingScroll() {
+  render({ preserveScroll: true });
 }
 
 function renderSidebar() {
@@ -557,30 +587,30 @@ function renderActionPicker() {
     .filter(([, item]) => item.kind === "asset")
     .map(([action]) => renderActionOption(action, "asset", assets.has(action)));
 
-  return `<div class="option-section">
-    <h3>动作选择</h3>
-    <p class="muted">基础动作固定包含；勾选额外动作后，下方才会出现对应源视频卡片。</p>
+  return `<details class="option-section collapsible-section" data-picker="actions"${state.actionPickerOpen ? " open" : ""}>
+    <summary>动作选择</summary>
+    <p class="muted">选择要出现在交互按钮和资源流程中的动作。</p>
     <div class="option-group">
       <strong>基础按钮动作</strong>
       <div class="option-grid">${Array.from(baseButtons).map((action) => renderActionOption(action, "button", true, true)).join("")}</div>
     </div>
     <div class="option-group">
-      <strong>额外按钮动作</strong>
-      <div class="option-grid">${extraButtons.join("") || `<span class="muted">暂无可选动作</span>`}</div>
+      <strong>扩展按钮动作</strong>
+      <div class="option-grid">${extraButtons.join("") || `<span class="muted">暂无扩展动作</span>`}</div>
     </div>
     <div class="option-group">
       <strong>资源动作</strong>
-      <div class="option-grid">${assetOptions.join("") || `<span class="muted">暂无可选资源动作</span>`}</div>
+      <div class="option-grid">${assetOptions.join("") || `<span class="muted">暂无资源动作</span>`}</div>
     </div>
-  </div>`;
+  </details>`;
 }
 
 function renderFeaturePicker() {
   const enabled = new Set(selectedEnabledFeatures());
   const disabled = new Set(selectedDisabledFeatures());
   const features = Object.keys(state.options.features);
-  return `<div class="option-section">
-    <h3>功能选择</h3>
+  return `<details class="option-section collapsible-section" data-picker="features"${state.featurePickerOpen ? " open" : ""}>
+    <summary>功能选择</summary>
     <div class="option-group">
       <strong>启用功能</strong>
       <div class="option-grid">${features.map((feature) => renderFeatureOption(feature, "features", enabled.has(feature))).join("")}</div>
@@ -589,7 +619,7 @@ function renderFeaturePicker() {
       <strong>禁用功能</strong>
       <div class="option-grid">${features.map((feature) => renderFeatureOption(feature, "disableFeatures", disabled.has(feature))).join("")}</div>
     </div>
-  </div>`;
+  </details>`;
 }
 
 function renderDerivedSummary() {
@@ -654,7 +684,7 @@ function renderPreview() {
     return `<section class="panel empty-preview">
       <div class="panel-header">
         <h2>预览</h2>
-        <span class="muted">${state.previewPending ? "生成中" : "尚未生成"}</span>
+        <span class="muted">${state.previewPending ? "生成中" : "等待生成"}</span>
       </div>
     </section>`;
   }
@@ -671,25 +701,27 @@ function renderPreview() {
       <div><span>版本 version</span><strong>${escapeHtml(state.preview.draft.version)}</strong></div>
     </div>
     <div class="preview-grid">
-      <section>
-        <h3>元数据草稿</h3>
+      <details class="preview-detail" open>
+        <summary>元数据草稿</summary>
         <pre>${renderJson(state.preview.draft)}</pre>
-      </section>
-      <section>
-        <h3>复制目标</h3>
+      </details>
+      <details class="preview-detail" open>
+        <summary>复制目标</summary>
         <pre>${renderJson(state.preview.copied)}</pre>
-      </section>
-      <section>
-        <h3>处理命令</h3>
+      </details>
+      <details class="preview-detail" open>
+        <summary>处理命令</summary>
         <pre>${renderJson(state.preview.processCommands)}</pre>
-      </section>
-      <section>
-        <h3>预检命令</h3>
+      </details>
+      <details class="preview-detail" open>
+        <summary>预检命令</summary>
         <pre>${renderJson(state.preview.preflightCommands || [])}</pre>
-      </section>
+      </details>
     </div>
-    <h3>警告</h3>
-    <pre>${renderJson(state.preview.warnings || [])}</pre>
+    <details class="preview-detail warnings-detail" open>
+      <summary>警告</summary>
+      <pre>${renderJson(state.preview.warnings || [])}</pre>
+    </details>
   </section>`;
 }
 
@@ -761,18 +793,15 @@ function renderNewVariant() {
         <div class="panel-header">
           <div>
             <h1>新增宠物</h1>
-            <p class="muted">基于 bootstrap 流程创建宠物</p>
+            <p class="muted">创建 metadata，并准备 bootstrap 处理流程。</p>
           </div>
-          <button type="button" class="primary" data-build-preview${busy() ? " disabled" : ""}>${state.previewPending ? "生成中" : "生成预览"}</button>
         </div>
-        <div class="form-grid">
+        <div class="form-grid new-pet-basics">
           <label>范围 scope ${renderSelect("scope", Object.keys(options.notes))}</label>
           <label>套餐 tier ${renderSelect("tier", Object.keys(options.tiers))}</label>
           <label>物种 species ${renderSelect("species", Object.keys(options.species))}</label>
-          <div class="date-platform-row">
-            <label>日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${busy() ? " disabled" : ""}></label>
-            <div class="platforms inline-platforms">${renderPlatformToggles()}</div>
-          </div>
+          <label class="date-field">日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${busy() ? " disabled" : ""}></label>
+          <div class="platforms inline-platforms">${renderPlatformToggles()}</div>
         </div>
         ${renderActionPicker()}
         ${renderFeaturePicker()}
@@ -781,9 +810,12 @@ function renderNewVariant() {
       </section>
 
       <section class="panel">
-        <div class="panel-header">
+        <div class="panel-header source-panel-header">
           <h2>源视频</h2>
-          <button type="button" data-choose-folder${busy() ? " disabled" : ""}>选择文件夹</button>
+          <div class="button-row source-actions">
+            <button type="button" data-choose-folder${busy() ? " disabled" : ""}>选择文件夹</button>
+            <button type="button" class="primary" data-build-preview${busy() || state.preview ? " disabled" : ""}>${state.previewPending ? "生成中" : "生成预览"}</button>
+          </div>
         </div>
         <div class="source-path">${escapeHtml(state.form.sourceFolder || "未选择源视频文件夹")}</div>
         <div class="action-grid">${renderActionCards()}</div>
@@ -1176,14 +1208,17 @@ function renderSuccessModal() {
   </div>`;
 }
 
-function render() {
+function render(options = {}) {
+  const scrollSnapshot = options.preserveScroll ? readScrollSnapshot() : null;
   renderSidebar();
   if (!api) {
     appNode.innerHTML = `<pre class="fatal">Devtools 预加载 API 不可用。</pre>`;
+    restoreScrollSnapshot(scrollSnapshot);
     return;
   }
   if (!state.options) {
     appNode.innerHTML = `<div class="loading">加载中</div>`;
+    restoreScrollSnapshot(scrollSnapshot);
     return;
   }
   if (state.view === "maintainVariant") {
@@ -1195,6 +1230,7 @@ function render() {
   } else {
     appNode.innerHTML = renderNewVariant();
   }
+  restoreScrollSnapshot(scrollSnapshot);
 }
 
 function pushLog(message) {
@@ -1294,7 +1330,7 @@ async function buildPreview() {
   state.previewPending = true;
   state.activeOperation = "newVariant";
   clearNewPreview();
-  render();
+  renderPreservingScroll();
 
   try {
     const formSnapshot = JSON.parse(JSON.stringify(state.form));
@@ -1314,7 +1350,7 @@ async function buildPreview() {
   } finally {
     if (requestId === state.previewRequestId) {
       state.previewPending = false;
-      render();
+      renderPreservingScroll();
     }
   }
 }
@@ -1588,16 +1624,30 @@ async function deleteTestVariant(previewId) {
 
 if (sidebarNode) {
   sidebarNode.addEventListener("click", (event) => {
-    const view = event.target.dataset.navView;
+    const navButton = event.target.closest("[data-nav-view]");
+    const view = navButton ? navButton.dataset.navView : "";
     if (view) {
       switchView(view);
     }
+  });
+  sidebarNode.addEventListener("pointerover", (event) => {
+    const navButton = event.target.closest("[data-nav-view]");
+    const related = event.relatedTarget;
+    if (!navButton || (related && related.nodeType && navButton.contains(related))) {
+      return;
+    }
+    const nextColor = navHoverColors[Math.floor(Math.random() * navHoverColors.length)];
+    navButton.style.setProperty("--nav-hover-bg", nextColor);
   });
 }
 
 appNode.addEventListener("toggle", (event) => {
   if (event.target.classList.contains("advanced")) {
     state.advancedOpen = event.target.open;
+  } else if (event.target.dataset.picker === "actions") {
+    state.actionPickerOpen = event.target.open;
+  } else if (event.target.dataset.picker === "features") {
+    state.featurePickerOpen = event.target.open;
   }
 }, true);
 
@@ -1669,7 +1719,7 @@ appNode.addEventListener("change", async (event) => {
     }
     state.form.platforms = Array.from(next);
     clearNewPreview();
-    render();
+    renderPreservingScroll();
   } else if (runOption) {
     setRunOption(runOption, event.target.checked);
   } else if (event.target.dataset.loopMode) {

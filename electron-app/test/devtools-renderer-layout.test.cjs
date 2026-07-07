@@ -16,7 +16,7 @@ test("devtools renderNewVariant groups panels into left and right dashboard colu
   const renderNewVariantBody = appSource.match(/function renderNewVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
   assert.match(renderNewVariantBody, /<div class="wizard-left">/);
   assert.match(renderNewVariantBody, /<div class="wizard-right">/);
-  assert.match(renderNewVariantBody, /<div class="wizard-left">[\s\S]*data-build-preview[\s\S]*data-choose-folder[\s\S]*<div class="wizard-right">/);
+  assert.match(renderNewVariantBody, /<div class="wizard-left">[\s\S]*class="button-row source-actions"[\s\S]*data-choose-folder[\s\S]*data-build-preview[\s\S]*<div class="wizard-right">/);
   assert.match(renderNewVariantBody, /<div class="wizard-right">[\s\S]*\$\{renderPreview\(\)\}[\s\S]*\$\{renderExecution\(\)\}/);
 });
 
@@ -70,18 +70,44 @@ test("devtools pet catalog exposes list filters, checks, and gallery controls", 
   assert.match(renderPetCatalogBody, /data-catalog-check/);
   assert.match(renderPetCatalogBody, /data-generate-gallery/);
   assert.match(renderPetCatalogBody, /data-open-gallery/);
+  assert.match(renderPetCatalogBody, /<h1>宠物库<\/h1>/);
+  assert.match(renderPetCatalogBody, /<h2>宠物列表<\/h2>/);
+  assert.match(renderPetCatalogBody, /<h2>详情 \/ 检查<\/h2>/);
+  assert.doesNotMatch(renderPetCatalogBody, /<\/details>`;/);
 });
 
-test("devtools new pet form keeps action and feature choices outside advanced settings", () => {
+test("devtools new pet form keeps action and feature choices collapsible outside advanced settings", () => {
   const renderNewVariantBody = appSource.match(/function renderNewVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const renderActionPickerBody = appSource.match(/function renderActionPicker\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const renderFeaturePickerBody = appSource.match(/function renderFeaturePicker\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
   const advancedBody = appSource.match(/function renderAdvancedControls\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
 
-  assert.match(renderNewVariantBody, /class="date-platform-row"/);
+  assert.match(renderNewVariantBody, /class="form-grid new-pet-basics"/);
+  assert.match(renderNewVariantBody, /class="date-field"/);
   assert.match(renderNewVariantBody, /class="platforms inline-platforms"/);
   assert.match(renderNewVariantBody, /renderActionPicker\(\)[\s\S]*renderFeaturePicker\(\)[\s\S]*renderAdvancedControls\(\)/);
+  assert.match(renderActionPickerBody, /<details class="option-section collapsible-section" data-picker="actions"\$\{state\.actionPickerOpen \? " open" : ""\}>/);
+  assert.match(renderActionPickerBody, /<summary>动作选择<\/summary>/);
+  assert.match(renderFeaturePickerBody, /<details class="option-section collapsible-section" data-picker="features"\$\{state\.featurePickerOpen \? " open" : ""\}>/);
+  assert.match(renderFeaturePickerBody, /<summary>功能选择<\/summary>/);
   assert.doesNotMatch(renderNewVariantBody, /data-run-option="autoSelectLoop"/);
   assert.doesNotMatch(appSource, /默认自动选取最佳运行帧段/);
   assert.doesNotMatch(advancedBody, /renderActionPicker|renderFeaturePicker/);
+});
+
+test("devtools new pet preview controls preserve scroll and collapse noisy details", () => {
+  const renderNewVariantBody = appSource.match(/function renderNewVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const renderPreviewBody = appSource.match(/function renderPreview\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(renderNewVariantBody, /data-build-preview\$\{busy\(\) \|\| state\.preview \? " disabled" : ""\}/);
+  assert.match(renderPreviewBody, /<details class="preview-detail" open>[\s\S]*<summary>元数据草稿<\/summary>/);
+  assert.match(renderPreviewBody, /<details class="preview-detail" open>[\s\S]*<summary>复制目标<\/summary>/);
+  assert.match(renderPreviewBody, /<details class="preview-detail" open>[\s\S]*<summary>处理命令<\/summary>/);
+  assert.match(renderPreviewBody, /<details class="preview-detail" open>[\s\S]*<summary>预检命令<\/summary>/);
+  assert.match(appSource, /function renderPreservingScroll\(\)/);
+  assert.match(appSource, /function setField[\s\S]*renderPreservingScroll\(\)/);
+  assert.match(appSource, /function setActionVideo[\s\S]*renderPreservingScroll\(\)/);
+  assert.match(appSource, /async function buildPreview[\s\S]*renderPreservingScroll\(\)/);
 });
 
 test("devtools maintenance metadata uses selectable controls and reset action", () => {
@@ -113,6 +139,13 @@ test("devtools action cards expose per-action frame mode controls", () => {
 test("devtools CSS locks global horizontal overflow while enabling dashboard columns", () => {
   assert.match(cssBlock(".shell"), /height\s*:\s*100vh\s*;/);
   assert.match(cssBlock(".nav-item"), /font-weight\s*:\s*700\s*;/);
+  assert.match(cssBlock(".nav-item"), /font-size\s*:\s*16px\s*;/);
+  assert.match(cssBlock(".nav-item"), /min-height\s*:\s*54px\s*;/);
+  assert.match(cssBlock(".nav-item:hover:not(:disabled)"), /var\(--nav-hover-bg,\s*#f1f5f9\)/);
+  assert.match(cssBlock(".nav-stack"), /gap\s*:\s*16px\s*;/);
+  assert.match(appSource, /const navHoverColors = \[/);
+  assert.match(appSource, /addEventListener\("pointerover"/);
+  assert.match(appSource, /setProperty\("--nav-hover-bg", nextColor\)/);
   assert.match(cssBlock(".shell"), /overflow\s*:\s*hidden\s*;/);
   assert.match(cssBlock(".workspace"), /overflow-x\s*:\s*hidden\s*;/);
   assert.match(cssBlock(".workspace"), /overflow-y\s*:\s*auto\s*;/);
@@ -121,5 +154,7 @@ test("devtools CSS locks global horizontal overflow while enabling dashboard col
   assert.match(stylesSource, /\.wizard-left,\s*\n\.wizard-right\s*\{/);
   assert.match(stylesSource, /\.wizard-left,\s*\n\.wizard-right\s*\{[\s\S]*?height\s*:\s*calc\(100vh - 48px\)\s*;/);
   assert.match(cssBlock(".action-grid"), /grid-template-columns\s*:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)\s*;/);
+  assert.match(cssBlock(".new-pet-basics"), /grid-template-columns\s*:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)\s+max-content\s*;/);
+  assert.match(cssBlock(".source-actions"), /gap\s*:\s*14px\s*;/);
   assert.match(stylesSource, /@media\s*\(max-width:\s*1180px\)/);
 });
