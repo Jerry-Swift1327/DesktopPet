@@ -21,6 +21,7 @@ function cssBlock(selector) {
 }
 
 function createFakeNode(className = "") {
+  const children = new Map();
   return {
     className,
     html: "",
@@ -30,10 +31,16 @@ function createFakeNode(className = "") {
     addEventListener() {},
     querySelector(selector) {
       if (selector === ".wizard-left" && this.html.includes("wizard-left")) {
-        return createFakeNode("wizard-left");
+        if (!children.has(selector)) {
+          children.set(selector, createFakeNode("wizard-left"));
+        }
+        return children.get(selector);
       }
       if (selector === ".wizard-right" && this.html.includes("wizard-right")) {
-        return createFakeNode("wizard-right");
+        if (!children.has(selector)) {
+          children.set(selector, createFakeNode("wizard-right"));
+        }
+        return children.get(selector);
       }
       return null;
     },
@@ -144,7 +151,7 @@ function createRendererHarness() {
     Promise
   };
 
-  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, appNode, sidebarNode };`, context, {
+  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, generateCatalogGallery, appNode, sidebarNode };`, context, {
     filename: "devtools/renderer/app.js"
   });
   return context.__rendererHarness;
@@ -211,18 +218,25 @@ test("devtools renderer exposes maintenance navigation and confirmation surfaces
   assert.match(appSource, /class="success-modal"/);
 });
 
-test("devtools pet catalog exposes list filters, checks, and gallery controls", () => {
+test("devtools pet catalog exposes compact filters, colored list, details, and gallery controls", () => {
   const renderPetCatalogBody = appSource.match(/function renderPetCatalog\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
 
+  assert.match(renderPetCatalogBody, /class="form-grid catalog-filters"/);
+  assert.match(renderPetCatalogBody, /renderCatalogFilter\("scope",[\s\S]*data-catalog-filter="date"[\s\S]*renderCatalogFilter\("species",[\s\S]*renderCatalogFilter\("tier"/);
   assert.match(renderPetCatalogBody, /data-catalog-filter/);
   assert.match(renderPetCatalogBody, /data-catalog-id/);
-  assert.match(renderPetCatalogBody, /data-catalog-check/);
+  assert.match(renderPetCatalogBody, /class="catalog-row \$\{catalogToneClass\(variant\.id\)\}/);
+  assert.match(renderPetCatalogBody, /summary/);
+  assert.match(renderPetCatalogBody, /resources/);
   assert.match(renderPetCatalogBody, /data-generate-gallery/);
   assert.match(renderPetCatalogBody, /data-open-gallery/);
   assert.match(renderPetCatalogBody, /<h1>宠物库<\/h1>/);
   assert.match(renderPetCatalogBody, /<h2>宠物列表<\/h2>/);
   assert.match(renderPetCatalogBody, /<h2>详情 \/ 检查<\/h2>/);
   assert.doesNotMatch(renderPetCatalogBody, /<h1>新增宠物<\/h1>/);
+  assert.doesNotMatch(renderPetCatalogBody, /data-catalog-check/);
+  assert.doesNotMatch(renderPetCatalogBody, /renderExecution\(\)/);
+  assert.doesNotMatch(renderPetCatalogBody, /checkResult/);
   assert.doesNotMatch(renderPetCatalogBody, /<\/details>`;/);
 });
 
@@ -241,6 +255,35 @@ test("devtools navigation replaces delete page with rendered pet catalog", async
   assert.match(harness.appNode.innerHTML, /data-current-view="petCatalog"/);
   assert.match(harness.appNode.innerHTML, /<h1>宠物库<\/h1>/);
   assert.doesNotMatch(harness.appNode.innerHTML, /<h1>删除宠物<\/h1>/);
+});
+
+test("devtools pet catalog keeps scroll when generating gallery", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  await harness.switchView("petCatalog");
+
+  const leftColumn = harness.appNode.querySelector(".wizard-left");
+  const rightColumn = harness.appNode.querySelector(".wizard-right");
+  leftColumn.scrollTop = 240;
+  rightColumn.scrollTop = 120;
+
+  await harness.generateCatalogGallery();
+
+  assert.equal(leftColumn.scrollTop, 240);
+  assert.equal(rightColumn.scrollTop, 120);
+  assert.match(harness.appNode.innerHTML, /\.variant-gallery\/index\.html/);
+});
+
+test("devtools pet catalog reloads summary and resources for another selected pet", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  await harness.switchView("petCatalog");
+
+  harness.state.catalog.selectedId = "pettest001";
+  await harness.loadCatalogDetails("pettest001");
+
+  assert.match(harness.appNode.innerHTML, /pettest001/);
+  assert.match(harness.appNode.innerHTML, /testcat_actions_manifest\.json/);
 });
 
 test("devtools new pet form keeps action and feature choices collapsible outside advanced settings", () => {
@@ -336,12 +379,18 @@ test("devtools CSS locks global horizontal overflow while enabling dashboard col
   assert.match(stylesSource, /\.wizard-left,\s*\n\.wizard-right\s*\{[\s\S]*?height\s*:\s*calc\(100vh - 48px\)\s*;/);
   assert.match(cssBlock(".action-grid"), /grid-template-columns\s*:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)\s*;/);
   assert.match(cssBlock(".new-pet-basics"), /grid-template-columns\s*:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)\s+max-content\s*;/);
+  assert.match(cssBlock(".catalog-filters"), /grid-template-columns\s*:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)\s*;/);
+  assert.match(cssBlock(".catalog-list"), /grid-template-columns\s*:\s*repeat\(auto-fit,\s*minmax\(min\(310px,\s*100%\),\s*1fr\)\)\s*;/);
+  assert.match(cssBlock(".catalog-row"), /background\s*:\s*var\(--catalog-row-bg,\s*#ffffff\)\s*;/);
+  assert.match(cssBlock(".catalog-row.active"), /border-color\s*:\s*#0284c7\s*;/);
+  assert.match(stylesSource, /\.catalog-tone-0[\s\S]*--catalog-row-bg:\s*#f0f9ff/);
+  assert.match(stylesSource, /\.catalog-tone-7[\s\S]*--catalog-row-bg:\s*#f8fafc/);
   assert.match(cssBlock(".source-actions"), /gap\s*:\s*14px\s*;/);
   assert.match(cssBlock(".new-pet-picker .new-pet-option-grid"), /grid-template-columns\s*:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)\s*;/);
   assert.match(cssBlock(".new-pet-picker .option-group + .option-group"), /margin-top\s*:\s*10px\s*;/);
   assert.match(cssBlock(".summary-grid-compact"), /grid-template-columns\s*:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)\s*;/);
   assert.match(cssBlock(".summary-grid-wide"), /grid-template-columns\s*:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)\s*;/);
   assert.match(stylesSource, /@media\s*\(max-width:\s*1500px\)[\s\S]*\.new-pet-picker \.new-pet-option-grid\s*\{[\s\S]*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
-  assert.match(stylesSource, /@media\s*\(max-width:\s*1180px\)/);
+  assert.match(stylesSource, /@media\s*\(max-width:\s*1180px\)[\s\S]*\.catalog-filters\s*\{[\s\S]*repeat\(auto-fit,\s*minmax\(min\(190px,\s*100%\),\s*1fr\)\)/);
   assert.match(stylesSource, /@media\s*\(max-width:\s*780px\)[\s\S]*\.new-pet-picker \.new-pet-option-grid,[\s\S]*\.summary-grid-compact,[\s\S]*\.summary-grid-wide\s*\{[\s\S]*grid-template-columns\s*:\s*1fr\s*;/);
 });

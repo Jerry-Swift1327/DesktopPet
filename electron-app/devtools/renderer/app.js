@@ -253,6 +253,15 @@ function filterVariants(rows, filters) {
   });
 }
 
+function catalogToneClass(id) {
+  const toneCount = 8;
+  let hash = 0;
+  for (const char of String(id || "")) {
+    hash = (hash * 31 + char.charCodeAt(0)) % toneCount;
+  }
+  return `catalog-tone-${hash}`;
+}
+
 function renderJson(value) {
   return escapeHtml(JSON.stringify(value, null, 2));
 }
@@ -863,13 +872,13 @@ function renderPetCatalog() {
           </div>
           <button type="button" data-refresh-variants${disabled}>刷新</button>
         </div>
-        <div class="form-grid">
-          ${renderCatalogFilter("species", Object.keys(options.species), "物种 species")}
-          ${renderCatalogFilter("tier", Object.keys(options.tiers), "套餐 tier")}
+        <div class="form-grid catalog-filters">
           ${renderCatalogFilter("scope", scopeValues, "范围 scope")}
           <label>日期 date
             <input type="date" data-catalog-filter="date" value="${escapeHtml(dateValue)}"${disabled}>
           </label>
+          ${renderCatalogFilter("species", Object.keys(options.species), "物种 species")}
+          ${renderCatalogFilter("tier", Object.keys(options.tiers), "套餐 tier")}
         </div>
       </section>
 
@@ -879,7 +888,7 @@ function renderPetCatalog() {
           <span class="muted">${rows.length} / ${state.variants.length}</span>
         </div>
         <div class="catalog-list">
-          ${rows.map((variant) => `<button type="button" class="catalog-row ${selected === variant.id ? "active" : ""}" data-catalog-id="${escapeHtml(variant.id)}"${disabled}>
+          ${rows.map((variant) => `<button type="button" class="catalog-row ${catalogToneClass(variant.id)} ${selected === variant.id ? "active" : ""}" data-catalog-id="${escapeHtml(variant.id)}"${disabled}>
             <strong>${escapeHtml(variant.id)}</strong>
             <span>${escapeHtml([variant.scope, variant.species, variant.tier, variant.date].filter(Boolean).join(" · "))}</span>
           </button>`).join("") || `<p class="muted">没有匹配的宠物。</p>`}
@@ -905,9 +914,6 @@ function renderPetCatalog() {
       <section class="panel">
         <div class="panel-header">
           <h2>详情 / 检查</h2>
-          <div class="button-row">
-            <button type="button" data-catalog-check${disabled || !selected ? " disabled" : ""}>${state.catalog.checkPending ? "检查中" : "检查资源"}</button>
-          </div>
         </div>
         ${state.catalog.details ? `<div class="preview-grid">
           <section><h3>summary</h3><pre>${renderJson({
@@ -921,9 +927,7 @@ function renderPetCatalog() {
           })}</pre></section>
           <section><h3>resources</h3><pre>${renderJson(state.catalog.details.resources)}</pre></section>
         </div>` : `<p class="muted">请选择一个宠物。</p>`}
-        ${state.catalog.checkResult ? `<h3>检查结果</h3><pre>${renderJson(state.catalog.checkResult)}</pre>` : ""}
       </section>
-      ${renderExecution()}
     </div>
   </div>`;
 }
@@ -1536,7 +1540,7 @@ async function generateCatalogGallery() {
   state.catalog.galleryPending = true;
   state.activeOperation = "petCatalog";
   state.stages.generateGallery = "running";
-  render();
+  renderPreservingScroll();
   try {
     state.catalog.gallery = await api.generateGallery();
     state.stages.generateGallery = "done";
@@ -1545,7 +1549,7 @@ async function generateCatalogGallery() {
     pushLog(error.message);
   } finally {
     state.catalog.galleryPending = false;
-    render();
+    renderPreservingScroll();
   }
 }
 

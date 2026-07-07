@@ -240,6 +240,11 @@ h3 {
   min-width: max-content;
 }
 
+.catalog-filters {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+}
+
 label {
   display: grid;
   min-width: 0;
@@ -497,6 +502,7 @@ select:focus {
 
 .catalog-list {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(310px, 100%), 1fr));
   gap: 8px;
 }
 
@@ -506,6 +512,7 @@ select:focus {
   min-width: 0;
   gap: 3px;
   text-align: left;
+  background: var(--catalog-row-bg, #ffffff);
 }
 
 .catalog-row strong,
@@ -521,8 +528,41 @@ select:focus {
 }
 
 .catalog-row.active {
-  border-color: #94a3b8;
-  background: #f8fafc;
+  border-color: #0284c7;
+  background: #e0f2fe;
+  box-shadow: inset 4px 0 0 #0284c7, 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.catalog-tone-0 {
+  --catalog-row-bg: #f0f9ff;
+}
+
+.catalog-tone-1 {
+  --catalog-row-bg: #f0fdf4;
+}
+
+.catalog-tone-2 {
+  --catalog-row-bg: #fff7ed;
+}
+
+.catalog-tone-3 {
+  --catalog-row-bg: #f5f3ff;
+}
+
+.catalog-tone-4 {
+  --catalog-row-bg: #ecfeff;
+}
+
+.catalog-tone-5 {
+  --catalog-row-bg: #fdf2f8;
+}
+
+.catalog-tone-6 {
+  --catalog-row-bg: #fefce8;
+}
+
+.catalog-tone-7 {
+  --catalog-row-bg: #f8fafc;
 }
 
 .notes-editor {
@@ -942,6 +982,10 @@ pre {
   }
 
   .new-pet-basics {
+    grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  }
+
+  .catalog-filters {
     grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   }
 
