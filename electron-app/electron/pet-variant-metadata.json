@@ -344,36 +344,6 @@
         ],
         "disable": []
       }
-    },
-    "pettest01": {
-      "id": "pettest01",
-      "date": "2026-07-07",
-      "scope": "test",
-      "tier": "basic",
-      "species": "cat",
-      "notes": "测试变体-基础",
-      "version": "1.0",
-      "scale": 1.1,
-      "platforms": [
-        "win32"
-      ],
-      "assetPrefix": "pettest01",
-      "actions": {
-        "buttons": [
-          "squat",
-          "walk",
-          "feed",
-          "ball"
-        ],
-        "assets": []
-      },
-      "features": {
-        "enable": [
-          "autoStart",
-          "windowRoam"
-        ],
-        "disable": []
-      }
     }
   }
 }

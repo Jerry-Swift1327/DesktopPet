@@ -73,6 +73,7 @@ const navItems = [
   { view: "deleteVariant", label: "删除宠物" }
 ];
 
+const validViews = new Set(navItems.map((item) => item.view));
 const navHoverColors = ["#eef8ff", "#f0fdf4", "#fff7ed", "#f5f3ff", "#fef2f2", "#ecfeff"];
 
 function localDateString(date = new Date()) {
@@ -587,20 +588,20 @@ function renderActionPicker() {
     .filter(([, item]) => item.kind === "asset")
     .map(([action]) => renderActionOption(action, "asset", assets.has(action)));
 
-  return `<details class="option-section collapsible-section" data-picker="actions"${state.actionPickerOpen ? " open" : ""}>
+  return `<details class="option-section collapsible-section new-pet-picker" data-picker="actions"${state.actionPickerOpen ? " open" : ""}>
     <summary>动作选择</summary>
     <p class="muted">选择要出现在交互按钮和资源流程中的动作。</p>
     <div class="option-group">
       <strong>基础按钮动作</strong>
-      <div class="option-grid">${Array.from(baseButtons).map((action) => renderActionOption(action, "button", true, true)).join("")}</div>
+      <div class="option-grid new-pet-option-grid">${Array.from(baseButtons).map((action) => renderActionOption(action, "button", true, true)).join("")}</div>
     </div>
     <div class="option-group">
       <strong>扩展按钮动作</strong>
-      <div class="option-grid">${extraButtons.join("") || `<span class="muted">暂无扩展动作</span>`}</div>
+      <div class="option-grid new-pet-option-grid">${extraButtons.join("") || `<span class="muted">暂无扩展动作</span>`}</div>
     </div>
     <div class="option-group">
       <strong>资源动作</strong>
-      <div class="option-grid">${assetOptions.join("") || `<span class="muted">暂无资源动作</span>`}</div>
+      <div class="option-grid new-pet-option-grid">${assetOptions.join("") || `<span class="muted">暂无资源动作</span>`}</div>
     </div>
   </details>`;
 }
@@ -609,15 +610,15 @@ function renderFeaturePicker() {
   const enabled = new Set(selectedEnabledFeatures());
   const disabled = new Set(selectedDisabledFeatures());
   const features = Object.keys(state.options.features);
-  return `<details class="option-section collapsible-section" data-picker="features"${state.featurePickerOpen ? " open" : ""}>
+  return `<details class="option-section collapsible-section new-pet-picker" data-picker="features"${state.featurePickerOpen ? " open" : ""}>
     <summary>功能选择</summary>
     <div class="option-group">
       <strong>启用功能</strong>
-      <div class="option-grid">${features.map((feature) => renderFeatureOption(feature, "features", enabled.has(feature))).join("")}</div>
+      <div class="option-grid new-pet-option-grid">${features.map((feature) => renderFeatureOption(feature, "features", enabled.has(feature))).join("")}</div>
     </div>
     <div class="option-group">
       <strong>禁用功能</strong>
-      <div class="option-grid">${features.map((feature) => renderFeatureOption(feature, "disableFeatures", disabled.has(feature))).join("")}</div>
+      <div class="option-grid new-pet-option-grid">${features.map((feature) => renderFeatureOption(feature, "disableFeatures", disabled.has(feature))).join("")}</div>
     </div>
   </details>`;
 }
@@ -626,15 +627,19 @@ function renderDerivedSummary() {
   const enable = selectedEnabledFeatures();
   const disable = selectedDisabledFeatures();
 
-  return `<div class="summary-grid">
-    <div><span>宠物 ID id</span><strong>${escapeHtml(getDerivedDraftValue("id"))}</strong></div>
-    <div><span>说明 notes</span><strong>${escapeHtml(getNotesValue() || "-")}</strong></div>
-    <div><span>版本 version</span><strong>${escapeHtml(getDerivedDraftValue("version"))}</strong></div>
-    <div><span>缩放 scale</span><strong>${escapeHtml(getDerivedDraftValue("scale"))}</strong></div>
-    <div><span>资源前缀 assetPrefix</span><strong>${escapeHtml(getDerivedDraftValue("assetPrefix"))}</strong></div>
-    <div><span>动作 actions</span><strong>${escapeHtml(requiredActions().join(", ") || "-")}</strong></div>
-    <div><span>启用功能 features on</span><strong>${escapeHtml(enable.join(", ") || "-")}</strong></div>
-    <div><span>禁用功能 features off</span><strong>${escapeHtml(disable.join(", ") || "-")}</strong></div>
+  return `<div class="derived-summary">
+    <div class="summary-grid summary-grid-compact">
+      <div><span>宠物 ID id</span><strong>${escapeHtml(getDerivedDraftValue("id"))}</strong></div>
+      <div><span>说明 notes</span><strong>${escapeHtml(getNotesValue() || "-")}</strong></div>
+      <div><span>版本 version</span><strong>${escapeHtml(getDerivedDraftValue("version"))}</strong></div>
+      <div><span>缩放 scale</span><strong>${escapeHtml(getDerivedDraftValue("scale"))}</strong></div>
+      <div><span>资源前缀 assetPrefix</span><strong>${escapeHtml(getDerivedDraftValue("assetPrefix"))}</strong></div>
+    </div>
+    <div class="summary-grid summary-grid-wide">
+      <div><span>动作 actions</span><strong>${escapeHtml(requiredActions().join(", ") || "-")}</strong></div>
+      <div><span>启用功能 features on</span><strong>${escapeHtml(enable.join(", ") || "-")}</strong></div>
+      <div><span>禁用功能 features off</span><strong>${escapeHtml(disable.join(", ") || "-")}</strong></div>
+    </div>
   </div>`;
 }
 
@@ -1208,8 +1213,31 @@ function renderSuccessModal() {
   </div>`;
 }
 
+const viewRenderers = {
+  newVariant: renderNewVariant,
+  petCatalog: renderPetCatalog,
+  maintainVariant: renderMaintainVariant,
+  deleteVariant: renderDeleteVariant
+};
+
+function isKnownView(view) {
+  return validViews.has(view) && typeof viewRenderers[view] === "function";
+}
+
+function normalizeView(view) {
+  return isKnownView(view) ? view : "newVariant";
+}
+
+function renderViewShell(view, content) {
+  return `<div class="view-root" data-current-view="${escapeHtml(view)}">${content}</div>`;
+}
+
 function render(options = {}) {
   const scrollSnapshot = options.preserveScroll ? readScrollSnapshot() : null;
+  const currentView = normalizeView(state.view);
+  if (state.view !== currentView) {
+    state.view = currentView;
+  }
   renderSidebar();
   if (!api) {
     appNode.innerHTML = `<pre class="fatal">Devtools 预加载 API 不可用。</pre>`;
@@ -1221,15 +1249,7 @@ function render(options = {}) {
     restoreScrollSnapshot(scrollSnapshot);
     return;
   }
-  if (state.view === "maintainVariant") {
-    appNode.innerHTML = renderMaintainVariant();
-  } else if (state.view === "deleteVariant") {
-    appNode.innerHTML = renderDeleteVariant();
-  } else if (state.view === "petCatalog") {
-    appNode.innerHTML = renderPetCatalog();
-  } else {
-    appNode.innerHTML = renderNewVariant();
-  }
+  appNode.innerHTML = renderViewShell(currentView, viewRenderers[currentView]());
   restoreScrollSnapshot(scrollSnapshot);
 }
 
@@ -1303,7 +1323,7 @@ async function loadCatalogDetails(id) {
 }
 
 async function switchView(view) {
-  if (busy() || state.view === view) {
+  if (!isKnownView(view) || busy() || state.view === view) {
     return;
   }
   state.view = view;
@@ -1626,7 +1646,8 @@ if (sidebarNode) {
   sidebarNode.addEventListener("click", (event) => {
     const navButton = event.target.closest("[data-nav-view]");
     const view = navButton ? navButton.dataset.navView : "";
-    if (view) {
+    if (isKnownView(view)) {
+      event.preventDefault();
       switchView(view);
     }
   });

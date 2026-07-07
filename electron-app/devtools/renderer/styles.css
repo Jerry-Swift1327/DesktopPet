@@ -111,9 +111,14 @@ button.primary:hover:not(:disabled) {
 }
 
 .nav-item.active {
-  border-color: #94a3b8;
-  background: #f8fafc;
+  border-color: #0284c7;
+  background: #e0f2fe;
   color: #18181b;
+  box-shadow: inset 4px 0 0 #0284c7, 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.nav-item.active:hover:not(:disabled) {
+  background: #e0f2fe;
 }
 
 .workspace {
@@ -125,6 +130,12 @@ button.primary:hover:not(:disabled) {
 }
 
 #app {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.view-root {
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -314,6 +325,24 @@ select:focus {
   margin-top: 14px;
 }
 
+.derived-summary {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.derived-summary .summary-grid {
+  margin-top: 0;
+}
+
+.summary-grid-compact {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.summary-grid-wide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .summary-grid div {
   min-width: 0;
   border: 1px solid #e2e8f0;
@@ -416,6 +445,19 @@ select:focus {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   gap: 8px;
+}
+
+.new-pet-picker .option-group {
+  gap: 6px;
+}
+
+.new-pet-picker .option-group + .option-group {
+  margin-top: 10px;
+}
+
+.new-pet-picker .new-pet-option-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 10px;
 }
 
 .option-check {
@@ -868,6 +910,16 @@ pre {
   }
 }
 
+@media (max-width: 1500px) {
+  .new-pet-picker .new-pet-option-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .summary-grid-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1180px) {
   .workspace {
     padding: 18px;
@@ -895,6 +947,15 @@ pre {
 
   .new-pet-basics > .inline-platforms {
     min-width: 0;
+  }
+
+  .new-pet-picker .new-pet-option-grid,
+  .summary-grid-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-grid-wide {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -943,6 +1004,12 @@ pre {
   }
 
   .new-pet-basics {
+    grid-template-columns: 1fr;
+  }
+
+  .new-pet-picker .new-pet-option-grid,
+  .summary-grid-compact,
+  .summary-grid-wide {
     grid-template-columns: 1fr;
   }
 
