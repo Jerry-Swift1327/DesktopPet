@@ -4,12 +4,16 @@ const path = require("path");
 const {
   buildBootstrapPlan,
   applyBootstrapPlanAsync,
+  buildCheckVariantResult,
+  buildRenameAssetsPlan,
+  applyRenameAssetsPlan,
   buildReplaceActionPlan,
   applyReplaceActionPlanAsync,
   buildMetadataEditPreview: buildCliMetadataEditPreview,
   applyMetadataEdit: applyCliMetadataEdit,
   buildDeleteVariantPreview: buildCliDeleteVariantPreview,
   applyDeleteVariant: applyCliDeleteVariant,
+  generateVariantGallery,
   listVariantSummaries,
   getVariantDetails: getCliVariantDetails,
   resolveSourceActionName
@@ -322,6 +326,19 @@ function createVariantWorkflow(options = {}) {
     return getCliVariantDetails(id, { metadataFile, animationsRoot });
   }
 
+  function checkVariant(id) {
+    return buildCheckVariantResult(id, { metadataFile, animationsRoot });
+  }
+
+  function generateGallery() {
+    const output = generateVariantGallery({ metadataFile, animationsRoot, outputDir: galleryRoot });
+    return { output, outputDir: galleryRoot };
+  }
+
+  function getGalleryIndexPath() {
+    return path.join(galleryRoot, "index.html");
+  }
+
   function storePreview(kind, value) {
     const previewId = idFactory();
     const preview = { ...value, previewId };
@@ -410,6 +427,26 @@ function createVariantWorkflow(options = {}) {
     }
   }
 
+  function buildRenameAssetsPreview(payload = {}) {
+    return storePreview("renameAssets", buildRenameAssetsPlan(payload, { metadataFile, animationsRoot }));
+  }
+
+  async function runRenameAssets(previewId, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== "renameAssets") {
+      throw new Error(`Missing rename-assets preview: ${previewId}`);
+    }
+    emitHook(hooks, "onStage", { stage: "renameAssets", status: "running" });
+    try {
+      const result = applyRenameAssetsPlan(entry.plan);
+      emitHook(hooks, "onStage", { stage: "renameAssets", status: "done" });
+      return result;
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage: "renameAssets", status: "failed", error: error.message });
+      throw error;
+    }
+  }
+
   function buildMetadataEditPreview(payload = {}) {
     return storePreview("metadataEdit", buildCliMetadataEditPreview(payload, { metadataFile, animationsRoot }));
   }
@@ -464,10 +501,15 @@ function createVariantWorkflow(options = {}) {
     getCatalogOptions,
     listVariants,
     getVariantDetails,
+    checkVariant,
+    generateGallery,
+    getGalleryIndexPath,
     buildNewVariantPreview,
     runNewVariant,
     buildReplaceActionPreview,
     runReplaceAction,
+    buildRenameAssetsPreview,
+    runRenameAssets,
     buildMetadataEditPreview,
     applyMetadataEdit,
     buildDeleteVariantPreview,

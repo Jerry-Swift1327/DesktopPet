@@ -123,6 +123,19 @@ function getEnabledFeatureNames(features = {}) {
     .map(([feature]) => feature);
 }
 
+function getProfileActionKeys(profile) {
+  return uniqueList((profile.actionButtons || profile.actions || PET_ACTION_ORDER)
+    .concat(profile.actionAssets || profile.extraAnimationAssets || []));
+}
+
+function getProfileAssetPrefix(profile) {
+  return profile.assetPrefix || profile.animationPrefix || profile.id;
+}
+
+function getProfileActionFolderName(profile, action) {
+  return `${getProfileAssetPrefix(profile)}_${actionPool[action].asset}`;
+}
+
 function buildVariantSummary(profile) {
   return {
     id: profile.id,
@@ -234,30 +247,47 @@ function queryVariants(args) {
   console.log(formatList(rows));
 }
 
-function pathExistsForVariant(input, options = {}) {
-  const id = resolveVariantInput(input);
-  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
-  return getVariantActionAssets(id)
-    .map((folder) => path.join(animationsRoot, folder))
-    .filter((folder) => fs.existsSync(folder))
-    .concat(fs.existsSync(path.join(animationsRoot, getVariantManifestName(id))) ? [path.join(animationsRoot, getVariantManifestName(id))] : []);
+function getWindowsOutputForProfile(profile, channel) {
+  if (!profile.platforms.includes("win32")) {
+    return null;
+  }
+  return ["deliverables"].concat(profile.deliveryPathSegments || [profile.scope, profile.id], channel).join("/");
 }
 
-function checkVariant(args, options = {}) {
-  const id = resolveVariantInput(args.id);
-  const profile = getPetVariantProfile(id);
-  const existingPaths = pathExistsForVariant(id, options);
-  const result = {
-    id,
+function pathExistsForProfile(profile, options = {}) {
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const manifest = getManifestPath(animationsRoot, getProfileAssetPrefix(profile));
+  return getProfileActionKeys(profile)
+    .map((action) => path.join(animationsRoot, getProfileActionFolderName(profile, action)))
+    .filter((folder) => fs.existsSync(folder))
+    .concat(fs.existsSync(manifest) ? [manifest] : []);
+}
+
+function buildCheckVariantResult(input, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const metadata = readMetadataFile(metadataFile);
+  const profile = getVariantProfileFromMetadata(typeof input === "object" ? input.id : input, metadata);
+  const assetPrefix = getProfileAssetPrefix(profile);
+  const existingPaths = pathExistsForProfile(profile, options);
+  return {
+    id: profile.id,
     notes: profile.notes,
     species: profile.species,
     tier: profile.tier,
-    manifest: getVariantManifestName(id),
-    animationFolders: getVariantActionAssets(id),
+    scope: profile.scope,
+    platforms: profile.platforms,
+    version: profile.version,
+    assetPrefix,
+    manifest: `${assetPrefix}_actions_manifest.json`,
+    animationFolders: getProfileActionKeys(profile).map((action) => getProfileActionFolderName(profile, action)),
     existingPaths,
-    releaseOutput: profile.platforms.includes("win32") ? getWindowsBuildProfile(id, "release").output : null,
-    installerOutput: profile.platforms.includes("win32") ? getWindowsBuildProfile(id, "installer").output : null
+    releaseOutput: getWindowsOutputForProfile(profile, "release"),
+    installerOutput: getWindowsOutputForProfile(profile, "installer")
   };
+}
+
+function checkVariant(args, options = {}) {
+  const result = buildCheckVariantResult(args, options);
   console.log(JSON.stringify(result, null, 2));
 }
 
@@ -353,32 +383,55 @@ function findSourceVideo(sourceDir, action) {
   return path.join(sourceDir, files[0]);
 }
 
-function renameAssets(args, options = {}) {
-  const id = resolveVariantInput(args.id);
-  const sourceDir = path.resolve(args.from || "");
+function buildRenameAssetsPlan(args, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const metadata = readMetadataFile(metadataFile);
+  const profile = getVariantProfileFromMetadata(args.id, metadata);
+  const sourceDir = path.resolve(args.from || args.source || "");
   const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
-  if (!args.from) {
+  if (!args.from && !args.source) {
     throw new Error("Missing --from source directory.");
   }
   if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
     throw new Error(`Source directory was not found: ${sourceDir}`);
   }
 
-  const profile = getPetVariantProfile(id);
   const copied = [];
   for (const action of profile.actionButtons || profile.actions || PET_ACTION_ORDER) {
-    const actionName = `${profile.animationPrefix}_${actionPool[action].asset}`;
+    const actionName = getProfileActionFolderName(profile, action);
     const actionDir = path.join(animationsRoot, actionName);
     const source = findSourceVideo(sourceDir, action);
     const target = path.join(actionDir, `${actionName}.mp4`);
     if (fs.existsSync(target) && !args.force) {
       throw new Error(`Target video already exists: ${target}. Pass --force to overwrite.`);
     }
-    fs.mkdirSync(actionDir, { recursive: true });
-    fs.copyFileSync(source, target);
     copied.push({ action, source, target });
   }
-  console.log(JSON.stringify({ id, copied }, null, 2));
+  return {
+    id: profile.id,
+    sourceDir,
+    animationsRoot,
+    copied,
+    force: Boolean(args.force)
+  };
+}
+
+function applyRenameAssetsPlan(plan) {
+  for (const item of plan.copied || []) {
+    if (fs.existsSync(item.target) && !plan.force) {
+      throw new Error(`Target video already exists: ${item.target}. Pass --force to overwrite.`);
+    }
+    fs.mkdirSync(path.dirname(item.target), { recursive: true });
+    fs.copyFileSync(item.source, item.target);
+  }
+  return { id: plan.id, copied: plan.copied || [] };
+}
+
+function renameAssets(args, options = {}) {
+  const plan = buildRenameAssetsPlan(args, options);
+  const result = applyRenameAssetsPlan(plan);
+  console.log(JSON.stringify(result, null, 2));
+  return result;
 }
 
 function uniqueList(values) {
@@ -1210,7 +1263,10 @@ module.exports = {
   readArgs,
   createVariant,
   renameAssets,
+  buildRenameAssetsPlan,
+  applyRenameAssetsPlan,
   findSourceVideo,
+  buildCheckVariantResult,
   buildBootstrapPlan,
   applyBootstrapPlan,
   applyBootstrapPlanAsync,

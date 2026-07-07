@@ -3,7 +3,7 @@ const appNode = document.getElementById("app");
 const sidebarNode = document.querySelector(".sidebar");
 
 const newVariantStages = ["prepareStaging", "writeMetadata", "copyVideos", "processVideos", "runPreflight", "generateGallery", "complete"];
-const maintenanceStages = ["replaceAction", "writeMetadataEdit", "deleteVariantResources", "complete"];
+const maintenanceStages = ["replaceAction", "renameAssets", "writeMetadataEdit", "deleteVariantResources", "complete"];
 const allStageNames = Array.from(new Set(newVariantStages.concat(maintenanceStages)));
 
 const stageLabels = {
@@ -13,6 +13,7 @@ const stageLabels = {
   processVideos: "处理视频",
   runPreflight: "运行预检",
   generateGallery: "生成图鉴",
+  renameAssets: "导入资源",
   replaceAction: "替换动作",
   writeMetadataEdit: "写入维护元数据",
   deleteVariantResources: "删除测试资源",
@@ -43,6 +44,7 @@ const stageWeights = {
   processVideos: 42,
   runPreflight: 14,
   generateGallery: 10,
+  renameAssets: 72,
   replaceAction: 72,
   writeMetadataEdit: 84,
   deleteVariantResources: 90,
@@ -66,9 +68,17 @@ const featureLabels = {
 
 const navItems = [
   { view: "newVariant", label: "新增宠物" },
-  { view: "maintainVariant", label: "维护变体" },
-  { view: "deleteVariant", label: "删除测试变体" }
+  { view: "petCatalog", label: "宠物库" },
+  { view: "maintainVariant", label: "维护宠物" },
+  { view: "deleteVariant", label: "删除宠物" }
 ];
+
+function localDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function createDefaultForm() {
   return {
@@ -76,7 +86,7 @@ function createDefaultForm() {
     tier: "basic",
     species: "cat",
     platforms: ["win32"],
-    date: new Date().toISOString().slice(0, 10),
+    date: localDateString(),
     sourceFolder: "",
     actionVideos: {},
     autoSelectLoop: false,
@@ -110,6 +120,20 @@ const state = {
   advancedOpen: false,
   logs: [],
   stages: {},
+  catalog: {
+    selectedId: "",
+    filters: {
+      species: "",
+      tier: "",
+      scope: "",
+      date: ""
+    },
+    details: null,
+    checkResult: null,
+    checkPending: false,
+    gallery: null,
+    galleryPending: false
+  },
   maintain: {
     selectedId: "",
     details: null,
@@ -118,14 +142,19 @@ const state = {
     loopMode: { mode: "auto", sourceStart: "", sourceEnd: "" },
     replacePreview: null,
     replacePending: false,
+    renameSourceFolder: "",
+    renameForce: false,
+    renamePreview: null,
+    renamePending: false,
     metadataFields: {
       species: "",
       tier: "",
       notes: "",
-      actionButtons: "",
-      actionAssets: "",
-      featuresEnable: "",
-      featuresDisable: ""
+      notePreset: "",
+      actionButtons: [],
+      actionAssets: [],
+      featuresEnable: [],
+      featuresDisable: []
     },
     metadataPreview: null,
     metadataPending: false
@@ -161,12 +190,77 @@ function parseList(value) {
     .filter(Boolean);
 }
 
+function listEqual(left, right) {
+  const leftItems = parseList(left);
+  const rightItems = parseList(right);
+  return leftItems.length === rightItems.length && leftItems.every((item, index) => item === rightItems[index]);
+}
+
+function setListValue(list, value, checked) {
+  const selected = new Set(parseList(list));
+  if (checked) {
+    selected.add(value);
+  } else {
+    selected.delete(value);
+  }
+  return Array.from(selected);
+}
+
+function notePresetOptions(scope, tier) {
+  const result = [];
+  const notes = state.options?.notes || {};
+  for (const [scopeKey, tiers] of Object.entries(notes)) {
+    for (const [tierKey, note] of Object.entries(tiers || {})) {
+      result.push({
+        value: note,
+        label: `${scopeKey}/${tierKey} · ${note}`,
+        recommended: scopeKey === scope && tierKey === tier
+      });
+    }
+  }
+  return result.sort((left, right) => {
+    if (left.recommended !== right.recommended) {
+      return left.recommended ? -1 : 1;
+    }
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function findNotePreset(value, scope, tier) {
+  return notePresetOptions(scope, tier).find((item) => item.value === value)?.value || "custom";
+}
+
+function filterVariants(rows, filters) {
+  return rows.filter((variant) => {
+    if (filters.species && variant.species !== filters.species) {
+      return false;
+    }
+    if (filters.tier && variant.tier !== filters.tier) {
+      return false;
+    }
+    if (filters.scope && variant.scope !== filters.scope) {
+      return false;
+    }
+    if (filters.date && variant.date !== filters.date) {
+      return false;
+    }
+    return true;
+  });
+}
+
 function renderJson(value) {
   return escapeHtml(JSON.stringify(value, null, 2));
 }
 
 function busy() {
-  return state.running || state.previewPending || state.maintain.replacePending || state.maintain.metadataPending || state.deleteVariant.pending;
+  return state.running
+    || state.previewPending
+    || state.catalog.checkPending
+    || state.catalog.galleryPending
+    || state.maintain.replacePending
+    || state.maintain.renamePending
+    || state.maintain.metadataPending
+    || state.deleteVariant.pending;
 }
 
 function getNotesValue() {
@@ -244,7 +338,7 @@ function selectedPath(action) {
 }
 
 function defaultLoopMode() {
-  return state.form.autoSelectLoop ? "auto" : "full";
+  return "full";
 }
 
 function loopModeFor(action) {
@@ -275,6 +369,35 @@ function clearNewPreview() {
 function clearMaintainPreviews() {
   state.maintain.replacePreview = null;
   state.maintain.metadataPreview = null;
+}
+
+function markMetadataPreviewDirty() {
+  state.maintain.metadataPreview = null;
+  const node = appNode.querySelector(".metadata-diff");
+  if (node) {
+    node.outerHTML = `<pre class="metadata-diff">尚未生成 diff 预览。</pre>`;
+  }
+}
+
+function updateDeleteConfirmButton() {
+  const button = appNode.querySelector("[data-delete-confirm]");
+  if (!button) {
+    return;
+  }
+  const selected = state.deleteVariant.selectedId;
+  const preview = state.deleteVariant.preview;
+  const confirmReady = selected && state.deleteVariant.confirmText === selected && preview && preview.canDelete;
+  button.disabled = !confirmReady || busy();
+}
+
+function resetMaintainEdits() {
+  if (state.maintain.details) {
+    syncMaintainFields(state.maintain.details);
+  }
+  state.maintain.metadataPreview = null;
+  state.logs = [];
+  state.stages = {};
+  render();
 }
 
 function setField(name, value) {
@@ -338,9 +461,6 @@ function setRunOption(name, value) {
     return;
   }
   state.form[name] = value;
-  if (name === "autoSelectLoop") {
-    state.form.loopModes = {};
-  }
   clearNewPreview();
   render();
 }
@@ -477,7 +597,7 @@ function renderDerivedSummary() {
   const disable = selectedDisabledFeatures();
 
   return `<div class="summary-grid">
-    <div><span>变体 ID id</span><strong>${escapeHtml(getDerivedDraftValue("id"))}</strong></div>
+    <div><span>宠物 ID id</span><strong>${escapeHtml(getDerivedDraftValue("id"))}</strong></div>
     <div><span>说明 notes</span><strong>${escapeHtml(getNotesValue() || "-")}</strong></div>
     <div><span>版本 version</span><strong>${escapeHtml(getDerivedDraftValue("version"))}</strong></div>
     <div><span>缩放 scale</span><strong>${escapeHtml(getDerivedDraftValue("scale"))}</strong></div>
@@ -545,7 +665,7 @@ function renderPreview() {
       <button type="button" class="primary" data-run-preview="${escapeHtml(state.preview.previewId)}"${busy() ? " disabled" : ""}>开始生成</button>
     </div>
     <div class="summary-grid">
-      <div><span>变体 ID id</span><strong>${escapeHtml(state.preview.draft.id)}</strong></div>
+      <div><span>宠物 ID id</span><strong>${escapeHtml(state.preview.draft.id)}</strong></div>
       <div><span>物种 species</span><strong>${escapeHtml(state.preview.draft.species)}</strong></div>
       <div><span>套餐 tier</span><strong>${escapeHtml(state.preview.draft.tier)}</strong></div>
       <div><span>版本 version</span><strong>${escapeHtml(state.preview.draft.version)}</strong></div>
@@ -619,13 +739,11 @@ function renderAdvancedControls() {
   return `<details class="advanced"${state.advancedOpen ? " open" : ""}>
     <summary>高级设置（谨慎使用）</summary>
     <div class="form-grid">
-      <label>变体 ID id <input type="text" data-advanced="id" value="${escapeHtml(advanced.id || "")}"${disabled}></label>
+      <label>宠物 ID id <input type="text" data-advanced="id" value="${escapeHtml(advanced.id || "")}"${disabled}></label>
       <label>资源前缀 assetPrefix <input type="text" data-advanced="assetPrefix" value="${escapeHtml(advanced.assetPrefix || "")}"${disabled}></label>
       <label>缩放 scale <input type="number" min="0.4" max="2" step="0.05" data-advanced="scale" value="${escapeHtml(advanced.scale || "")}"${disabled}></label>
       <label>版本 version <input type="text" data-advanced="version" value="${escapeHtml(advanced.version || "")}"${disabled}></label>
     </div>
-    ${renderActionPicker()}
-    ${renderFeaturePicker()}
     <div class="check-row">
       <label class="check"><input type="checkbox" data-run-option="force"${state.form.force ? " checked" : ""}${disabled}>强制覆盖资源</label>
       <label class="check"><input type="checkbox" data-run-option="skipProcessing"${state.form.skipProcessing ? " checked" : ""}${disabled}>跳过视频处理</label>
@@ -643,7 +761,7 @@ function renderNewVariant() {
         <div class="panel-header">
           <div>
             <h1>新增宠物</h1>
-            <p class="muted">基于 bootstrap 流程创建宠物变体</p>
+            <p class="muted">基于 bootstrap 流程创建宠物</p>
           </div>
           <button type="button" class="primary" data-build-preview${busy() ? " disabled" : ""}>${state.previewPending ? "生成中" : "生成预览"}</button>
         </div>
@@ -651,13 +769,13 @@ function renderNewVariant() {
           <label>范围 scope ${renderSelect("scope", Object.keys(options.notes))}</label>
           <label>套餐 tier ${renderSelect("tier", Object.keys(options.tiers))}</label>
           <label>物种 species ${renderSelect("species", Object.keys(options.species))}</label>
-          <label>日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${busy() ? " disabled" : ""}></label>
+          <div class="date-platform-row">
+            <label>日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${busy() ? " disabled" : ""}></label>
+            <div class="platforms inline-platforms">${renderPlatformToggles()}</div>
+          </div>
         </div>
-        <div class="platforms">${renderPlatformToggles()}</div>
-        <div class="check-row processing-options">
-          <label class="check"><input type="checkbox" data-run-option="autoSelectLoop"${state.form.autoSelectLoop ? " checked" : ""}${busy() ? " disabled" : ""}>默认自动选取最佳运行帧段</label>
-          <span class="muted">每个动作仍可单独改为完整帧、自动选取或手动范围。</span>
-        </div>
+        ${renderActionPicker()}
+        ${renderFeaturePicker()}
         ${renderDerivedSummary()}
         ${renderAdvancedControls()}
       </section>
@@ -680,10 +798,103 @@ function renderNewVariant() {
   ${renderSuccessModal()}`;
 }
 
+function renderCatalogFilter(name, values, label) {
+  const selected = state.catalog.filters[name] || "";
+  const disabled = busy() ? " disabled" : "";
+  return `<label>${escapeHtml(label)}
+    <select data-catalog-filter="${escapeHtml(name)}"${disabled}>
+      <option value="">全部</option>
+      ${values.map((value) => `<option value="${escapeHtml(value)}"${selected === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function renderPetCatalog() {
+  const options = state.options;
+  const rows = filterVariants(state.variants, state.catalog.filters);
+  const selected = state.catalog.selectedId;
+  const disabled = busy() ? " disabled" : "";
+  const scopeValues = Array.from(new Set(state.variants.map((variant) => variant.scope))).sort();
+  const dateValue = state.catalog.filters.date || "";
+  return `<div class="wizard">
+    <div class="wizard-left">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h1>宠物库</h1>
+            <p class="muted">查看、筛选、检查宠物，并生成本地图鉴。</p>
+          </div>
+          <button type="button" data-refresh-variants${disabled}>刷新</button>
+        </div>
+        <div class="form-grid">
+          ${renderCatalogFilter("species", Object.keys(options.species), "物种 species")}
+          ${renderCatalogFilter("tier", Object.keys(options.tiers), "套餐 tier")}
+          ${renderCatalogFilter("scope", scopeValues, "范围 scope")}
+          <label>日期 date
+            <input type="date" data-catalog-filter="date" value="${escapeHtml(dateValue)}"${disabled}>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>宠物列表</h2>
+          <span class="muted">${rows.length} / ${state.variants.length}</span>
+        </div>
+        <div class="catalog-list">
+          ${rows.map((variant) => `<button type="button" class="catalog-row ${selected === variant.id ? "active" : ""}" data-catalog-id="${escapeHtml(variant.id)}"${disabled}>
+            <strong>${escapeHtml(variant.id)}</strong>
+            <span>${escapeHtml([variant.scope, variant.species, variant.tier, variant.date].filter(Boolean).join(" · "))}</span>
+          </button>`).join("") || `<p class="muted">没有匹配的宠物。</p>`}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>图鉴</h2>
+            <p class="muted">生成本地 `.variant-gallery/index.html`。</p>
+          </div>
+          <div class="button-row">
+            <button type="button" data-generate-gallery${disabled}>${state.catalog.galleryPending ? "生成中" : "生成图鉴"}</button>
+            <button type="button" data-open-gallery${disabled || !state.catalog.gallery ? " disabled" : ""}>打开图鉴</button>
+          </div>
+        </div>
+        ${state.catalog.gallery ? `<pre>${renderJson(state.catalog.gallery)}</pre>` : `<p class="muted">生成后可从这里打开本地图鉴。</p>`}
+      </section>
+    </div>
+
+    <div class="wizard-right">
+      <section class="panel">
+        <div class="panel-header">
+          <h2>详情 / 检查</h2>
+          <div class="button-row">
+            <button type="button" data-catalog-check${disabled || !selected ? " disabled" : ""}>${state.catalog.checkPending ? "检查中" : "检查资源"}</button>
+          </div>
+        </div>
+        ${state.catalog.details ? `<div class="preview-grid">
+          <section><h3>summary</h3><pre>${renderJson({
+            id: state.catalog.details.id,
+            notes: state.catalog.details.notes,
+            species: state.catalog.details.species,
+            tier: state.catalog.details.tier,
+            scope: state.catalog.details.scope,
+            platforms: state.catalog.details.platforms,
+            version: state.catalog.details.version
+          })}</pre></section>
+          <section><h3>resources</h3><pre>${renderJson(state.catalog.details.resources)}</pre></section>
+        </div>` : `<p class="muted">请选择一个宠物。</p>`}
+        ${state.catalog.checkResult ? `<h3>检查结果</h3><pre>${renderJson(state.catalog.checkResult)}</pre>` : ""}
+      </section>
+      ${renderExecution()}
+    </div>
+  </div>`;
+}
+
 function renderVariantOptions(selectedId, onlyTest = false) {
   const rows = onlyTest ? state.variants.filter((variant) => variant.scope === "test") : state.variants;
   if (rows.length === 0) {
-    return `<option value="">暂无变体</option>`;
+    return `<option value="">暂无宠物</option>`;
   }
   return rows.map((variant) => `<option value="${escapeHtml(variant.id)}"${selectedId === variant.id ? " selected" : ""}>${escapeHtml(variant.id)} · ${escapeHtml(variant.scope)} · ${escapeHtml(variant.species)}</option>`).join("");
 }
@@ -700,19 +911,77 @@ function syncMaintainFields(details) {
     return;
   }
   const profile = details.profile;
+  const enabledFeatures = profile.enabledFeatures || Object.entries(profile.features || {}).filter(([, enabled]) => enabled).map(([name]) => name);
+  const disabledFeatures = Object.entries(profile.features || {}).filter(([, enabled]) => enabled === false).map(([name]) => name);
   state.maintain.metadataFields = {
     species: profile.species || "",
     tier: profile.tier || "",
     notes: profile.notes || "",
-    actionButtons: (profile.actionButtons || profile.actions || []).join(", "),
-    actionAssets: (profile.actionAssets || profile.extraAnimationAssets || []).join(", "),
-    featuresEnable: (profile.enabledFeatures || Object.entries(profile.features || {}).filter(([, enabled]) => enabled).map(([name]) => name)).join(", "),
-    featuresDisable: Object.entries(profile.features || {}).filter(([, enabled]) => enabled === false).map(([name]) => name).join(", ")
+    notePreset: findNotePreset(profile.notes || "", profile.scope, profile.tier),
+    actionButtons: (profile.actionButtons || profile.actions || []).slice(),
+    actionAssets: (profile.actionAssets || profile.extraAnimationAssets || []).slice(),
+    featuresEnable: enabledFeatures.slice(),
+    featuresDisable: disabledFeatures.slice()
   };
   const actions = actionsFromDetails(details);
   if (!state.maintain.action || !actions.includes(state.maintain.action)) {
     state.maintain.action = actions[0] || "";
   }
+}
+
+function renderMaintainSelectField(name, label, values, selected, disabled) {
+  return `<label>${escapeHtml(label)}
+    <select data-maintain-field="${escapeHtml(name)}"${disabled}>
+      ${values.map((value) => `<option value="${escapeHtml(value)}"${selected === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function renderMaintainCheckboxList(name, label, values, selectedValues, disabled) {
+  const selected = new Set(parseList(selectedValues));
+  return `<div class="option-group maintain-choice-group">
+    <strong>${escapeHtml(label)}</strong>
+    <div class="option-grid">
+      ${values.map((value) => `<label class="option-check">
+        <input type="checkbox" data-maintain-list="${escapeHtml(name)}" data-maintain-list-value="${escapeHtml(value)}"${selected.has(value) ? " checked" : ""}${disabled}>
+        <span>${name.startsWith("features") ? escapeHtml(featureLabel(value)) : escapeHtml(actionLabel(value))}</span>
+      </label>`).join("")}
+    </div>
+  </div>`;
+}
+
+function renderMaintainNotesField(fields, disabled) {
+  const presets = notePresetOptions(state.maintain.details?.profile?.scope, fields.tier);
+  const presetValue = fields.notePreset || findNotePreset(fields.notes, state.maintain.details?.profile?.scope, fields.tier);
+  return `<div class="notes-editor">
+    <label>notes 标准项
+      <select data-maintain-note-preset${disabled}>
+        ${presets.map((item) => `<option value="${escapeHtml(item.value)}"${presetValue === item.value ? " selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+        <option value="custom"${presetValue === "custom" ? " selected" : ""}>自定义</option>
+      </select>
+    </label>
+    <label>notes 自定义
+      <input type="text" data-maintain-field="notes" value="${escapeHtml(fields.notes)}"${disabled}>
+    </label>
+  </div>`;
+}
+
+function renderMaintainMetadataControls(fields, disabled) {
+  const actions = Object.keys(state.options.actions);
+  const buttonActions = actions.filter((action) => state.options.actions[action].kind === "button");
+  const assetActions = actions.filter((action) => state.options.actions[action].kind === "asset");
+  const features = Object.keys(state.options.features);
+  return `<div class="form-grid">
+    ${renderMaintainSelectField("species", "species", Object.keys(state.options.species), fields.species, disabled)}
+    ${renderMaintainSelectField("tier", "tier", Object.keys(state.options.tiers), fields.tier, disabled)}
+  </div>
+  ${renderMaintainNotesField(fields, disabled)}
+  <div class="option-section">
+    ${renderMaintainCheckboxList("actionButtons", "actions.buttons", buttonActions, fields.actionButtons, disabled)}
+    ${renderMaintainCheckboxList("actionAssets", "actions.assets", assetActions, fields.actionAssets, disabled)}
+    ${renderMaintainCheckboxList("featuresEnable", "features.enable", features, fields.featuresEnable, disabled)}
+    ${renderMaintainCheckboxList("featuresDisable", "features.disable", features, fields.featuresDisable, disabled)}
+  </div>`;
 }
 
 function renderMaintainVariant() {
@@ -725,13 +994,13 @@ function renderMaintainVariant() {
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h1>维护变体</h1>
-            <p class="muted">替换动作资源或预览后写入结构化元数据</p>
+            <h1>维护宠物</h1>
+            <p class="muted">替换动作资源、批量导入动作源视频，或预览后写入结构化元数据</p>
           </div>
           <button type="button" data-refresh-variants${disabled}>刷新</button>
         </div>
         <div class="form-grid">
-          <label>选择变体
+          <label>选择宠物
             <select data-maintain-select${disabled}>${renderVariantOptions(state.maintain.selectedId)}</select>
           </label>
           <label>替换动作
@@ -743,7 +1012,7 @@ function renderMaintainVariant() {
           <div><span>assetPrefix</span><strong>${escapeHtml(details.profile.assetPrefix)}</strong></div>
           <div><span>version</span><strong>${escapeHtml(details.profile.version)}</strong></div>
           <div><span>manifest</span><strong>${escapeHtml(details.resources.manifest)}</strong></div>
-        </div>` : `<p class="muted">请选择一个变体。</p>`}
+        </div>` : `<p class="muted">请选择一个宠物。</p>`}
       </section>
 
       <section class="panel">
@@ -765,18 +1034,33 @@ function renderMaintainVariant() {
 
       <section class="panel">
         <div class="panel-header">
+          <div>
+            <h2>批量导入动作源视频</h2>
+            <p class="muted">预览并执行 rename-assets，将源目录中的动作 MP4 复制到当前宠物资源目录。</p>
+          </div>
+          <button type="button" data-build-rename-preview${disabled || !state.maintain.renameSourceFolder ? " disabled" : ""}>生成导入预览</button>
+        </div>
+        <div class="source-path">${escapeHtml(state.maintain.renameSourceFolder || "未选择源视频文件夹")}</div>
+        <div class="check-row">
+          <button type="button" data-choose-rename-folder${disabled}>选择文件夹</button>
+          <label class="check"><input type="checkbox" data-maintain-rename-force${state.maintain.renameForce ? " checked" : ""}${disabled}>强制覆盖目标视频</label>
+        </div>
+        ${state.maintain.renamePreview ? `<div class="preview-grid">
+          <section><h3>复制计划</h3><pre>${renderJson(state.maintain.renamePreview.copied)}</pre></section>
+          <section><h3>源目录</h3><pre>${renderJson({ sourceDir: state.maintain.renamePreview.sourceDir, animationsRoot: state.maintain.renamePreview.animationsRoot })}</pre></section>
+        </div>
+        <button type="button" class="primary" data-run-rename-assets="${escapeHtml(state.maintain.renamePreview.previewId)}"${disabled}>执行导入</button>` : ""}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>修改信息 / 元数据</h2>
-          <button type="button" data-build-metadata-preview${disabled}>生成 diff 预览</button>
+          <div class="button-row">
+            <button type="button" data-reset-maintain-edits${disabled}>取消修改并清空记录</button>
+            <button type="button" data-build-metadata-preview${disabled}>生成 diff 预览</button>
+          </div>
         </div>
-        <div class="form-grid">
-          <label>species <input type="text" data-maintain-field="species" value="${escapeHtml(fields.species)}"${disabled}></label>
-          <label>tier <input type="text" data-maintain-field="tier" value="${escapeHtml(fields.tier)}"${disabled}></label>
-          <label>notes <input type="text" data-maintain-field="notes" value="${escapeHtml(fields.notes)}"${disabled}></label>
-          <label>actions.buttons <input type="text" data-maintain-field="actionButtons" value="${escapeHtml(fields.actionButtons)}"${disabled}></label>
-          <label>actions.assets <input type="text" data-maintain-field="actionAssets" value="${escapeHtml(fields.actionAssets)}"${disabled}></label>
-          <label>features.enable <input type="text" data-maintain-field="featuresEnable" value="${escapeHtml(fields.featuresEnable)}"${disabled}></label>
-          <label>features.disable <input type="text" data-maintain-field="featuresDisable" value="${escapeHtml(fields.featuresDisable)}"${disabled}></label>
-        </div>
+        ${renderMaintainMetadataControls(fields, disabled)}
         ${renderMetadataDiff()}
       </section>
     </div>
@@ -820,11 +1104,11 @@ function renderMetadataDiff() {
 function renderVariantDetails(details) {
   if (!details) {
     return `<section class="panel empty-preview">
-      <div class="panel-header"><h2>变体详情</h2><span class="muted">${state.variantsPending ? "加载中" : "未选择"}</span></div>
+      <div class="panel-header"><h2>宠物详情</h2><span class="muted">${state.variantsPending ? "加载中" : "未选择"}</span></div>
     </section>`;
   }
   return `<section class="panel">
-    <div class="panel-header"><h2>变体详情</h2><span class="muted">${escapeHtml(details.id)}</span></div>
+    <div class="panel-header"><h2>宠物详情</h2><span class="muted">${escapeHtml(details.id)}</span></div>
     <div class="preview-grid">
       <section><h3>profile</h3><pre>${renderJson(details.profile)}</pre></section>
       <section><h3>resources</h3><pre>${renderJson(details.resources)}</pre></section>
@@ -842,22 +1126,22 @@ function renderDeleteVariant() {
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h1>删除测试变体</h1>
-            <p class="muted">仅允许删除 scope 为 test 的变体及其开发态资源</p>
+            <h1>删除宠物</h1>
+            <p class="muted">仅允许删除 scope 为 test 的宠物及其开发态资源</p>
           </div>
           <button type="button" data-refresh-variants${disabled}>刷新</button>
         </div>
         <div class="form-grid">
-          <label>测试变体
+          <label>测试宠物
             <select data-delete-select${disabled}>${renderVariantOptions(selected, true)}</select>
           </label>
           <label>二次确认
-            <input type="text" data-delete-confirm-input value="${escapeHtml(state.deleteVariant.confirmText)}" placeholder="输入变体 ID"${disabled}>
+            <input type="text" data-delete-confirm-input value="${escapeHtml(state.deleteVariant.confirmText)}" placeholder="输入宠物 ID"${disabled}>
           </label>
         </div>
         <div class="check-row">
           <button type="button" data-build-delete-preview${disabled}>生成删除预览</button>
-          <button type="button" class="danger-button" data-delete-confirm="${preview ? escapeHtml(preview.previewId) : ""}"${!confirmReady || busy() ? " disabled" : ""}>确认删除测试变体</button>
+          <button type="button" class="danger-button" data-delete-confirm="${preview ? escapeHtml(preview.previewId) : ""}"${!confirmReady || busy() ? " disabled" : ""}>确认删除宠物</button>
         </div>
       </section>
 
@@ -906,6 +1190,8 @@ function render() {
     appNode.innerHTML = renderMaintainVariant();
   } else if (state.view === "deleteVariant") {
     appNode.innerHTML = renderDeleteVariant();
+  } else if (state.view === "petCatalog") {
+    appNode.innerHTML = renderPetCatalog();
   } else {
     appNode.innerHTML = renderNewVariant();
   }
@@ -929,6 +1215,9 @@ async function refreshVariants() {
   render();
   try {
     state.variants = await api.listVariants();
+    if (!state.catalog.selectedId && state.variants.length > 0) {
+      state.catalog.selectedId = state.variants[0].id;
+    }
     if (!state.maintain.selectedId && state.variants.length > 0) {
       state.maintain.selectedId = state.variants[0].id;
     }
@@ -960,6 +1249,23 @@ async function loadMaintainDetails(id) {
   render();
 }
 
+async function loadCatalogDetails(id) {
+  if (!id || !api.getVariantDetails) {
+    state.catalog.details = null;
+    state.catalog.checkResult = null;
+    render();
+    return;
+  }
+  try {
+    state.catalog.details = await api.getVariantDetails(id);
+    state.catalog.checkResult = null;
+  } catch (error) {
+    state.catalog.details = null;
+    pushLog(error.message);
+  }
+  render();
+}
+
 async function switchView(view) {
   if (busy() || state.view === view) {
     return;
@@ -969,10 +1275,12 @@ async function switchView(view) {
   state.logs = [];
   state.stages = {};
   render();
-  if (view === "maintainVariant" || view === "deleteVariant") {
+  if (view === "maintainVariant" || view === "deleteVariant" || view === "petCatalog") {
     await refreshVariants();
     if (view === "maintainVariant" && state.maintain.selectedId) {
       await loadMaintainDetails(state.maintain.selectedId);
+    } else if (view === "petCatalog" && state.catalog.selectedId) {
+      await loadCatalogDetails(state.catalog.selectedId);
     }
   }
 }
@@ -1015,7 +1323,7 @@ async function runPreview(previewId) {
   if (!state.preview || busy()) {
     return;
   }
-  if (!window.confirm("确认开始生成这个宠物变体吗？")) {
+  if (!window.confirm("确认开始生成这个宠物吗？")) {
     return;
   }
 
@@ -1104,6 +1412,99 @@ async function runReplaceAction(previewId) {
   }
 }
 
+async function buildRenamePreview() {
+  if (busy() || !state.maintain.selectedId || !state.maintain.renameSourceFolder) {
+    return;
+  }
+  state.maintain.renamePending = true;
+  state.maintain.renamePreview = null;
+  render();
+  try {
+    state.maintain.renamePreview = await api.buildRenameAssetsPreview({
+      id: state.maintain.selectedId,
+      from: state.maintain.renameSourceFolder,
+      force: state.maintain.renameForce
+    });
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.maintain.renamePending = false;
+    render();
+  }
+}
+
+async function runRenameAssets(previewId) {
+  if (busy() || !previewId || !window.confirm("确认导入这些动作源视频吗？")) {
+    return;
+  }
+  state.running = true;
+  state.activeOperation = "maintainVariant";
+  state.logs = [];
+  state.stages = {};
+  render();
+  try {
+    await api.runRenameAssets(previewId);
+    state.stages.complete = "done";
+    state.maintain.renamePreview = null;
+    await loadMaintainDetails(state.maintain.selectedId);
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    render();
+  }
+}
+
+async function checkCatalogVariant() {
+  if (busy() || !state.catalog.selectedId) {
+    return;
+  }
+  state.catalog.checkPending = true;
+  state.catalog.checkResult = null;
+  render();
+  try {
+    state.catalog.checkResult = await api.checkVariant(state.catalog.selectedId);
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.catalog.checkPending = false;
+    render();
+  }
+}
+
+async function generateCatalogGallery() {
+  if (busy()) {
+    return;
+  }
+  state.catalog.galleryPending = true;
+  state.activeOperation = "petCatalog";
+  state.stages.generateGallery = "running";
+  render();
+  try {
+    state.catalog.gallery = await api.generateGallery();
+    state.stages.generateGallery = "done";
+  } catch (error) {
+    state.stages.generateGallery = "failed";
+    pushLog(error.message);
+  } finally {
+    state.catalog.galleryPending = false;
+    render();
+  }
+}
+
+async function openCatalogGallery() {
+  if (busy()) {
+    return;
+  }
+  try {
+    await api.openGallery();
+  } catch (error) {
+    pushLog(error.message);
+    render();
+  }
+}
+
 async function buildMetadataPreview() {
   if (busy() || !state.maintain.selectedId) {
     return;
@@ -1162,7 +1563,7 @@ async function buildDeletePreview() {
 }
 
 async function deleteTestVariant(previewId) {
-  if (busy() || !previewId || !window.confirm("确认删除这个测试变体及其开发态资源吗？")) {
+  if (busy() || !previewId || !window.confirm("确认删除这个测试宠物及其开发态资源吗？")) {
     return;
   }
   state.running = true;
@@ -1204,13 +1605,17 @@ appNode.addEventListener("input", (event) => {
   const maintainField = event.target.dataset.maintainField;
   if (maintainField) {
     state.maintain.metadataFields[maintainField] = event.target.value;
-    state.maintain.metadataPreview = null;
-    render();
+    state.maintain.metadataFields.notePreset = findNotePreset(
+      state.maintain.metadataFields.notes,
+      state.maintain.details?.profile?.scope,
+      state.maintain.metadataFields.tier
+    );
+    markMetadataPreviewDirty();
     return;
   }
   if (event.target.dataset.deleteConfirmInput !== undefined) {
     state.deleteVariant.confirmText = event.target.value;
-    render();
+    updateDeleteConfirmButton();
     return;
   }
   if (event.target.dataset.maintainLoopStart !== undefined) {
@@ -1239,6 +1644,10 @@ appNode.addEventListener("change", async (event) => {
   const actionKind = event.target.dataset.actionKind;
   const featureToggle = event.target.dataset.featureToggle;
   const featureList = event.target.dataset.featureList;
+  const catalogFilter = event.target.dataset.catalogFilter;
+  const maintainField = event.target.dataset.maintainField;
+  const maintainList = event.target.dataset.maintainList;
+  const maintainListValue = event.target.dataset.maintainListValue;
 
   if (field) {
     setField(field, event.target.value);
@@ -1265,9 +1674,22 @@ appNode.addEventListener("change", async (event) => {
     setRunOption(runOption, event.target.checked);
   } else if (event.target.dataset.loopMode) {
     setLoopMode(event.target.dataset.loopMode, { mode: event.target.value });
+  } else if (catalogFilter) {
+    state.catalog.filters[catalogFilter] = event.target.value;
+    const rows = filterVariants(state.variants, state.catalog.filters);
+    if (!rows.some((variant) => variant.id === state.catalog.selectedId)) {
+      state.catalog.selectedId = rows[0]?.id || "";
+    }
+    state.catalog.details = null;
+    state.catalog.checkResult = null;
+    render();
+    if (state.catalog.selectedId) {
+      await loadCatalogDetails(state.catalog.selectedId);
+    }
   } else if (event.target.dataset.maintainSelect !== undefined) {
     state.maintain.selectedId = event.target.value;
     state.maintain.replacePreview = null;
+    state.maintain.renamePreview = null;
     state.maintain.metadataPreview = null;
     await loadMaintainDetails(event.target.value);
   } else if (event.target.dataset.maintainAction !== undefined) {
@@ -1277,6 +1699,42 @@ appNode.addEventListener("change", async (event) => {
   } else if (event.target.dataset.maintainLoopMode !== undefined) {
     state.maintain.loopMode.mode = event.target.value;
     state.maintain.replacePreview = null;
+    render();
+  } else if (maintainField) {
+    state.maintain.metadataFields[maintainField] = event.target.value;
+    if (maintainField === "tier" && state.maintain.metadataFields.notePreset !== "custom") {
+      const scope = state.maintain.details?.profile?.scope;
+      const nextNote = scope ? state.options.notes[scope]?.[event.target.value] : null;
+      if (nextNote) {
+        state.maintain.metadataFields.notes = nextNote;
+        state.maintain.metadataFields.notePreset = nextNote;
+      }
+    }
+    state.maintain.metadataPreview = null;
+    render();
+  } else if (event.target.dataset.maintainNotePreset !== undefined) {
+    state.maintain.metadataFields.notePreset = event.target.value;
+    if (event.target.value !== "custom") {
+      state.maintain.metadataFields.notes = event.target.value;
+    }
+    state.maintain.metadataPreview = null;
+    render();
+  } else if (maintainList) {
+    state.maintain.metadataFields[maintainList] = setListValue(
+      state.maintain.metadataFields[maintainList],
+      maintainListValue,
+      event.target.checked
+    );
+    if (maintainList === "featuresEnable" && event.target.checked) {
+      state.maintain.metadataFields.featuresDisable = setListValue(state.maintain.metadataFields.featuresDisable, maintainListValue, false);
+    } else if (maintainList === "featuresDisable" && event.target.checked) {
+      state.maintain.metadataFields.featuresEnable = setListValue(state.maintain.metadataFields.featuresEnable, maintainListValue, false);
+    }
+    state.maintain.metadataPreview = null;
+    render();
+  } else if (event.target.dataset.maintainRenameForce !== undefined) {
+    state.maintain.renameForce = event.target.checked;
+    state.maintain.renamePreview = null;
     render();
   } else if (event.target.dataset.deleteSelect !== undefined) {
     state.deleteVariant.selectedId = event.target.value;
@@ -1290,10 +1748,15 @@ appNode.addEventListener("click", async (event) => {
   if (busy() && event.target.dataset.closeSuccess === undefined) {
     return;
   }
+  const catalogRow = event.target.closest("[data-catalog-id]");
   const action = event.target.dataset.chooseAction;
   const previewId = event.target.dataset.runPreview;
 
-  if (event.target.dataset.chooseFolder !== undefined) {
+  if (catalogRow) {
+    state.catalog.selectedId = catalogRow.dataset.catalogId;
+    state.catalog.checkResult = null;
+    await loadCatalogDetails(state.catalog.selectedId);
+  } else if (event.target.dataset.chooseFolder !== undefined) {
     const folder = await api.chooseSourceFolder();
     if (folder) {
       setField("sourceFolder", folder);
@@ -1312,6 +1775,17 @@ appNode.addEventListener("click", async (event) => {
     render();
   } else if (event.target.dataset.refreshVariants !== undefined) {
     await refreshVariants();
+    if (state.view === "petCatalog" && state.catalog.selectedId) {
+      await loadCatalogDetails(state.catalog.selectedId);
+    } else if (state.view === "maintainVariant" && state.maintain.selectedId) {
+      await loadMaintainDetails(state.maintain.selectedId);
+    }
+  } else if (event.target.dataset.catalogCheck !== undefined) {
+    await checkCatalogVariant();
+  } else if (event.target.dataset.generateGallery !== undefined) {
+    await generateCatalogGallery();
+  } else if (event.target.dataset.openGallery !== undefined) {
+    await openCatalogGallery();
   } else if (event.target.dataset.chooseReplacement !== undefined) {
     const filePath = await api.chooseActionVideo(state.maintain.action || "replace");
     if (filePath) {
@@ -1319,10 +1793,23 @@ appNode.addEventListener("click", async (event) => {
       state.maintain.replacePreview = null;
       render();
     }
+  } else if (event.target.dataset.chooseRenameFolder !== undefined) {
+    const folder = await api.chooseSourceFolder();
+    if (folder) {
+      state.maintain.renameSourceFolder = folder;
+      state.maintain.renamePreview = null;
+      render();
+    }
   } else if (event.target.dataset.buildReplacePreview !== undefined) {
     await buildReplacePreview();
   } else if (event.target.dataset.runReplaceAction) {
     await runReplaceAction(event.target.dataset.runReplaceAction);
+  } else if (event.target.dataset.buildRenamePreview !== undefined) {
+    await buildRenamePreview();
+  } else if (event.target.dataset.runRenameAssets) {
+    await runRenameAssets(event.target.dataset.runRenameAssets);
+  } else if (event.target.dataset.resetMaintainEdits !== undefined) {
+    resetMaintainEdits();
   } else if (event.target.dataset.buildMetadataPreview !== undefined) {
     await buildMetadataPreview();
   } else if (event.target.dataset.applyMetadataEdit) {

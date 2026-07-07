@@ -1,7 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const { pathToFileURL } = require("url");
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { createVariantWorkflow } = require("./services/variant-workflow.cjs");
 
 const indexFile = path.join(__dirname, "index.html");
@@ -120,6 +120,25 @@ ipcMain.handle("devtools:getVariantDetails", (event, id) => {
   return workflow.getVariantDetails(id);
 });
 
+ipcMain.handle("devtools:checkVariant", (event, id) => {
+  assertDevtoolsSender(event);
+  return workflow.checkVariant(id);
+});
+
+ipcMain.handle("devtools:generateGallery", (event) => {
+  assertDevtoolsSender(event);
+  return workflow.generateGallery();
+});
+
+ipcMain.handle("devtools:openGallery", async (event) => {
+  assertDevtoolsSender(event);
+  const galleryIndex = path.resolve(workflow.getGalleryIndexPath());
+  if (!fs.existsSync(galleryIndex) || path.basename(galleryIndex) !== "index.html") {
+    throw new Error("Devtools gallery has not been generated.");
+  }
+  return shell.openPath(galleryIndex);
+});
+
 ipcMain.handle("devtools:buildNewVariantPreview", (event, formState) => {
   assertDevtoolsSender(event);
   return workflow.buildNewVariantPreview(formState || {});
@@ -161,6 +180,29 @@ ipcMain.handle("devtools:runReplaceAction", async (event, previewId) => {
   }
 
   activeRun = workflow.runReplaceAction(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
+ipcMain.handle("devtools:buildRenameAssetsPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildRenameAssetsPreview(payload || {});
+});
+
+ipcMain.handle("devtools:runRenameAssets", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) {
+    throw new Error("宸叉湁 devtools 浠诲姟姝ｅ湪鎵ц銆?");
+  }
+
+  activeRun = workflow.runRenameAssets(previewId, {
     onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
     onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
   });

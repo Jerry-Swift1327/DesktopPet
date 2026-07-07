@@ -95,13 +95,13 @@ npm run installer:mac -- --pet-variant=pet2604 --arch=x64
 npm.cmd run devtools
 ```
 
-第一版支持通过可视化流程新增变体，并复用 `npm.cmd run variant:bootstrap` 的同一套生成规则。Devtools 源码位于 `devtools/`，不包含在正常交付包中。
+Devtools 支持新增宠物、宠物库、维护宠物和删除测试宠物，并复用 `variant:list/show/query/check/new/bootstrap/rename-assets/gallery` 的同一套规则或纯函数。Devtools 源码位于 `devtools/`，不包含在正常交付包中。
 
 ## 关键目录
 
 | 路径 | 作用 |
 | --- | --- |
-| `devtools` | 内部维护工具窗口，当前用于新增变体，不进入正常交付包 |
+| `devtools` | 内部维护工具窗口，用于新增、查询、检查、维护和删除测试宠物，不进入正常交付包 |
 | `electron` | 主进程、预加载桥、变体配置、行走计时和 Windows 窗口探测脚本 |
 | `scripts` | 变体元数据查询、新建和资源重命名 CLI |
 | `static` | 宠物窗口、快捷菜单、悬停面板和气泡的渲染入口 |
@@ -120,7 +120,7 @@ npm.cmd run devtools
 | `build-electron-win.ps1` | 组装 Windows 便携版目录包 |
 | `build-installer-win.ps1` | 构建 Windows NSIS 安装向导 |
 | `build-installer-mac.cjs` | 构建 macOS `.app` 和 `.dmg` |
-| `scripts/variant-cli.cjs` | 查询/新增变体并复制重命名动作源视频 |
+| `scripts/variant-cli.cjs` | 查询/新增宠物变体、bootstrap、资源检查、复制重命名动作源视频和生成本地图鉴 |
 
 ## 输出目录
 

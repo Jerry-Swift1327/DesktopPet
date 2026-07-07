@@ -21,7 +21,7 @@ node --test "test/**/*.test.cjs"
 | --- | --- | --- |
 | `walk-controller-window-frame.test.cjs` | Window surface walk regression: stable real-window X track drives the pet window, returns scale with each step, handles direction-specific visible insets and edge mirrors, caps mirrored edge correction to one X step, and frameStep does not change walk speed. | `../electron/behavior/walk-controller.cjs` |
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名、test scope 与 `pettest<seq>` 独立序列 | `../electron/pet-variants.cjs` |
-| `variant-cli.test.cjs` | 变体 CLI 的新建、校验、动作源视频复制重命名、每动作帧段参数、维护预览/应用纯函数 | `../scripts/variant-cli.cjs` |
+| `variant-cli.test.cjs` | 变体 CLI 的新建、校验、资源检查、动作源视频复制重命名、每动作帧段参数、维护预览/应用纯函数和图鉴生成 | `../scripts/variant-cli.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |
 | `walk-controller-accessor.test.cjs` | walk-controller 访问器与 main.cjs 接线结构断言 | `../electron/behavior/walk-controller.cjs`、`../electron/main.cjs` |
 | `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除与 main.cjs 薄包装接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |
@@ -29,9 +29,9 @@ node --test "test/**/*.test.cjs"
 | `pet-frame-cache.test.cjs` | 宠物帧缓存、首帧解码门禁、失败降级、响应式缩放布局、moving walk 帧等待 advanceWalkStep 成功后提交和 renderer 接线结构 | `../static/renderer/pet-frame-cache.js`、`../static/renderer/pet-window.js`、`../static/index.html` |
 | `state-visual-commit.test.cjs` | 状态切换视觉提交事务（旧帧贴地保持、目标首帧上报后落地/启动行走） | `../electron/behavior/state-controller.cjs`、`../electron/main.cjs` |
 | `contact-qrcode.test.cjs` | 联系二维码查找辅助模块结构断言（开发/打包路径构造、Downloads fallback、文件存在/不存在、读取异常跳过、返回结构） | `../electron/ipc/contact-qrcode.cjs` |
-| `devtools-ipc-contract.test.cjs` | devtools 维护中心 IPC/preload 结构契约（列出变体、详情、替换动作、元数据编辑、删除测试变体） | `../devtools/main.cjs`、`../devtools/preload.cjs` |
-| `devtools-renderer-layout.test.cjs` | devtools renderer 全景控制台结构护栏（左右双栏、维护页签、每动作帧段、动作状态指示器、进度条、执行日志弹性区域、全局防横向滚动 CSS） | `../devtools/renderer/app.js`、`../devtools/renderer/styles.css` |
-| `devtools-variant-workflow.test.cjs` | devtools 变体 workflow（新增变体预览/执行、每动作帧段、维护列表/详情、动作替换、元数据编辑、删除测试变体） | `../devtools/services/variant-workflow.cjs` |
+| `devtools-ipc-contract.test.cjs` | devtools 维护中心 IPC/preload 结构契约（列出宠物、详情、检查、图鉴、替换动作、批量导入、元数据编辑、删除测试宠物） | `../devtools/main.cjs`、`../devtools/preload.cjs` |
+| `devtools-renderer-layout.test.cjs` | devtools renderer 全景控制台结构护栏（左右双栏、宠物库、维护页签、每动作帧段、动作状态指示器、进度条、执行日志弹性区域、全局防横向滚动 CSS） | `../devtools/renderer/app.js`、`../devtools/renderer/styles.css` |
+| `devtools-variant-workflow.test.cjs` | devtools workflow（新增宠物预览/执行、宠物库检查/图鉴、每动作帧段、维护列表/详情、动作替换、批量导入、元数据编辑、删除测试宠物） | `../devtools/services/variant-workflow.cjs` |
 | `app-lifecycle-contract.test.cjs` | 应用生命周期契约结构断言（单实例锁、whenReady 启动序列、before-quit 退出清理、window-all-closed、activate、display-metrics-changed、switch-variant 重启、启动/退出顺序） | `../electron/main.cjs` |
 | `main-timer-lifecycle-race.test.cjs` | 主进程定时器与窗口销毁竞态护栏（idle/yawn/sleep 定时器退出清理、状态切换前窗口存活判断、transition anchor 安全读取 bounds） | `../electron/main.cjs` |
 | `register-app-lifecycle.test.cjs` | 生命周期注册模块结构断言（导出函数、事件注册、darwin 条件、不包含业务逻辑函数） | `../electron/lifecycle/register-app-lifecycle.cjs` |

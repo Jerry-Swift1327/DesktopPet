@@ -10,8 +10,13 @@ const preloadSource = fs.readFileSync(path.join(ROOT, "devtools", "preload.cjs")
 const invokeContracts = [
   ["listVariants", "devtools:listVariants"],
   ["getVariantDetails", "devtools:getVariantDetails"],
+  ["checkVariant", "devtools:checkVariant"],
+  ["generateGallery", "devtools:generateGallery"],
+  ["openGallery", "devtools:openGallery"],
   ["buildReplaceActionPreview", "devtools:buildReplaceActionPreview"],
   ["runReplaceAction", "devtools:runReplaceAction"],
+  ["buildRenameAssetsPreview", "devtools:buildRenameAssetsPreview"],
+  ["runRenameAssets", "devtools:runRenameAssets"],
   ["buildMetadataEditPreview", "devtools:buildMetadataEditPreview"],
   ["applyMetadataEdit", "devtools:applyMetadataEdit"],
   ["buildDeleteVariantPreview", "devtools:buildDeleteVariantPreview"],

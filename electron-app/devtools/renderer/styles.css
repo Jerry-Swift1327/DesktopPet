@@ -95,6 +95,7 @@ button.primary:hover:not(:disabled) {
 .nav-item {
   width: 100%;
   text-align: left;
+  font-weight: 700;
 }
 
 .nav-stack {
@@ -243,6 +244,28 @@ select:focus {
   margin-top: 14px;
 }
 
+.date-platform-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.inline-platforms {
+  margin-top: 0;
+  padding-bottom: 7px;
+}
+
+.button-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .check {
   display: inline-flex;
   grid-template-columns: none;
@@ -329,6 +352,10 @@ select:focus {
   font-size: 12px;
 }
 
+.maintain-choice-group {
+  margin-top: 0;
+}
+
 .option-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
@@ -368,6 +395,43 @@ select:focus {
   font-size: 12px;
   margin-bottom: 12px;
   overflow-wrap: anywhere;
+}
+
+.catalog-list {
+  display: grid;
+  gap: 8px;
+}
+
+.catalog-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 3px;
+  text-align: left;
+}
+
+.catalog-row strong,
+.catalog-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-row span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.catalog-row.active {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.notes-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .action-grid {
@@ -791,7 +855,6 @@ pre {
 
   .nav-item {
     width: auto;
-    margin-left: auto;
   }
 
   .workspace {
@@ -809,6 +872,15 @@ pre {
 
   .action-card {
     grid-template-columns: 1fr;
+  }
+
+  .date-platform-row,
+  .notes-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-platforms {
+    padding-bottom: 0;
   }
 
   .action-card button {

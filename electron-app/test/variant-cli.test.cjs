@@ -6,7 +6,10 @@ const path = require("path");
 const {
   createVariant,
   renameAssets,
+  buildRenameAssetsPlan,
+  applyRenameAssetsPlan,
   findSourceVideo,
+  buildCheckVariantResult,
   buildBootstrapPlan,
   applyBootstrapPlan,
   applyBootstrapPlanAsync,
@@ -116,6 +119,42 @@ test("variant CLI copies existing variant videos into preserved action directori
       action
     );
   }
+});
+
+test("variant CLI builds check results from metadata files", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+
+  const result = buildCheckVariantResult("pettest01", { metadataFile, animationsRoot });
+
+  assert.equal(result.id, "pettest01");
+  assert.equal(result.scope, "test");
+  assert.equal(result.manifest, "pettest01_actions_manifest.json");
+  assert.equal(result.animationFolders.includes("pettest01_squat"), true);
+  assert.equal(result.existingPaths.some((item) => item.endsWith("pettest01_actions_manifest.json")), true);
+});
+
+test("variant CLI can preview rename-assets before applying copied videos", () => {
+  const tempDir = createTempDir();
+  const sourceDir = path.join(tempDir, "downloads");
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
+
+  const plan = buildRenameAssetsPlan({ id: "pettest01", from: sourceDir }, { metadataFile, animationsRoot });
+
+  assert.equal(plan.id, "pettest01");
+  assert.equal(plan.copied.length, 4);
+  assert.equal(fs.existsSync(plan.copied[0].target), false);
+
+  const result = applyRenameAssetsPlan(plan);
+
+  assert.equal(result.copied.length, 4);
+  assert.equal(fs.readFileSync(path.join(animationsRoot, "pettest01_squat", "pettest01_squat.mp4"), "utf8"), "squat");
 });
 
 test("variant CLI list output uses V2 columns", () => {

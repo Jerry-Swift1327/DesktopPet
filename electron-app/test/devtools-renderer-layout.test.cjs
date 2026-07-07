@@ -44,16 +44,60 @@ test("devtools execution panel exposes a flexible terminal log area", () => {
 
 test("devtools renderer exposes maintenance navigation and confirmation surfaces", () => {
   assert.match(appSource, /view:\s*"newVariant"/);
+  assert.match(appSource, /view:\s*"petCatalog"/);
   assert.match(appSource, /view:\s*"maintainVariant"/);
   assert.match(appSource, /view:\s*"deleteVariant"/);
   assert.match(appSource, /data-nav-view=/);
+  assert.match(appSource, /function renderPetCatalog/);
   assert.match(appSource, /function renderMaintainVariant/);
   assert.match(appSource, /function renderDeleteVariant/);
+  assert.match(appSource, /宠物库/);
+  assert.match(appSource, /维护宠物/);
+  assert.match(appSource, /删除宠物/);
+  assert.doesNotMatch(appSource, /维护变体|删除测试变体/);
   assert.match(appSource, /class="metadata-diff"/);
   assert.match(appSource, /data-apply-metadata-edit/);
   assert.match(appSource, /data-delete-confirm/);
   assert.match(appSource, /data-reset-new-variant/);
   assert.match(appSource, /class="success-modal"/);
+});
+
+test("devtools pet catalog exposes list filters, checks, and gallery controls", () => {
+  const renderPetCatalogBody = appSource.match(/function renderPetCatalog\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(renderPetCatalogBody, /data-catalog-filter/);
+  assert.match(renderPetCatalogBody, /data-catalog-id/);
+  assert.match(renderPetCatalogBody, /data-catalog-check/);
+  assert.match(renderPetCatalogBody, /data-generate-gallery/);
+  assert.match(renderPetCatalogBody, /data-open-gallery/);
+});
+
+test("devtools new pet form keeps action and feature choices outside advanced settings", () => {
+  const renderNewVariantBody = appSource.match(/function renderNewVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const advancedBody = appSource.match(/function renderAdvancedControls\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(renderNewVariantBody, /class="date-platform-row"/);
+  assert.match(renderNewVariantBody, /class="platforms inline-platforms"/);
+  assert.match(renderNewVariantBody, /renderActionPicker\(\)[\s\S]*renderFeaturePicker\(\)[\s\S]*renderAdvancedControls\(\)/);
+  assert.doesNotMatch(renderNewVariantBody, /data-run-option="autoSelectLoop"/);
+  assert.doesNotMatch(appSource, /默认自动选取最佳运行帧段/);
+  assert.doesNotMatch(advancedBody, /renderActionPicker|renderFeaturePicker/);
+});
+
+test("devtools maintenance metadata uses selectable controls and reset action", () => {
+  assert.match(appSource, /data-maintain-list=/);
+  assert.match(appSource, /data-maintain-note-preset/);
+  assert.match(appSource, /data-reset-maintain-edits/);
+  assert.match(appSource, /data-build-rename-preview/);
+  assert.match(appSource, /data-run-rename-assets/);
+});
+
+test("devtools delete confirmation input updates without rerendering the focused input", () => {
+  const inputBody = appSource.match(/appNode\.addEventListener\("input", \(event\) => \{([\s\S]*?)\n\}\);/)?.[1] || "";
+  const deleteBranch = inputBody.match(/if \(event\.target\.dataset\.deleteConfirmInput !== undefined\) \{([\s\S]*?)return;/)?.[1] || "";
+
+  assert.match(deleteBranch, /updateDeleteConfirmButton\(\)/);
+  assert.doesNotMatch(deleteBranch, /render\(/);
 });
 
 test("devtools action cards expose per-action frame mode controls", () => {
@@ -68,13 +112,14 @@ test("devtools action cards expose per-action frame mode controls", () => {
 
 test("devtools CSS locks global horizontal overflow while enabling dashboard columns", () => {
   assert.match(cssBlock(".shell"), /height\s*:\s*100vh\s*;/);
+  assert.match(cssBlock(".nav-item"), /font-weight\s*:\s*700\s*;/);
   assert.match(cssBlock(".shell"), /overflow\s*:\s*hidden\s*;/);
   assert.match(cssBlock(".workspace"), /overflow-x\s*:\s*hidden\s*;/);
   assert.match(cssBlock(".workspace"), /overflow-y\s*:\s*auto\s*;/);
   assert.doesNotMatch(cssBlock(".wizard"), /max-width\s*:/);
   assert.match(cssBlock(".wizard"), /grid-template-columns\s*:\s*minmax\(0,\s*1\.1fr\)\s+minmax\(0,\s*0\.9fr\)\s*;/);
   assert.match(stylesSource, /\.wizard-left,\s*\n\.wizard-right\s*\{/);
-  assert.match(cssBlock(".wizard-left,\n.wizard-right"), /height\s*:\s*calc\(100vh - 48px\)\s*;/);
+  assert.match(stylesSource, /\.wizard-left,\s*\n\.wizard-right\s*\{[\s\S]*?height\s*:\s*calc\(100vh - 48px\)\s*;/);
   assert.match(cssBlock(".action-grid"), /grid-template-columns\s*:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)\s*;/);
   assert.match(stylesSource, /@media\s*\(max-width:\s*1180px\)/);
 });
