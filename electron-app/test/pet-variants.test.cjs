@@ -187,7 +187,8 @@ test("variant lists are sorted by date ascending", () => {
     "pet2607",
     "pet2608",
     "pet2609",
-    "pet2610"
+    "pet2610",
+    "pet2611"
   ]);
   assert.deepEqual(getPetVariantMetadataList().map((profile) => profile.id), PET_VARIANT_IDS);
 });
@@ -211,17 +212,17 @@ test("new variant drafts derive V2 fields version notes and delivery defaults", 
   const customDraft = createPetVariantMetadataDraft({
     species: "cat",
     tier: "advanced",
-    date: "2026-06-30"
+    date: "2026-07-08"
   });
   const internalDraft = createPetVariantMetadataDraft({
     species: "dog",
     scope: "internal",
     tier: "basic",
-    date: "2026-07-01"
+    date: "2026-07-08"
   });
   const profile = resolvePetVariantProfile(customDraft);
 
-  assert.equal(customDraft.id, "pet2611");
+  assert.equal(customDraft.id, "pet2612");
   assert.equal(customDraft.notes, "客户定制-高级");
   assert.equal(customDraft.version, "1.0");
   assert.equal(internalDraft.version, "1.4");
@@ -230,17 +231,17 @@ test("new variant drafts derive V2 fields version notes and delivery defaults", 
   assert.equal(profile.species, "cat");
   assert.equal(profile.tier, "advanced");
   assert.deepEqual(profile.platforms, ["win32"]);
-  assert.deepEqual(profile.deliveryPathSegments, ["custom", "pet2611"]);
-  assert.equal(profile.animationPrefix, "pet2611");
+  assert.deepEqual(profile.deliveryPathSegments, ["custom", "pet2612"]);
+  assert.equal(profile.animationPrefix, "pet2612");
   assert.match(profile.installerGuid, /^[0-9a-f-]{36}$/);
-  assert.equal(createVariantInstallerGuid("pet2611"), createVariantInstallerGuid("pet2611"));
+  assert.equal(createVariantInstallerGuid("pet2612"), createVariantInstallerGuid("pet2612"));
 });
 
 test("explicit feature draft overrides do not inherit tier feature defaults", () => {
   const draft = createPetVariantMetadataDraft({
     species: "cat",
     tier: "advanced",
-    date: "2026-07-06",
+    date: "2026-07-08",
     features: {
       enable: ["autoStart", "windowRoam"],
       disable: []
@@ -295,10 +296,10 @@ test("variant namespace rejects duplicate ids and V2 validation rejects unknown 
 });
 
 test("custom variant ids use pet-year sequence across dated variants", () => {
-  assert.equal(createNextPetVariantId({ date: "2026-06-30" }), "pet2611");
-  assert.equal(createNextPetVariantId({ date: "2026-07-01" }), "pet2611");
+  assert.equal(createNextPetVariantId({ date: "2026-07-07" }), "pet2612");
+  assert.equal(createNextPetVariantId({ date: "2026-07-08" }), "pet2612");
   assert.equal(createNextPetVariantId({ date: "2027-01-01" }), "pet2701");
-  assert.throws(() => createNextPetVariantId({ date: "2026-06-01" }), /would require resequencing/);
+  assert.throws(() => createNextPetVariantId({ date: "2026-07-06" }), /would require resequencing/);
 });
 
 test("test scope variants use independent pettest ids and do not affect official sequences", () => {

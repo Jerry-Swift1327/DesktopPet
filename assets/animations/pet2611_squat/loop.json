@@ -1,0 +1,41 @@
+{
+  "action": "pet2611_squat",
+  "video": "pet2611_squat.mp4",
+  "frameMs": 30,
+  "sourceFrameSize": 128,
+  "frameSize": 256,
+  "qualityProfile": "enhanced_2x_conservative",
+  "sourceFrameCount": 167,
+  "normalizationMode": "source-canvas",
+  "sourceCanvasSize": [
+    960,
+    960
+  ],
+  "stableGround": {
+    "enabled": true,
+    "applied": true,
+    "targetBottom": 222,
+    "targetPercentile": 90.0,
+    "maxShift": 32,
+    "cleanedComponents": 18,
+    "cleanedPixels": 46,
+    "maxCleanedArea": 5,
+    "alignedFrames": 16,
+    "maxAbsShift": 1,
+    "clampedFrames": 0,
+    "warningCount": 0,
+    "warnings": []
+  },
+  "trimGroundAlphaMode": "processed-explicit",
+  "trimGroundAlpha": 128,
+  "trimGroundPadding": 0,
+  "stableGroundMode": "processed-subject-components",
+  "stableGroundMaxShift": 32,
+  "frameCount": 167,
+  "loopStart": 0,
+  "loopEnd": 166,
+  "sourceLoopStart": 0,
+  "sourceLoopEnd": 166,
+  "score": 0.0,
+  "loopSelection": "full"
+}

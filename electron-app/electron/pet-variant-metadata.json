@@ -344,6 +344,35 @@
         ],
         "disable": []
       }
+    },
+    "pet2611": {
+      "id": "pet2611",
+      "date": "2026-07-07",
+      "scope": "custom",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "客户定制-基础",
+      "version": "1.0",
+      "scale": 1.1,
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "pet2611",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": []
+      },
+      "features": {
+        "enable": [
+          "autoStart"
+        ],
+        "disable": []
+      }
     }
   }
 }

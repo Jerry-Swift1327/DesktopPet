@@ -208,6 +208,8 @@ python tools\build_quality_previews.py --actions dog_walk --clean
 - 并排对比预览
 - `quality_previews/README.md` 报告
 
+当 `loop.json` 包含 `sourceFrames` 时，预览脚本会按该列表映射源素材帧，适用于去重或非连续选帧后的运行帧。
+
 ## 推荐资源处理流程
 
 新增完整变体时，优先从 `electron-app` 运行 `npm.cmd run variant:bootstrap` 统一编排元数据、源视频复制、资源处理和本地图鉴生成；本脚本仍是实际抽帧、抠像和 manifest 写入入口。

@@ -20,12 +20,9 @@ ACTIONS = ("dog_squat", "dog_walk", "dog_feed", "dog_ball")
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 
-from process_pet_actions import (  # noqa: E402
-    chroma_key_green_image,
-    clear_frame_dir,
-    find_ffmpeg,
-    get_global_bounds,
-)
+from pet_actions.chroma import chroma_key_green_image, get_global_bounds  # noqa: E402
+from pet_actions.ffmpeg import find_ffmpeg  # noqa: E402
+from pet_actions.files import clear_frame_dir  # noqa: E402
 
 
 FRAME_MS = 30
@@ -145,10 +142,20 @@ def generate_candidate_frames(action: str, action_dir: Path, output_dir: Path) -
     loop = read_loop(action_dir)
     loop_start = int(loop["loopStart"])
     loop_end = int(loop["loopEnd"])
+    loop_length = loop_end - loop_start + 1
+    source_frames = loop.get("sourceFrames")
+    if isinstance(source_frames, list):
+        if len(source_frames) != loop_length:
+            raise RuntimeError(f"sourceFrames length does not match loop length for {action}")
+        source_indices = [int(index) for index in source_frames]
+    else:
+        source_start = int(loop.get("sourceLoopStart", loop_start))
+        source_indices = [source_start + offset for offset in range(loop_length)]
     candidate_frames: list[Path] = []
-    for index in range(loop_start, loop_end + 1):
-        keyed = chroma_key_green_image(frame_path(raw_dir, index))
-        output_path = candidate_dir / f"frame_{index:03d}.png"
+    for offset, source_index in enumerate(source_indices):
+        output_index = loop_start + offset
+        keyed = chroma_key_green_image(frame_path(raw_dir, source_index))
+        output_path = candidate_dir / f"frame_{output_index:03d}.png"
         normalize_candidate_frame(keyed, bounds).save(output_path)
         candidate_frames.append(output_path)
 
