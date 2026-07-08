@@ -367,7 +367,9 @@ test("devtools new pet form keeps action and feature choices collapsible outside
   assert.match(renderActionPickerBody, /class="option-grid new-pet-option-grid"/);
   assert.match(renderFeaturePickerBody, /<details class="option-section collapsible-section new-pet-picker" data-picker="features"\$\{state\.featurePickerOpen \? " open" : ""\}>/);
   assert.match(renderFeaturePickerBody, /<summary>功能选择<\/summary>/);
+  assert.match(renderFeaturePickerBody, /<strong>启用功能<\/strong>/);
   assert.match(renderFeaturePickerBody, /class="option-grid new-pet-option-grid"/);
+  assert.doesNotMatch(renderFeaturePickerBody, /禁用功能|disableFeatures/);
   assert.doesNotMatch(renderNewVariantBody, /data-run-option="autoSelectLoop"/);
   assert.doesNotMatch(appSource, /默认自动选取最佳运行帧段/);
   assert.doesNotMatch(advancedBody, /renderActionPicker|renderFeaturePicker/);
@@ -378,7 +380,28 @@ test("devtools new pet derived summary uses compact and wide rows", () => {
 
   assert.match(renderDerivedSummaryBody, /class="derived-summary"/);
   assert.match(renderDerivedSummaryBody, /class="summary-grid summary-grid-compact"[\s\S]*宠物 ID id[\s\S]*说明 notes[\s\S]*版本 version[\s\S]*缩放 scale[\s\S]*资源前缀 assetPrefix/);
-  assert.match(renderDerivedSummaryBody, /class="summary-grid summary-grid-wide"[\s\S]*动作 actions[\s\S]*启用功能 features on[\s\S]*禁用功能 features off/);
+  assert.match(renderDerivedSummaryBody, /class="summary-grid summary-grid-wide"[\s\S]*动作 actions[\s\S]*启用功能 features/);
+  assert.doesNotMatch(renderDerivedSummaryBody, /禁用功能 features off/);
+});
+
+test("devtools feature metadata editing uses a single enabled feature list", () => {
+  const renderMaintainBody = appSource.match(/function renderMaintainMetadataControls\(fields, disabled\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const payloadBody = appSource.match(/function buildMetadataPayload\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(renderMaintainBody, /renderMaintainCheckboxList\("featuresEnable", "启用功能 features", features, fields\.featuresEnable, disabled\)/);
+  assert.doesNotMatch(renderMaintainBody, /featuresDisable|features\.disable/);
+  assert.match(payloadBody, /features:\s*\{[\s\S]*enable:\s*parseList\(fields\.featuresEnable\),[\s\S]*disable:\s*\[\]/);
+  assert.doesNotMatch(payloadBody, /parseList\(fields\.featuresDisable\)/);
+});
+
+test("devtools checkbox controls keep a fixed visual size", () => {
+  const checkboxBlock = cssBlock('input[type="checkbox"]');
+
+  assert.match(checkboxBlock, /width\s*:\s*16px\s*;/);
+  assert.match(checkboxBlock, /height\s*:\s*16px\s*;/);
+  assert.match(checkboxBlock, /min-width\s*:\s*16px\s*;/);
+  assert.match(checkboxBlock, /padding\s*:\s*0\s*;/);
+  assert.match(checkboxBlock, /accent-color\s*:/);
 });
 
 test("devtools new pet preview controls preserve scroll and collapse noisy details", () => {

@@ -324,10 +324,6 @@ function selectedEnabledFeatures() {
   return parseList(value);
 }
 
-function selectedDisabledFeatures() {
-  return parseList(state.form.advanced.disableFeatures);
-}
-
 function stageLabel(stage) {
   return stageLabels[stage] || stage;
 }
@@ -458,16 +454,16 @@ function toggleAction(action, kind, checked) {
 }
 
 function toggleFeature(name, feature, checked) {
+  if (name !== "features") {
+    return;
+  }
   const selected = new Set(parseList(state.form.advanced[name]));
-  const oppositeName = name === "features" ? "disableFeatures" : "features";
-  const opposite = new Set(parseList(state.form.advanced[oppositeName]));
   if (checked) {
     selected.add(feature);
-    opposite.delete(feature);
   } else {
     selected.delete(feature);
   }
-  state.form.advanced[oppositeName] = Array.from(opposite);
+  state.form.advanced.disableFeatures = [];
   setAdvancedList(name, Array.from(selected));
 }
 
@@ -618,7 +614,6 @@ function renderActionPicker() {
 
 function renderFeaturePicker() {
   const enabled = new Set(selectedEnabledFeatures());
-  const disabled = new Set(selectedDisabledFeatures());
   const features = Object.keys(state.options.features);
   return `<details class="option-section collapsible-section new-pet-picker" data-picker="features"${state.featurePickerOpen ? " open" : ""}>
     <summary>功能选择</summary>
@@ -626,16 +621,11 @@ function renderFeaturePicker() {
       <strong>启用功能</strong>
       <div class="option-grid new-pet-option-grid">${features.map((feature) => renderFeatureOption(feature, "features", enabled.has(feature))).join("")}</div>
     </div>
-    <div class="option-group">
-      <strong>禁用功能</strong>
-      <div class="option-grid new-pet-option-grid">${features.map((feature) => renderFeatureOption(feature, "disableFeatures", disabled.has(feature))).join("")}</div>
-    </div>
   </details>`;
 }
 
 function renderDerivedSummary() {
   const enable = selectedEnabledFeatures();
-  const disable = selectedDisabledFeatures();
 
   return `<div class="derived-summary">
     <div class="summary-grid summary-grid-compact">
@@ -647,8 +637,7 @@ function renderDerivedSummary() {
     </div>
     <div class="summary-grid summary-grid-wide">
       <div><span>动作 actions</span><strong>${escapeHtml(requiredActions().join(", ") || "-")}</strong></div>
-      <div><span>启用功能 features on</span><strong>${escapeHtml(enable.join(", ") || "-")}</strong></div>
-      <div><span>禁用功能 features off</span><strong>${escapeHtml(disable.join(", ") || "-")}</strong></div>
+      <div><span>启用功能 features</span><strong>${escapeHtml(enable.join(", ") || "-")}</strong></div>
     </div>
   </div>`;
 }
@@ -954,7 +943,6 @@ function syncMaintainFields(details) {
   }
   const profile = details.profile;
   const enabledFeatures = profile.enabledFeatures || Object.entries(profile.features || {}).filter(([, enabled]) => enabled).map(([name]) => name);
-  const disabledFeatures = Object.entries(profile.features || {}).filter(([, enabled]) => enabled === false).map(([name]) => name);
   state.maintain.metadataFields = {
     species: profile.species || "",
     tier: profile.tier || "",
@@ -963,7 +951,7 @@ function syncMaintainFields(details) {
     actionButtons: (profile.actionButtons || profile.actions || []).slice(),
     actionAssets: (profile.actionAssets || profile.extraAnimationAssets || []).slice(),
     featuresEnable: enabledFeatures.slice(),
-    featuresDisable: disabledFeatures.slice()
+    featuresDisable: []
   };
   const actions = actionsFromDetails(details);
   if (!state.maintain.action || !actions.includes(state.maintain.action)) {
@@ -1021,8 +1009,7 @@ function renderMaintainMetadataControls(fields, disabled) {
   <div class="option-section">
     ${renderMaintainCheckboxList("actionButtons", "actions.buttons", buttonActions, fields.actionButtons, disabled)}
     ${renderMaintainCheckboxList("actionAssets", "actions.assets", assetActions, fields.actionAssets, disabled)}
-    ${renderMaintainCheckboxList("featuresEnable", "features.enable", features, fields.featuresEnable, disabled)}
-    ${renderMaintainCheckboxList("featuresDisable", "features.disable", features, fields.featuresDisable, disabled)}
+    ${renderMaintainCheckboxList("featuresEnable", "启用功能 features", features, fields.featuresEnable, disabled)}
   </div>`;
 }
 
@@ -1432,7 +1419,7 @@ function buildMetadataPayload() {
       },
       features: {
         enable: parseList(fields.featuresEnable),
-        disable: parseList(fields.featuresDisable)
+        disable: []
       }
     }
   };
@@ -1810,10 +1797,8 @@ appNode.addEventListener("change", async (event) => {
       maintainListValue,
       event.target.checked
     );
-    if (maintainList === "featuresEnable" && event.target.checked) {
-      state.maintain.metadataFields.featuresDisable = setListValue(state.maintain.metadataFields.featuresDisable, maintainListValue, false);
-    } else if (maintainList === "featuresDisable" && event.target.checked) {
-      state.maintain.metadataFields.featuresEnable = setListValue(state.maintain.metadataFields.featuresEnable, maintainListValue, false);
+    if (maintainList === "featuresEnable") {
+      state.maintain.metadataFields.featuresDisable = [];
     }
     state.maintain.metadataPreview = null;
     renderPreservingScroll();

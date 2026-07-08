@@ -266,6 +266,18 @@ select {
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  accent-color: #0284c7;
+}
+
 input:focus,
 select:focus {
   border-color: #64748b;
@@ -308,10 +320,6 @@ select:focus {
   grid-template-columns: none;
   align-items: center;
   gap: 8px;
-}
-
-.check input {
-  width: auto;
 }
 
 .processing-options {
@@ -476,10 +484,6 @@ select:focus {
   padding: 8px 10px;
   background: #fbfdff;
   color: #27272a;
-}
-
-.option-check input {
-  width: auto;
 }
 
 .option-check span {
