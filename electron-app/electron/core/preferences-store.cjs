@@ -185,7 +185,10 @@ function createPreferencesStore({
   }
 
   function canToggleWindowRoam() {
-    return Boolean(petRuntimeConfig.features?.windowRoam) && ENABLE_WINDOW_DOCKING && process.platform === "win32";
+    return Boolean(petRuntimeConfig.features?.windowRoam)
+      && Boolean(petRuntimeConfig.features?.windowDocking)
+      && ENABLE_WINDOW_DOCKING
+      && process.platform === "win32";
   }
 
   function readWindowRoamPreference() {
@@ -213,7 +216,7 @@ function createPreferencesStore({
 
   function buildWindowRoamSummary(error = "") {
     return {
-      supported: ENABLE_WINDOW_DOCKING && process.platform === "win32",
+      supported: Boolean(petRuntimeConfig.features?.windowDocking) && ENABLE_WINDOW_DOCKING && process.platform === "win32",
       enabled: windowRoamEnabledCache,
       canToggle: canToggleWindowRoam(),
       error

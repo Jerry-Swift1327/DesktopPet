@@ -394,3 +394,7 @@ test("devtools CSS locks global horizontal overflow while enabling dashboard col
   assert.match(stylesSource, /@media\s*\(max-width:\s*1180px\)[\s\S]*\.catalog-filters\s*\{[\s\S]*repeat\(auto-fit,\s*minmax\(min\(190px,\s*100%\),\s*1fr\)\)/);
   assert.match(stylesSource, /@media\s*\(max-width:\s*780px\)[\s\S]*\.new-pet-picker \.new-pet-option-grid,[\s\S]*\.summary-grid-compact,[\s\S]*\.summary-grid-wide\s*\{[\s\S]*grid-template-columns\s*:\s*1fr\s*;/);
 });
+test("devtools exposes drag window docking as an independent feature choice", () => {
+  assert.match(appSource, /const defaultEnabledFeatures = \["autoStart", "windowDocking", "windowRoam"\]/);
+  assert.match(appSource, /windowDocking: "拖拽吸附窗口"/);
+});

@@ -40,7 +40,7 @@ electron-app/package.json
 
 窗口创建和控制器逻辑已拆分到 `electron-app/electron/windows/` 目录：`main.cjs` 通过 `windows/overlay-window.cjs` 的 `createOverlayWindow` 工厂创建 overlay 窗口（归纳 BrowserWindow 选项），定位几何由 `windows/overlay-geometry.cjs` 提供（含菜单/悬停/自定义面板位置计算），宠物主窗口由 `windows/pet-window-controller.cjs` 以 `createPetWindowController(context)` 工厂封装创建、显示/隐藏、bounds/position 包装和动画过渡，持有 `petWindow` 运行态，`main.cjs` 不再亲自管理宠物窗口细节；气泡、菜单、悬停面板、自定义面板分别由 `windows/bubble-controller.cjs`、`windows/menu-controller.cjs`、`windows/hover-controller.cjs`、`windows/customization-controller.cjs` 以 `createXController(context)` 形式封装创建、显示、隐藏、定位和可见性等行为。`main.cjs` 负责在启动时构造这些控制器并注入上下文，窗口相关逻辑修改应优先落到对应控制器模块，而非 `main.cjs`。
 
-行为控制器逻辑已拆分到 `electron-app/electron/behavior/` 目录：行走循环和步进由 `behavior/walk-controller.cjs` 封装（含任务栏跑道推进），拖拽后贴靠和窗口表面轮询由 `behavior/dock-controller.cjs` 封装，拖拽运行态与拖拽开始/更新/结束流程由 `behavior/drag-controller.cjs` 封装（持有 `dragTimer`/`dragState`/`lastDragSample`，`dockPetAfterDrag` 经回调注入仍委托 dockController，不内联），状态切换、one-shot 动作结算、起点复位与静默归位编排由 `behavior/state-controller.cjs` 封装（持有 `pendingActionStatsState`，`activeState`/`selectedState`/`walkDirection` 仍由 `main.cjs` 持有经 getter/setter 注入，surface/scale/window 副作用已迁出 `pet/surface-scale-controller.cjs`），窗口漫游目标选取和轮询由 `behavior/window-roam-controller.cjs` 封装，眼球追踪光标跟随由 `behavior/eye-tracking-controller.cjs` 封装。各模块以 `createXController(context)` 形式暴露，依赖通过 context 注入，控制流和执行顺序与 `main.cjs` 原逻辑一致。
+行为控制器逻辑已拆分到 `electron-app/electron/behavior/` 目录：行走循环和步进由 `behavior/walk-controller.cjs` 封装（含任务栏跑道推进），拖拽后贴靠和窗口表面轮询由 `behavior/dock-controller.cjs` 封装并由变体 feature `windowDocking` 控制，拖拽运行态与拖拽开始/更新/结束流程由 `behavior/drag-controller.cjs` 封装（持有 `dragTimer`/`dragState`/`lastDragSample`，`dockPetAfterDrag` 经回调注入仍委托 dockController，不内联；`windowDocking` 关闭时拖拽释放只落成当前位置 floating surface），状态切换、one-shot 动作结算、起点复位与静默归位编排由 `behavior/state-controller.cjs` 封装（持有 `pendingActionStatsState`，`activeState`/`selectedState`/`walkDirection` 仍由 `main.cjs` 持有经 getter/setter 注入，surface/scale/window 副作用已迁出 `pet/surface-scale-controller.cjs`），窗口漫游目标选取和轮询由 `behavior/window-roam-controller.cjs` 封装，眼球追踪光标跟随由 `behavior/eye-tracking-controller.cjs` 封装。各模块以 `createXController(context)` 形式暴露，依赖通过 context 注入，控制流和执行顺序与 `main.cjs` 原逻辑一致。
 
 平台能力已拆分到 `electron-app/electron/platform/` 目录：开机自启注册表读写与运行态由 `platform/auto-start.cjs` 封装（平台能力适配器，业务偏好状态由 `preferencesStore` 统一管理），窗口候选探测（PowerShell 调用、解析、评分）由 `platform/window-surfaces.cjs` 封装，屏幕度量（任务栏表面、跑道、显示器）由 `platform/screen-metrics.cjs` 封装。各模块以 `createXController(context)` 形式暴露，依赖通过 context 注入。
 
@@ -74,7 +74,7 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 
 ## 宠物变体
 
-变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，动作池、功能池、tier 和 notes 规则集中在 `electron-app/electron/pet-catalog.cjs`，`electron-app/electron/pet-variants.cjs` 负责把 V2 元数据展开为运行时和打包 profile。真实 `id` 使用 `pet<yy><seq>`，是打包路径、注册表 key、singleInstanceKey 和用户数据目录的技术主键；现有变体通过 `assetPrefix` 继续读取旧资源目录和 manifest。变体只按真实 id 解析，不再使用 aliases。新增 custom 变体使用 `pet<yy><seq>` ID，Windows 打包路径为 `deliverables/<scope>/<id>/<channel>`。
+变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，动作池、功能池、tier 和 notes 规则集中在 `electron-app/electron/pet-catalog.cjs`，`electron-app/electron/pet-variants.cjs` 负责把 V2 元数据展开为运行时和打包 profile。`windowDocking` 是拖拽释放后吸附窗口的独立 feature；`windowRoam` 只有在 `windowDocking` 和平台能力同时可用时才暴露。真实 `id` 使用 `pet<yy><seq>`，是打包路径、注册表 key、singleInstanceKey 和用户数据目录的技术主键；现有变体通过 `assetPrefix` 继续读取旧资源目录和 manifest。变体只按真实 id 解析，不再使用 aliases。新增 custom 变体使用 `pet<yy><seq>` ID，Windows 打包路径为 `deliverables/<scope>/<id>/<channel>`。
 
 | 变体 | species | tier | 范围 | 资源前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -110,6 +110,8 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 
 正式运行只依赖透明帧和循环元数据，不依赖源视频或 `raw_frames`。
 
+yawn 动作可在 `loop.json` 或 manifest 元数据中声明 `freezeLastFrame: true`，渲染层会把最后一帧定格为睡眠阶段；未声明时继续使用 `tailLoopStart` 尾段循环。
+
 ## 行走与贴靠
 
 行走由渲染层动画帧驱动，主进程计算实际移动：
@@ -124,7 +126,7 @@ Windows 贴靠逻辑使用：
 
 - `window-surfaces.ps1` 获取可贴靠窗口候选。
 - `window-from-point.ps1` 辅助拖拽命中判断。
-- `main.cjs` 保留 `WINDOW_DOCK_*`、`WINDOW_SURFACE_*` 薄包装函数作为验证、回退入口，窗口候选缓存与异步刷新状态由 `platform/window-surfaces.cjs` 的 `windowSurfaceController` 统一维护；`windowRoam*` 状态与目标选取由 `behavior/window-roam-controller.cjs` 负责。
+- `main.cjs` 保留 `WINDOW_DOCK_*`、`WINDOW_SURFACE_*` 薄包装函数作为验证、回退入口，窗口候选缓存与异步刷新状态由 `platform/window-surfaces.cjs` 的 `windowSurfaceController` 统一维护；拖拽吸附入口由 `windowDocking` feature 和 `ENABLE_WINDOW_DOCKING` 总开关共同 gating，`windowRoam*` 状态与目标选取由 `behavior/window-roam-controller.cjs` 负责。
 
 上述窗口候选和命中逻辑当前属于 Windows 实现。进入 macOS 适配时，不应直接复用 PowerShell/Win32 路径；建议新增平台适配层，将窗口枚举、窗口命中、Dock/任务栏边界、自启动等系统能力收口到平台 provider 中。macOS provider 未完成前，相关功能应降级或隐藏，避免影响基础桌宠启动、动画、拖拽、菜单和缩放。
 

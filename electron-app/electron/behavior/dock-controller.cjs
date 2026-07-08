@@ -65,6 +65,7 @@ function createDockController(context) {
     getPetScale,
     getPreferredPetScale,
     getWindowRoamEnabled,
+    isWindowDockingEnabled = () => true,
     // 贴靠轮询状态访问器（读 getter / 写 setter，状态存储于 main.cjs）
     getWindowSurfacePollTimer,
     setWindowSurfacePollTimer,
@@ -139,12 +140,13 @@ function createDockController(context) {
     let retryScheduled = false;
 
     try {
-      diagnostic = ENABLE_WINDOW_DOCKING
+      const canDock = ENABLE_WINDOW_DOCKING && isWindowDockingEnabled();
+      diagnostic = canDock
         ? diagnoseDockTargetFromCache(bounds)
         : { ok: false, reason: "disabled", elapsedMs: 0, surface: null };
       surface = diagnostic.surface;
 
-      if (!surface && !retry && ENABLE_WINDOW_DOCKING && shouldRetryDockAfterDrag(diagnostic.reason)) {
+      if (!surface && !retry && canDock && shouldRetryDockAfterDrag(diagnostic.reason)) {
         refreshWindowSurfaceCandidatesAsync({ force: true });
         retryScheduled = true;
         setTimeout(() => retryDockPetAfterDrag({ retry: true }), WINDOW_DOCK_DRAG_RETRY_DELAY_MS);
@@ -247,7 +249,7 @@ function createDockController(context) {
   }
 
   function startWindowSurfacePolling() {
-    if (getWindowSurfacePollTimer() || !ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
+    if (getWindowSurfacePollTimer() || !isWindowDockingEnabled() || !ENABLE_WINDOW_DOCKING || process.platform !== "win32") {
       return;
     }
     setWindowSurfacePollTimer(setInterval(() => {

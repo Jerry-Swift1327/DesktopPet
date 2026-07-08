@@ -22,8 +22,8 @@
 | `electron-app/electron/main.cjs` | 主进程核心逻辑 | 窗口、菜单、悬停面板、状态值、拖拽、吸附、行走、自启动 |
 | `electron-app/electron/preload.cjs` | 暴露安全 IPC API 给渲染层 | 新增渲染层调用主进程能力 |
 | `electron-app/electron/pet-variant-metadata.json` | V2 宠物变体元数据（id、species、tier、notes、scope、actions、features） | 新增定制变体、调整套餐、平台或资源前缀 |
-| `electron-app/electron/pet-catalog.cjs` | 动作池、功能池、tier profile 和 notes pool | 新增动作 ID、功能开关、套餐默认值或 notes 规则 |
-| `electron-app/electron/pet-variants.cjs` | 将 V2 元数据和 catalog 展开为运行时配置、动作 ID、渠道配置和打包 profile | 调整派生规则、动作顺序、打包输出 |
+| `electron-app/electron/pet-catalog.cjs` | 动作池、功能池、tier profile 和 notes pool | 新增动作 ID、功能开关（如 `windowDocking`）、套餐默认值或 notes 规则 |
+| `electron-app/electron/pet-variants.cjs` | 将 V2 元数据和 catalog 展开为运行时配置、动作 ID、渠道配置和打包 profile | 调整派生规则、动作顺序、feature 平台 gating 或打包输出 |
 | `electron-app/scripts/variant-cli.cjs` | 查询/新增/bootstrap 变体，按 species/tier/date/scope 筛选，资源检查，维护预览/应用纯函数，生成本地图鉴 | 新增变体流程、维护中心能力或 CLI 能力 |
 | `electron-app/devtools/` | 内部 Electron 开发者工具窗口，用于新增宠物、宠物库查询/检查/图鉴、替换或批量导入动作资源、编辑元数据和删除测试宠物 | 维护内部宠物向导、维护中心、预览执行流程或工具窗口文档 |
 | `electron-app/electron/walk-clock.cjs` | 行走循环暂停/恢复计时 | 修改行走倒计时或暂停恢复规则 |

@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "dock-controller.cjs"), "utf8");
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
+const { createDockController } = require("../electron/behavior/dock-controller.cjs");
 
 test("dock-controller 不再按值解构运行时可变状态，全部改为访问器", () => {
   // 提取 context 解构块（从 "const {" 到 "} = context;"）
@@ -71,7 +72,8 @@ test("dock-controller context 包含必要 getter/setter 访问器与协作方�
     "getPetRuntimeConfig",
     "getPetScale",
     "getPreferredPetScale",
-    "getWindowRoamEnabled"
+    "getWindowRoamEnabled",
+    "isWindowDockingEnabled"
   ];
   for (const accessor of requiredGetters) {
     assert.match(contextBlock, new RegExp(accessor), `context 应包含 ${accessor}`);
@@ -121,6 +123,7 @@ test("dock-controller 内部使用 getter 调用而非裸变量读取", () => {
   assert.match(controllerSource, /getPetScale\(\)/);
   assert.match(controllerSource, /getPreferredPetScale\(\)/);
   assert.match(controllerSource, /getWindowRoamEnabled\(\)/);
+  assert.match(controllerSource, /isWindowDockingEnabled\(\)/);
 });
 
 test("dock-controller 内部使用 setter 调用而非裸变量赋值", () => {
@@ -262,4 +265,32 @@ test("dock-controller injects and uses settlePetInPlaceAfterDrag", () => {
   const contextBlock = controllerSource.match(/const \{([\s\S]*?)\} = context;/)?.[1] || "";
   assert.match(contextBlock, /settlePetInPlaceAfterDrag/);
   assert.match(controllerSource, /settlePetInPlaceAfterDrag\(bounds,/);
+});
+
+test("window surface polling does not start when window docking feature is disabled", () => {
+  const originalSetInterval = global.setInterval;
+  let pollTimer = null;
+  let intervalStarted = false;
+  global.setInterval = () => {
+    intervalStarted = true;
+    return { fake: true };
+  };
+
+  try {
+    const controller = createDockController({
+      process: { platform: "win32" },
+      getWindowSurfacePollTimer: () => pollTimer,
+      setWindowSurfacePollTimer: (value) => { pollTimer = value; },
+      isWindowDockingEnabled: () => false,
+      ENABLE_WINDOW_DOCKING: true,
+      WINDOW_SURFACE_POLL_INTERVAL_MS: 250
+    });
+
+    controller.startWindowSurfacePolling();
+
+    assert.equal(intervalStarted, false);
+    assert.equal(pollTimer, null);
+  } finally {
+    global.setInterval = originalSetInterval;
+  }
 });

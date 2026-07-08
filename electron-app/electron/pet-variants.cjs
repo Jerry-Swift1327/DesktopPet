@@ -571,9 +571,11 @@ function getPetUserDataFolder(config = {}) {
 function getPetPlatformFeatures(config = {}) {
   const variantProfile = getPetVariantProfile(config.variant);
   const isWindows = config.platform === "win32";
+  const windowDocking = Boolean(variantProfile.features.windowDocking) && isWindows;
   return {
     autoStart: Boolean(variantProfile.features.autoStart) && isWindows,
-    windowRoam: Boolean(variantProfile.features.windowRoam) && isWindows,
+    windowDocking,
+    windowRoam: Boolean(variantProfile.features.windowRoam) && windowDocking,
     eyeTracking: Boolean(variantProfile.features.eyeTracking),
     customization: Boolean(variantProfile.features.customization),
     switchPet: Boolean(variantProfile.features.switchPet)

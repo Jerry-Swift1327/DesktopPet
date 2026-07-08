@@ -387,6 +387,7 @@ let tabbyIdlePollTimer = null;
 let tabbySleepPoseTimer = null;
 let tabbySleepPoseSwitchAt = 0;
 let ragdollYawnSleepLoopTimer = null;
+let freezeYawnSleepTimer = null;
 let appLifecycleShuttingDown = false;
 let idleGreetingPool = [];
 let lastUserOperationAt = Date.now();
@@ -1283,6 +1284,7 @@ const dockController = createDockController({
   getPetScale: () => surfaceScaleController.getPetScale(),
   getPreferredPetScale: () => surfaceScaleController.getPreferredPetScale(),
   getWindowRoamEnabled: () => preferencesStore.getWindowRoamEnabled(),
+  isWindowDockingEnabled,
   // 贴靠轮询状态访问器（读 getter / 写 setter，状态存储于 main.cjs）
   getWindowSurfacePollTimer: () => windowSurfacePollTimer,
   setWindowSurfacePollTimer: (v) => { windowSurfacePollTimer = v; },
@@ -1336,6 +1338,7 @@ const dragController = createDragController({
   getInteractionPauseSummary,
   // dock 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag（仍委托 dockController）
   dockPetAfterDrag: (...args) => dockPetAfterDrag(...args),
+  settlePetInPlaceAfterDrag,
   // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
   getPetWindow: () => petWindowController.getPetWindow(),
   getActiveState: () => activeState,
@@ -1344,8 +1347,8 @@ const dragController = createDragController({
   getTaskbarWalkRunway: () => taskbarWalkRunway,
   getWindowDockInProgress: () => windowDockInProgress,
   setWindowDockInProgress: (v) => { windowDockInProgress = v; },
+  isWindowDockingEnabled,
   // 常量
-  ENABLE_WINDOW_DOCKING,
   WINDOW_SURFACE_DRAG_REFRESH_MIN_MS
 });
 
@@ -1540,13 +1543,21 @@ function writePetScalePreference() {
 
 function buildMenuFeatures() {
   const features = getPetPlatformFeatures({ variant: petRuntimeConfig.variant, platform: process.platform });
+  const windowDocking = Boolean(features.windowDocking) && ENABLE_WINDOW_DOCKING;
   return {
     autoStart: features.autoStart,
-    windowRoam: features.windowRoam && ENABLE_WINDOW_DOCKING,
+    windowDocking,
+    windowRoam: Boolean(features.windowRoam) && windowDocking,
     eyeTracking: Boolean(features.eyeTracking),
     customization: Boolean(features.customization),
     switchPet: Boolean(features.switchPet)
   };
+}
+
+function isWindowDockingEnabled() {
+  return Boolean(petRuntimeConfig.features?.windowDocking)
+    && ENABLE_WINDOW_DOCKING
+    && process.platform === "win32";
 }
 
 function sendMenuConfig() {
@@ -2160,6 +2171,13 @@ function clearRagdollYawnSleepLoopTimer() {
   }
 }
 
+function clearFreezeYawnSleepTimer() {
+  if (freezeYawnSleepTimer) {
+    clearTimeout(freezeYawnSleepTimer);
+    freezeYawnSleepTimer = null;
+  }
+}
+
 function scheduleTabbySleepPose(state) {
   if (!petRuntimeConfig.features.sleepPoseSwitch || activeState !== state || (state !== STATE_YAWN && state !== STATE_SLEEP) || tabbySleepPoseTimer) {
     return;
@@ -2183,6 +2201,20 @@ function scheduleRagdollYawnSleepLoopTimeout(state) {
   ragdollYawnSleepLoopTimer = setTimeout(() => {
     ragdollYawnSleepLoopTimer = null;
     if (petRuntimeConfig.variant === "pet2609" && activeState === STATE_YAWN && canDrivePetStateFromTimer()) {
+      setState(STATE_WALK, false);
+    }
+  }, RAGDOLL_YAWN_SLEEP_LOOP_MAX_MS);
+}
+
+function scheduleFreezeYawnSleepTimeout(state) {
+  const metadata = readMetadata(getState(state).metadata);
+  if (activeState !== state || state !== STATE_YAWN || metadata.freezeLastFrame !== true || freezeYawnSleepTimer) {
+    return;
+  }
+  freezeYawnSleepTimer = setTimeout(() => {
+    freezeYawnSleepTimer = null;
+    const latestMetadata = readMetadata(getState(STATE_YAWN).metadata);
+    if (activeState === STATE_YAWN && latestMetadata.freezeLastFrame === true && canDrivePetStateFromTimer()) {
       setState(STATE_WALK, false);
     }
   }, RAGDOLL_YAWN_SLEEP_LOOP_MAX_MS);
@@ -2296,6 +2328,7 @@ function buildPetConfig() {
         returnState: ONE_SHOT_STATES.has(state.id) ? DEFAULT_STATE : state.id,
         greetings: state.greetings,
         tailLoopStart,
+        freezeLastFrame: metadata.freezeLastFrame === true,
         frameSequence: sanitizeFrameSequence(state.frameSequence, maxFrame),
         sequenceRepeatCount: Number.isInteger(state.sequenceRepeatCount) ? Math.max(1, state.sequenceRepeatCount) : 1
       };
@@ -2930,13 +2963,23 @@ function updateRenderedFrame(info) {
   renderedFrameAt = Date.now();
   stateController.completeVisualStateCommit(info.state);
   if (renderedFrameState === STATE_YAWN) {
+    const renderedState = getState(renderedFrameState);
+    const metadata = readMetadata(renderedState.metadata);
     const tailLoopStart = readMetadata(getState(renderedFrameState).metadata).tailLoopStart;
-    if (Number.isInteger(tailLoopStart) && renderedFrameIndex >= tailLoopStart) {
+    if (metadata.freezeLastFrame === true) {
+      const maxFrame = Math.max(0, listFrames(renderedState.folder).length - 1);
+      clearRagdollYawnSleepLoopTimer();
+      if (renderedFrameIndex >= maxFrame) {
+        scheduleFreezeYawnSleepTimeout(STATE_YAWN);
+      }
+    } else if (Number.isInteger(tailLoopStart) && renderedFrameIndex >= tailLoopStart) {
+      clearFreezeYawnSleepTimer();
       scheduleTabbySleepPose(STATE_YAWN);
       scheduleRagdollYawnSleepLoopTimeout(STATE_YAWN);
     }
   } else {
     clearRagdollYawnSleepLoopTimer();
+    clearFreezeYawnSleepTimer();
   }
 }
 
@@ -2973,6 +3016,7 @@ function setState(state, shouldRecordInteraction = true) {
   const result = stateController.setState(state, shouldRecordInteraction);
   if (activeState !== STATE_YAWN) {
     clearRagdollYawnSleepLoopTimer();
+    clearFreezeYawnSleepTimer();
   }
   return result;
 }
@@ -3715,6 +3759,7 @@ function runAppBeforeQuitCleanupSequence() {
   clearMenuHideTimer();
   clearTabbySleepPoseTimer();
   clearRagdollYawnSleepLoopTimer();
+  clearFreezeYawnSleepTimer();
   if (randomGreetingTimer) {
     clearTimeout(randomGreetingTimer);
     randomGreetingTimer = null;

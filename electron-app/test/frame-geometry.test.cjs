@@ -88,6 +88,17 @@ test("getFrameIndexForStep loops from tailLoopStart after first sequence pass", 
   assert.equal(frameGeometry.getFrameIndexForStep(state, 8), 2);
 });
 
+test("getFrameIndexForStep freezes on the final frame when requested", () => {
+  const state = { frameCount: 4, loopStart: 0, loopEnd: 3, moving: false, oneShot: false, freezeLastFrame: true };
+
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 0), 0);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 1), 1);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 2), 2);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 3), 3);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 4), 3);
+  assert.equal(frameGeometry.getFrameIndexForStep(state, 40), 3);
+});
+
 // getStableGroundBottom
 test("getStableGroundBottom 空列表返回 0", () => {
   assert.equal(frameGeometry.getStableGroundBottom([]), 0);

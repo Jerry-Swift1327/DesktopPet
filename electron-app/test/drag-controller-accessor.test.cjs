@@ -8,6 +8,7 @@ const controllerSource = fs.readFileSync(path.join(__dirname, "..", "electron", 
 const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
 const ipcSource = fs.readFileSync(path.join(__dirname, "..", "electron", "ipc", "register-ipc-handlers.cjs"), "utf8");
 const dockSource = fs.readFileSync(path.join(__dirname, "..", "electron", "behavior", "dock-controller.cjs"), "utf8");
+const { createDragController } = require("../electron/behavior/drag-controller.cjs");
 
 // 剥离注释
 function stripComments(source) {
@@ -90,7 +91,8 @@ test("controller context 解构包含必要依赖", () => {
     "getTaskbarWalkRunway",
     "getWindowDockInProgress",
     "setWindowDockInProgress",
-    "ENABLE_WINDOW_DOCKING",
+    "isWindowDockingEnabled",
+    "settlePetInPlaceAfterDrag",
     "WINDOW_SURFACE_DRAG_REFRESH_MIN_MS"
   ];
   for (const dep of requiredDeps) {
@@ -164,4 +166,88 @@ test("register-ipc-handlers 的 pet:drag-start/pet:drag-end 契约不变", () =>
 test("main.cjs handlers 映射不变", () => {
   assert.match(mainStripped, /dragStart:\s*handleDragStart\s*,/);
   assert.match(mainStripped, /dragEnd:\s*handleDragEnd\b/);
+});
+
+test("drag end settles in place without starting dock flow when window docking is disabled", () => {
+  const originalSetInterval = global.setInterval;
+  const originalClearInterval = global.clearInterval;
+  const originalSetImmediate = global.setImmediate;
+  let intervalHandle = null;
+  let dockCalled = false;
+  let settleCall = null;
+  let dockInProgress = false;
+  let clearedPause = false;
+  const sentDragStates = [];
+  const petWindow = {
+    isDestroyed: () => false,
+    getBounds: () => ({ x: 100, y: 120, width: 180, height: 180 })
+  };
+
+  global.setInterval = () => {
+    intervalHandle = { fake: true };
+    return intervalHandle;
+  };
+  global.clearInterval = (handle) => {
+    assert.equal(handle, intervalHandle);
+    intervalHandle = null;
+  };
+  global.setImmediate = (callback) => {
+    callback();
+    return null;
+  };
+
+  try {
+    const controller = createDragController({
+      safeSend: (_win, _channel, value) => sentDragStates.push(value),
+      removeInteractionPause: () => { clearedPause = true; },
+      clampPetWindowPosition: (x, y) => ({ x: Math.round(x), y: Math.round(y) }),
+      setPetWindowPosition: () => {},
+      syncWalkTrackX: () => {},
+      getLastWindowSurfaceAsyncRefreshAt: () => 0,
+      refreshWindowSurfaceCandidatesAsync: () => {},
+      getCursorScreenPoint: () => ({ x: 118, y: 130 }),
+      isScreenPoint: (point) => Number.isFinite(point?.screenX) && Number.isFinite(point?.screenY),
+      isCustomizationVisible: () => false,
+      materializeTaskbarWalkRunway: () => {},
+      recordUserOperation: () => {},
+      addInteractionPause: () => {},
+      clearHoverIntent: () => {},
+      hideStartupBubble: () => {},
+      hidePetMenu: () => {},
+      hideHoverPanel: () => {},
+      hideCustomizationPanel: () => {},
+      setIsPointerOverHoverPanel: () => {},
+      log: () => {},
+      logWalkDiagnostic: () => {},
+      isInteractionPaused: () => false,
+      getInteractionPauseSummary: () => "",
+      dockPetAfterDrag: () => { dockCalled = true; },
+      settlePetInPlaceAfterDrag: (bounds, reason) => { settleCall = { bounds, reason }; },
+      getPetWindow: () => petWindow,
+      getActiveState: () => "petSquat",
+      getWalkDirection: () => -1,
+      getCurrentSurface: () => ({ type: "taskbar" }),
+      getTaskbarWalkRunway: () => null,
+      getWindowDockInProgress: () => dockInProgress,
+      setWindowDockInProgress: (value) => { dockInProgress = value; },
+      isWindowDockingEnabled: () => false,
+      WINDOW_SURFACE_DRAG_REFRESH_MIN_MS: 260
+    });
+
+    controller.handleDragStart(null, { screenX: 112, screenY: 124 });
+    controller.handleDragEnd();
+
+    assert.equal(dockCalled, false);
+    assert.equal(dockInProgress, false);
+    assert.deepEqual(settleCall, {
+      bounds: { x: 100, y: 120, width: 180, height: 180 },
+      reason: "window-docking-disabled"
+    });
+    assert.equal(clearedPause, true);
+    assert.deepEqual(sentDragStates, [true, false]);
+  } finally {
+    global.setInterval = originalSetInterval;
+    global.clearInterval = originalClearInterval;
+    global.setImmediate = originalSetImmediate;
+  }
 });

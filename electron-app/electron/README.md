@@ -62,8 +62,8 @@
 | 状态控制 | `behavior/state-controller.cjs`、`createStateController`、`setState`、`completeOneShotState`、`moveToStartPosition`、`settlePetQuietly`、`setWalkDirection`、`isWalkingState` |
 | 行走 | `advanceWalkStep`、`walkLoop`、`WALK_` |
 | 拖拽 | `dragController`、`dragState`、`drag-start`、`drag-end`、`behavior/drag-controller.cjs` |
-| 窗口贴靠 | `WINDOW_DOCK_`、`windowSurface`、`dockPetAfterDrag` |
-| 窗口漫游 | `windowRoam` |
+| 窗口贴靠 | `windowDocking`、`WINDOW_DOCK_`、`windowSurface`、`dockPetAfterDrag` |
+| 窗口漫游 | `windowRoam`（依赖 `windowDocking`） |
 | 菜单 | `menuWindow`、`PET_MENU_` |
 | 悬停面板 | `hoverWindow`、`HOVER_` |
 | 气泡 | `startupBubble`、`bubble` |
@@ -114,6 +114,8 @@
 ## 变体修改流程
 
 新增或修改宠物变体时，优先使用 `../scripts/variant-cli.cjs` 的 `variant:bootstrap` 流程或修改 `pet-variant-metadata.json`。动作 ID、功能池、tier 和 notes 规则维护在 `pet-catalog.cjs`；`pet-variants.cjs` 只维护派生规则、渠道配置和打包 profile 展开逻辑。
+
+功能开关中 `windowDocking` 表示拖拽释放后的窗口吸附能力；`windowRoam` 只有在 `windowDocking` 同时启用且平台支持时才会暴露。新的 yawn 资源如需用最后一帧定格为睡眠阶段，可在动作元数据中声明 `freezeLastFrame: true`；未声明时仍沿用 `tailLoopStart` 尾段循环。
 
 然后同步：
 

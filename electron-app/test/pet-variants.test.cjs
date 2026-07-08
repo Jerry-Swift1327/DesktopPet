@@ -90,6 +90,7 @@ test("catalog pools define species tiers notes actions and features", () => {
   assert.equal(getNotesPool().test.basic, "测试变体-基础");
   assert.equal(getActionPool().look.processPreset, "direction64");
   assert.equal(getFeaturePool().idleYawn.implemented, true);
+  assert.equal(getFeaturePool().windowDocking.implemented, true);
 });
 
 test("pet runtime config keeps variant features separate under pet ids", () => {
@@ -100,8 +101,10 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
   const tabbyConfig = buildPetRuntimeConfig({ variant: "pet2605" });
   const ragdollConfig = buildPetRuntimeConfig({ variant: "pet2609" });
   const pet2610Config = buildPetRuntimeConfig({ variant: "pet2610" });
+  const pet2611Config = buildPetRuntimeConfig({ variant: "pet2611" });
 
   assert.equal(dogConfig.features.autoStart, true);
+  assert.equal(dogConfig.features.windowDocking, true);
   assert.equal(dogConfig.features.windowRoam, true);
   assert.equal(dogConfig.features.customization, true);
   assert.equal(dogConfig.features.switchPet, false);
@@ -110,6 +113,7 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
   assert.equal(shorthairConfig.features.windowRoam, false);
   assert.equal(pomeranianConfig.features.autoStart, false);
   assert.equal(pomeranianConfig.features.windowRoam, false);
+  assert.equal(tabbyConfig.features.windowDocking, true);
   assert.equal(tabbyConfig.features.eyeTracking, true);
   assert.equal(tabbyConfig.features.sleepPoseSwitch, true);
   assert.equal(tabbyConfig.soundPrefix, "tabby");
@@ -141,6 +145,7 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
     "petSplits"
   ]);
   assert.equal(pet2610Config.features.idleYawn, true);
+  assert.equal(pet2610Config.features.windowDocking, true);
   assert.equal(pet2610Config.features.dockShake, true);
   assert.deepEqual(pet2610Config.actionOrder, [
     "petSquat",
@@ -148,6 +153,9 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
     "petFeed",
     "petBall"
   ]);
+  assert.equal(pet2611Config.features.autoStart, true);
+  assert.equal(pet2611Config.features.windowDocking, true);
+  assert.equal(Boolean(pet2611Config.features.idleYawn), false);
 });
 
 test("installer channel hides debug timers and uses compact panel height", () => {
@@ -253,6 +261,21 @@ test("explicit feature draft overrides do not inherit tier feature defaults", ()
   assert.equal(profile.features.windowRoam, true);
   assert.equal(Boolean(profile.features.idleYawn), false);
   assert.equal(Boolean(profile.features.wakeHiss), false);
+  assert.equal(Boolean(profile.features.windowDocking), false);
+});
+
+test("new variant drafts enable drag window docking by default without forcing idle yawn", () => {
+  const draft = createPetVariantMetadataDraft({
+    species: "cat",
+    tier: "basic",
+    date: "2026-07-08"
+  });
+  const profile = resolvePetVariantProfile(draft);
+
+  assert.deepEqual(draft.features.enable, ["autoStart", "windowDocking", "windowRoam"]);
+  assert.equal(profile.features.windowDocking, true);
+  assert.equal(profile.features.windowRoam, true);
+  assert.equal(Boolean(profile.features.idleYawn), false);
 });
 
 test("variant ids resolve to canonical ids only", () => {
@@ -358,6 +381,7 @@ test("mac packaged user data folder uses versioned Chongban parent and variant f
 test("platform features hide Windows-only menu items on macOS", () => {
   assert.deepEqual(getPetPlatformFeatures({ variant: "pet2601", platform: "darwin" }), {
     autoStart: false,
+    windowDocking: false,
     windowRoam: false,
     eyeTracking: false,
     customization: true,
@@ -365,6 +389,7 @@ test("platform features hide Windows-only menu items on macOS", () => {
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "pet2605", platform: "win32" }), {
     autoStart: true,
+    windowDocking: true,
     windowRoam: true,
     eyeTracking: true,
     customization: false,
@@ -372,6 +397,7 @@ test("platform features hide Windows-only menu items on macOS", () => {
   });
   assert.deepEqual(getPetPlatformFeatures({ variant: "pet2604", platform: "win32" }), {
     autoStart: false,
+    windowDocking: false,
     windowRoam: false,
     eyeTracking: false,
     customization: false,
@@ -421,8 +447,15 @@ test("existing variants keep the current animation folder convention", () => {
     "pet2610_shake",
     "pet2610_yawn"
   ]);
+  assert.deepEqual(getVariantAnimationFolders("pet2611"), [
+    "pet2611_squat",
+    "pet2611_walk",
+    "pet2611_feed",
+    "pet2611_ball"
+  ]);
   assert.equal(getVariantManifestName("pet2602"), "cat_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2605"), "tabby_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2609"), "ragdoll_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2610"), "pet2610_actions_manifest.json");
+  assert.equal(getVariantManifestName("pet2611"), "pet2611_actions_manifest.json");
 });

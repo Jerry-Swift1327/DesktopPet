@@ -27,6 +27,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam",
           "customization"
         ],
@@ -61,6 +62,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam",
           "customization"
         ],
@@ -95,6 +97,7 @@
         "enable": [],
         "disable": [
           "autoStart",
+          "windowDocking",
           "windowRoam"
         ]
       }
@@ -125,6 +128,7 @@
         "enable": [],
         "disable": [
           "autoStart",
+          "windowDocking",
           "windowRoam"
         ]
       }
@@ -165,6 +169,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam",
           "eyeTracking",
           "idleYawn",
@@ -200,6 +205,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam"
         ],
         "disable": []
@@ -230,6 +236,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam"
         ],
         "disable": []
@@ -260,6 +267,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam"
         ],
         "disable": []
@@ -297,6 +305,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam",
           "idleYawn",
           "wakeHiss"
@@ -338,6 +347,7 @@
       "features": {
         "enable": [
           "autoStart",
+          "windowDocking",
           "windowRoam",
           "idleYawn",
           "dockShake"

@@ -35,6 +35,7 @@ function createDragController(context) {
     getInteractionPauseSummary,
     // dock 回调，委托给 main.cjs 薄包装后的 dockPetAfterDrag（仍委托 dockController）
     dockPetAfterDrag,
+    settlePetInPlaceAfterDrag,
     // 外部状态访问器（实时读取 main.cjs 状态，避免快照）
     getPetWindow,
     getActiveState,
@@ -43,8 +44,8 @@ function createDragController(context) {
     getTaskbarWalkRunway,
     getWindowDockInProgress,
     setWindowDockInProgress,
+    isWindowDockingEnabled,
     // 常量
-    ENABLE_WINDOW_DOCKING,
     WINDOW_SURFACE_DRAG_REFRESH_MIN_MS
   } = context;
 
@@ -104,7 +105,7 @@ function createDragController(context) {
     const next = clampPetWindowPosition(point.x - dragState.offsetX, point.y - dragState.offsetY);
     setPetWindowPosition(next.x, next.y);
     syncWalkTrackX(next.x);
-    if (ENABLE_WINDOW_DOCKING) {
+    if (isWindowDockingEnabled()) {
       const sinceLastRefresh = now - getLastWindowSurfaceAsyncRefreshAt();
       if (sinceLastRefresh >= WINDOW_SURFACE_DRAG_REFRESH_MIN_MS) {
         refreshWindowSurfaceCandidatesAsync();
@@ -164,12 +165,17 @@ function createDragController(context) {
         clearDragState({ notify: true });
         return;
       }
-      setWindowDockInProgress(true);
       const bounds = petWindow.getBounds();
       if (dragState?.lastSample) {
         lastDragSample = dragState.lastSample;
       }
       log(`drag-end bounds=${bounds.x},${bounds.y},${bounds.width},${bounds.height}`);
+      if (!isWindowDockingEnabled()) {
+        settlePetInPlaceAfterDrag(bounds, "window-docking-disabled");
+        clearDragState({ notify: true });
+        return;
+      }
+      setWindowDockInProgress(true);
       logWalkDiagnostic(`drag-end dock-start state=${getActiveState()} surface=${getCurrentSurface()?.type || "unknown"} paused=${isInteractionPaused()} reasons=${getInteractionPauseSummary()}`);
       setImmediate(() => {
         dockPetAfterDrag();

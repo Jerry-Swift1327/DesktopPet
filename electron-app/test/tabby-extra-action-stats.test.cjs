@@ -70,6 +70,14 @@ test("tabby idle actions run outside the idle greeting timer", () => {
   assert.match(rendererSource, /previousState === config\.actionIds\?\.sleep && state === config\.actionIds\?\.yawn/);
 });
 
+test("new idle yawn resources can freeze the final sleep frame without changing legacy tail loops", () => {
+  assert.match(rendererSource, /freezeLastFrame/);
+  assert.match(rendererSource, /frameStep >= stepCount - 1[\s\S]*return frameSequence\[stepCount - 1\]/);
+  assert.match(mainSource, /scheduleFreezeYawnSleepTimeout\(STATE_YAWN\)/);
+  assert.match(mainSource, /metadata\.freezeLastFrame === true/);
+  assert.match(mainSource, /setState\(STATE_WALK, false\)/);
+});
+
 test("packaged runtime validates the external assets root first", () => {
   const getAssetsRootBody = assetLoaderSource.match(/function getAssetsRoot\(\) \{([\s\S]*?)function listFrames/)?.[1] || "";
 

@@ -52,10 +52,11 @@ const stageWeights = {
 };
 
 const defaultActionButtons = ["squat", "walk", "feed", "ball"];
-const defaultEnabledFeatures = ["autoStart", "windowRoam"];
+const defaultEnabledFeatures = ["autoStart", "windowDocking", "windowRoam"];
 
 const featureLabels = {
   autoStart: "开机自启",
+  windowDocking: "拖拽吸附窗口",
   windowRoam: "窗口漫游",
   customization: "自定义",
   switchPet: "切换宠物",

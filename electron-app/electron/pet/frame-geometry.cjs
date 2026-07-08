@@ -144,6 +144,9 @@ function getFrameIndexForStep(state, frameStep = 0) {
   const tailLoopStart = Number.isInteger(state.tailLoopStart) ? state.tailLoopStart : null;
   const shouldLoopFrames = !state.oneShot || state.moving;
   const safeFrameStep = Number.isFinite(frameStep) ? Math.round(frameStep) : 0;
+  if (state.freezeLastFrame && safeFrameStep >= stepCount - 1) {
+    return frameSequence[stepCount - 1] ?? 0;
+  }
   const step = tailLoopStart !== null && safeFrameStep >= stepCount
     ? tailLoopStart + ((safeFrameStep - tailLoopStart) % Math.max(1, stepCount - tailLoopStart))
     : shouldLoopFrames

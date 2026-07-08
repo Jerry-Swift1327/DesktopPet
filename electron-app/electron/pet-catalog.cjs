@@ -23,6 +23,7 @@ const ACTION_POOL = Object.freeze({
 
 const FEATURE_POOL = Object.freeze({
   autoStart: Object.freeze({ id: "autoStart", tier: "basic", implemented: true, platforms: Object.freeze(["win32"]) }),
+  windowDocking: Object.freeze({ id: "windowDocking", tier: "basic", implemented: true, platforms: Object.freeze(["win32"]) }),
   windowRoam: Object.freeze({ id: "windowRoam", tier: "basic", implemented: true, platforms: Object.freeze(["win32"]) }),
   customization: Object.freeze({ id: "customization", tier: "basic", implemented: true, platforms: Object.freeze(["win32", "darwin"]) }),
   switchPet: Object.freeze({ id: "switchPet", tier: "basic", implemented: true, platforms: Object.freeze(["win32", "darwin"]) }),
@@ -39,7 +40,7 @@ const TIER_PROFILES = Object.freeze({
     actionButtons: Object.freeze(["squat", "walk", "feed", "ball"]),
     actionAssets: Object.freeze([]),
     features: Object.freeze({
-      enable: Object.freeze(["autoStart", "windowRoam"]),
+      enable: Object.freeze(["autoStart", "windowDocking", "windowRoam"]),
       disable: Object.freeze([])
     })
   }),
@@ -48,7 +49,7 @@ const TIER_PROFILES = Object.freeze({
     actionButtons: Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]),
     actionAssets: Object.freeze(["yawn", "hiss"]),
     features: Object.freeze({
-      enable: Object.freeze(["autoStart", "windowRoam", "idleYawn", "wakeHiss"]),
+      enable: Object.freeze(["autoStart", "windowDocking", "windowRoam", "idleYawn", "wakeHiss"]),
       disable: Object.freeze([])
     })
   })

@@ -68,6 +68,9 @@ async function renderPetWindow() {
     const stepCount = Math.max(1, frameSequence.length);
     const tailLoopStart = Number.isInteger(state.tailLoopStart) ? state.tailLoopStart : null;
     const shouldLoopFrames = !state.oneShot || state.moving;
+    if (state.freezeLastFrame && frameStep >= stepCount - 1) {
+      return frameSequence[stepCount - 1] ?? 0;
+    }
     const step = tailLoopStart !== null && frameStep >= stepCount
       ? tailLoopStart + ((frameStep - tailLoopStart) % Math.max(1, stepCount - tailLoopStart))
       : shouldLoopFrames
@@ -78,9 +81,15 @@ async function renderPetWindow() {
 
   function isSleepStage() {
     const state = getState();
-    return activeState === config.actionIds?.sleep
-      || activeState === config.actionIds?.yawn
-      && Number.isInteger(state?.tailLoopStart)
+    if (activeState === config.actionIds?.sleep) {
+      return true;
+    }
+    if (activeState !== config.actionIds?.yawn) {
+      return false;
+    }
+    const stepCount = Math.max(1, getStateFrameSequence(state).length);
+    return Boolean(state?.freezeLastFrame && frameStep >= stepCount - 1)
+      || Number.isInteger(state?.tailLoopStart)
       && getStateFrameIndex(state) >= state.tailLoopStart;
   }
 

@@ -147,3 +147,10 @@ test("core/preferences-store.cjs 不直接接触窗口/IPC/bubble 且导出摘�
     assert.match(exportBlock, new RegExp(name), `导出应包含 ${name}`);
   }
 });
+test("windowRoam availability is gated by the windowDocking feature", () => {
+  const canToggleBody = extractFunctionBlock(preferencesStoreStripped, "canToggleWindowRoam");
+  const platformFeaturesBody = mainStripped.match(/function\s+buildMenuFeatures\s*\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(canToggleBody, /petRuntimeConfig\.features\?\.windowDocking/);
+  assert.match(platformFeaturesBody, /features\.windowDocking/);
+});
