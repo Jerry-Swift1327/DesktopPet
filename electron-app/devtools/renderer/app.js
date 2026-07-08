@@ -412,7 +412,7 @@ function resetMaintainEdits() {
   state.maintain.metadataPreview = null;
   state.logs = [];
   state.stages = {};
-  render();
+  renderPreservingScroll();
 }
 
 function setField(name, value) {
@@ -1268,12 +1268,16 @@ function formatLogEvent(event) {
   return `[${stageLabel(stage)}:${streamLabel(stream)}] ${String(event.message || "").trim()}`;
 }
 
-async function refreshVariants() {
+async function refreshVariants(options = {}) {
   if (!api.listVariants) {
     return;
   }
   state.variantsPending = true;
-  render();
+  if (options.preserveScroll) {
+    renderPreservingScroll();
+  } else {
+    render();
+  }
   try {
     state.variants = await api.listVariants();
     if (!state.catalog.selectedId && state.variants.length > 0) {
@@ -1290,14 +1294,19 @@ async function refreshVariants() {
     pushLog(error.message);
   } finally {
     state.variantsPending = false;
-    render();
+    if (options.preserveScroll) {
+      renderPreservingScroll();
+    } else {
+      render();
+    }
   }
 }
 
-async function loadMaintainDetails(id) {
+async function loadMaintainDetails(id, options = {}) {
+  const renderDetails = options.preserveScroll ? renderPreservingScroll : render;
   if (!id || !api.getVariantDetails) {
     state.maintain.details = null;
-    render();
+    renderDetails();
     return;
   }
   try {
@@ -1307,7 +1316,7 @@ async function loadMaintainDetails(id) {
     state.maintain.details = null;
     pushLog(error.message);
   }
-  render();
+  renderDetails();
 }
 
 async function loadCatalogDetails(id) {
@@ -1479,7 +1488,7 @@ async function buildRenamePreview() {
   }
   state.maintain.renamePending = true;
   state.maintain.renamePreview = null;
-  render();
+  renderPreservingScroll();
   try {
     state.maintain.renamePreview = await api.buildRenameAssetsPreview({
       id: state.maintain.selectedId,
@@ -1490,7 +1499,7 @@ async function buildRenamePreview() {
     pushLog(error.message);
   } finally {
     state.maintain.renamePending = false;
-    render();
+    renderPreservingScroll();
   }
 }
 
@@ -1502,18 +1511,18 @@ async function runRenameAssets(previewId) {
   state.activeOperation = "maintainVariant";
   state.logs = [];
   state.stages = {};
-  render();
+  renderPreservingScroll();
   try {
     await api.runRenameAssets(previewId);
     state.stages.complete = "done";
     state.maintain.renamePreview = null;
-    await loadMaintainDetails(state.maintain.selectedId);
+    await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
   } catch (error) {
     state.stages.complete = "failed";
     pushLog(error.message);
   } finally {
     state.running = false;
-    render();
+    renderPreservingScroll();
   }
 }
 
@@ -1572,14 +1581,14 @@ async function buildMetadataPreview() {
   }
   state.maintain.metadataPending = true;
   state.maintain.metadataPreview = null;
-  render();
+  renderPreservingScroll();
   try {
     state.maintain.metadataPreview = await api.buildMetadataEditPreview(buildMetadataPayload());
   } catch (error) {
     pushLog(error.message);
   } finally {
     state.maintain.metadataPending = false;
-    render();
+    renderPreservingScroll();
   }
 }
 
@@ -1591,18 +1600,18 @@ async function applyMetadataEdit(previewId) {
   state.activeOperation = "maintainVariant";
   state.logs = [];
   state.stages = {};
-  render();
+  renderPreservingScroll();
   try {
     await api.applyMetadataEdit(previewId);
     state.stages.complete = "done";
-    await refreshVariants();
-    await loadMaintainDetails(state.maintain.selectedId);
+    await refreshVariants({ preserveScroll: true });
+    await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
   } catch (error) {
     state.stages.complete = "failed";
     pushLog(error.message);
   } finally {
     state.running = false;
-    render();
+    renderPreservingScroll();
   }
 }
 
@@ -1787,14 +1796,14 @@ appNode.addEventListener("change", async (event) => {
       }
     }
     state.maintain.metadataPreview = null;
-    render();
+    renderPreservingScroll();
   } else if (event.target.dataset.maintainNotePreset !== undefined) {
     state.maintain.metadataFields.notePreset = event.target.value;
     if (event.target.value !== "custom") {
       state.maintain.metadataFields.notes = event.target.value;
     }
     state.maintain.metadataPreview = null;
-    render();
+    renderPreservingScroll();
   } else if (maintainList) {
     state.maintain.metadataFields[maintainList] = setListValue(
       state.maintain.metadataFields[maintainList],
@@ -1807,11 +1816,11 @@ appNode.addEventListener("change", async (event) => {
       state.maintain.metadataFields.featuresEnable = setListValue(state.maintain.metadataFields.featuresEnable, maintainListValue, false);
     }
     state.maintain.metadataPreview = null;
-    render();
+    renderPreservingScroll();
   } else if (event.target.dataset.maintainRenameForce !== undefined) {
     state.maintain.renameForce = event.target.checked;
     state.maintain.renamePreview = null;
-    render();
+    renderPreservingScroll();
   } else if (event.target.dataset.deleteSelect !== undefined) {
     state.deleteVariant.selectedId = event.target.value;
     state.deleteVariant.preview = null;
@@ -1874,7 +1883,7 @@ appNode.addEventListener("click", async (event) => {
     if (folder) {
       state.maintain.renameSourceFolder = folder;
       state.maintain.renamePreview = null;
-      render();
+      renderPreservingScroll();
     }
   } else if (event.target.dataset.buildReplacePreview !== undefined) {
     await buildReplacePreview();

@@ -45,6 +45,10 @@ function createFakeNode(className = "") {
       return null;
     },
     set innerHTML(value) {
+      for (const child of children.values()) {
+        child.isConnected = false;
+      }
+      children.clear();
       this.html = String(value);
     },
     get innerHTML() {
@@ -144,6 +148,9 @@ function createRendererHarness() {
         if (selector === ".workspace") {
           return workspaceNode;
         }
+        if (selector === ".wizard-left" || selector === ".wizard-right") {
+          return appNode.querySelector(selector);
+        }
         return null;
       }
     },
@@ -151,7 +158,7 @@ function createRendererHarness() {
     Promise
   };
 
-  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, generateCatalogGallery, appNode, sidebarNode };`, context, {
+  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, loadMaintainDetails, generateCatalogGallery, buildRenamePreview, runRenameAssets, buildMetadataPreview, applyMetadataEdit, appNode, sidebarNode, workspaceNode: document.querySelector(".workspace") };`, context, {
     filename: "devtools/renderer/app.js"
   });
   return context.__rendererHarness;
@@ -272,6 +279,65 @@ test("devtools pet catalog keeps scroll when generating gallery", async () => {
   assert.equal(leftColumn.scrollTop, 240);
   assert.equal(rightColumn.scrollTop, 120);
   assert.match(harness.appNode.innerHTML, /\.variant-gallery\/index\.html/);
+});
+
+test("devtools maintenance previews keep scroll in metadata and batch import panels", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  await harness.switchView("maintainVariant");
+  await harness.loadMaintainDetails("pet2601");
+
+  harness.state.maintain.renameSourceFolder = "C:\\pet-source-videos";
+
+  let leftColumn = harness.appNode.querySelector(".wizard-left");
+  let rightColumn = harness.appNode.querySelector(".wizard-right");
+  harness.workspaceNode.scrollTop = 90;
+  leftColumn.scrollTop = 320;
+  rightColumn.scrollTop = 180;
+
+  await harness.buildRenamePreview();
+
+  leftColumn = harness.appNode.querySelector(".wizard-left");
+  rightColumn = harness.appNode.querySelector(".wizard-right");
+  assert.equal(harness.workspaceNode.scrollTop, 90);
+  assert.equal(leftColumn.scrollTop, 320);
+  assert.equal(rightColumn.scrollTop, 180);
+
+  harness.workspaceNode.scrollTop = 120;
+  leftColumn.scrollTop = 440;
+  rightColumn.scrollTop = 260;
+
+  await harness.buildMetadataPreview();
+
+  leftColumn = harness.appNode.querySelector(".wizard-left");
+  rightColumn = harness.appNode.querySelector(".wizard-right");
+  assert.equal(harness.workspaceNode.scrollTop, 120);
+  assert.equal(leftColumn.scrollTop, 440);
+  assert.equal(rightColumn.scrollTop, 260);
+
+  harness.workspaceNode.scrollTop = 150;
+  leftColumn.scrollTop = 520;
+  rightColumn.scrollTop = 300;
+
+  await harness.runRenameAssets("rename-preview");
+
+  leftColumn = harness.appNode.querySelector(".wizard-left");
+  rightColumn = harness.appNode.querySelector(".wizard-right");
+  assert.equal(harness.workspaceNode.scrollTop, 150);
+  assert.equal(leftColumn.scrollTop, 520);
+  assert.equal(rightColumn.scrollTop, 300);
+
+  harness.workspaceNode.scrollTop = 180;
+  leftColumn.scrollTop = 610;
+  rightColumn.scrollTop = 340;
+
+  await harness.applyMetadataEdit("metadata-preview");
+
+  leftColumn = harness.appNode.querySelector(".wizard-left");
+  rightColumn = harness.appNode.querySelector(".wizard-right");
+  assert.equal(harness.workspaceNode.scrollTop, 180);
+  assert.equal(leftColumn.scrollTop, 610);
+  assert.equal(rightColumn.scrollTop, 340);
 });
 
 test("devtools pet catalog reloads summary and resources for another selected pet", async () => {
