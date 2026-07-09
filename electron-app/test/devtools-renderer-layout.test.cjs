@@ -427,6 +427,18 @@ test("devtools maintenance metadata uses selectable controls and reset action", 
   assert.match(appSource, /data-run-rename-assets/);
 });
 
+test("devtools maintenance can select known asset actions before metadata enables them", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  await harness.switchView("maintainVariant");
+  await harness.loadMaintainDetails("pet2601");
+
+  assert.deepEqual(harness.state.maintain.details.profile.actionAssets, []);
+  assert.match(appSource, /function maintainReplaceActions/);
+  assert.match(appSource, /const knownActions = Object\.keys\(state\.options\.actions \|\| \{\}\)/);
+  assert.match(harness.appNode.innerHTML, /<option value="yawn">/);
+});
+
 test("devtools delete confirmation input updates without rerendering the focused input", () => {
   const inputBody = appSource.match(/appNode\.addEventListener\("input", \(event\) => \{([\s\S]*?)\n\}\);/)?.[1] || "";
   const deleteBranch = inputBody.match(/if \(event\.target\.dataset\.deleteConfirmInput !== undefined\) \{([\s\S]*?)return;/)?.[1] || "";

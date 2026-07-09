@@ -39,9 +39,13 @@ from pet_actions.chroma import align_frame_to_reference, process_frames_to_proce
 from pet_actions.ffmpeg import extract_frames, find_ffmpeg  # noqa: E402
 from pet_actions.files import find_video, write_json  # noqa: E402
 from pet_actions.frames import (  # noqa: E402
+    build_enhanced_frames_from_source_indices,
     build_enhanced_loop_frames,
     detect_brightness_anomaly,
+    frame_signature,
+    motion_distance,
     sample_direction_frames,
+    signature_distance,
 )
 from pet_actions.loops import resolve_source_range  # noqa: E402
 from pet_actions.manifest import update_manifest  # noqa: E402
@@ -70,10 +74,33 @@ def align_runtime_frames_bottom_to_reference(
         aligned.save(frame_path)
 
 
+def score_explicit_source_frames(processed_frame_list: list[Path], source_frames: list[int]) -> float:
+    """Score the loop seam for an explicit runtime frame sequence."""
+    if not source_frames or not processed_frame_list:
+        return 0.0
+    first_source = source_frames[0]
+    last_source = source_frames[-1]
+    if first_source < 0 or last_source < 0 or first_source >= len(processed_frame_list) or last_source >= len(processed_frame_list):
+        return 0.0
+
+    first_signature = frame_signature(processed_frame_list[first_source])
+    last_signature = frame_signature(processed_frame_list[last_source])
+    score = signature_distance(first_signature, last_signature)
+    if first_source > 0 and last_source < len(processed_frame_list) - 1:
+        score += motion_distance(
+            frame_signature(processed_frame_list[first_source - 1]),
+            first_signature,
+            last_signature,
+            frame_signature(processed_frame_list[last_source + 1]),
+        ) * 0.45
+    return round(float(score), 6)
+
+
 def process_action_core(
     action: str,
     ffmpeg: str,
     fps: str,
+    frame_ms: int = FRAME_MS,
     video_path: Path | None = None,
     manifest_name: str | None = None,
     no_loop: bool = False,
@@ -88,9 +115,15 @@ def process_action_core(
     search_start: int | None = None,
     search_end: int | None = None,
     use_full_range: bool = False,
+    source_frames: list[int] | None = None,
+    source_frames_dedupe_threshold: float | None = None,
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
     trim_ground_alpha_auto: bool = False,
+    clean_detached_artifacts: bool = False,
+    detached_artifact_max_area: int = 256,
+    detached_artifact_max_span: int = 64,
+    detached_artifact_min_gap: int = 2,
     stable_ground: bool = False,
     stable_ground_max_shift: int = 32,
     visible_height: int | None = None,
@@ -151,6 +184,10 @@ def process_action_core(
         trim_ground_alpha_auto=trim_ground_alpha_auto,
         trim_ground_alpha=processed_trim_ground_alpha,
         trim_ground_padding=trim_ground_padding,
+        clean_detached_artifacts_enabled=clean_detached_artifacts,
+        detached_artifact_max_area=detached_artifact_max_area,
+        detached_artifact_max_span=detached_artifact_max_span,
+        detached_artifact_min_gap=detached_artifact_min_gap,
         stable_ground=stable_ground,
         stable_ground_max_shift=stable_ground_max_shift,
         center_visible_action_x=center_visible_action_x,
@@ -169,7 +206,7 @@ def process_action_core(
     metadata: dict[str, object] = {
         "action": action,
         "video": f"{action}.mp4",
-        "frameMs": FRAME_MS,
+        "frameMs": int(frame_ms),
         "sourceFrameSize": SOURCE_FRAME_SIZE,
         "frameSize": ENHANCED_FRAME_SIZE,
         "qualityProfile": QUALITY_PROFILE,
@@ -183,6 +220,11 @@ def process_action_core(
     if stable_ground:
         metadata["stableGroundMode"] = "processed-subject-components"
         metadata["stableGroundMaxShift"] = int(stable_ground_max_shift)
+    if clean_detached_artifacts:
+        metadata["detachedArtifactMode"] = "processed-subject-components"
+        metadata["detachedArtifactMaxArea"] = int(detached_artifact_max_area)
+        metadata["detachedArtifactMaxSpan"] = int(detached_artifact_max_span)
+        metadata["detachedArtifactMinGap"] = int(detached_artifact_min_gap)
     if center_visible_action_x:
         metadata["centerVisibleActionX"] = True
         metadata["centerVisibleTargetX"] = (
@@ -239,30 +281,47 @@ def process_action_core(
         else:
             # Standard loop selection from processed_frames
             processed_frame_list = sorted(processed_dir.glob("frame_*.png"))
-            loop = resolve_source_range(
-                processed_frame_list,
-                source_start,
-                source_end,
-                search_start,
-                search_end,
-                use_full_range,
-                long_loop,
-                loop_min,
-                loop_target,
-                loop_max,
-                length_bias,
-            )
+            if source_frames:
+                frame_count = build_enhanced_frames_from_source_indices(
+                    processed_dir,
+                    transparent_dir,
+                    source_frames,
+                    trim_ground_alpha,
+                    trim_ground_padding,
+                )
+                src_start = int(min(source_frames))
+                src_end = int(max(source_frames))
+                loop: dict[str, int | float | str] = {
+                    "loopStart": src_start,
+                    "loopEnd": src_end,
+                    "score": score_explicit_source_frames(processed_frame_list, source_frames),
+                    "loopSelection": "manual-deduplicated" if source_frames_dedupe_threshold is not None else "manual-frames",
+                }
+            else:
+                loop = resolve_source_range(
+                    processed_frame_list,
+                    source_start,
+                    source_end,
+                    search_start,
+                    search_end,
+                    use_full_range,
+                    long_loop,
+                    loop_min,
+                    loop_target,
+                    loop_max,
+                    length_bias,
+                )
 
-            src_start = int(loop["loopStart"])
-            src_end = int(loop["loopEnd"])
-            frame_count = build_enhanced_loop_frames(
-                processed_dir,
-                transparent_dir,
-                src_start,
-                src_end,
-                trim_ground_alpha,
-                trim_ground_padding,
-            )
+                src_start = int(loop["loopStart"])
+                src_end = int(loop["loopEnd"])
+                frame_count = build_enhanced_loop_frames(
+                    processed_dir,
+                    transparent_dir,
+                    src_start,
+                    src_end,
+                    trim_ground_alpha,
+                    trim_ground_padding,
+                )
             if frame_count <= 0:
                 raise RuntimeError("Loop frame generation did not produce any frames.")
             if align_reference_bottom_per_frame:
@@ -281,6 +340,14 @@ def process_action_core(
 
             if "loopSelection" in loop:
                 metadata["loopSelection"] = str(loop["loopSelection"])
+            if source_frames:
+                metadata["sourceFrames"] = source_frames
+                if source_frames_dedupe_threshold is not None:
+                    metadata["sourceSampling"] = "explicit-adjacent-deduplicated"
+                    metadata["droppedDuplicateFrames"] = max(0, src_end - src_start + 1 - len(source_frames))
+                    metadata["dedupeThreshold"] = float(source_frames_dedupe_threshold)
+                else:
+                    metadata["sourceSampling"] = "explicit"
             if long_loop:
                 metadata["qualityScore"] = float(loop.get("qualityScore", loop["score"]))
                 metadata["targetLength"] = int(loop.get("targetLength", frame_count))
@@ -377,6 +444,35 @@ def resolve_align_reference_action(
     return None
 
 
+def parse_source_frames(value: str | None) -> list[int] | None:
+    """Parse an explicit comma/space separated source frame list."""
+    if value is None or str(value).strip() == "":
+        return None
+    frames: list[int] = []
+    for item in str(value).replace(",", " ").split():
+        try:
+            frame = int(item)
+        except ValueError as exc:
+            raise ValueError(f"Invalid source frame index: {item}") from exc
+        if frame < 0:
+            raise ValueError(f"Invalid source frame index: {frame}")
+        frames.append(frame)
+    return frames or None
+
+
+def parse_optional_non_negative_float(value: str | None, name: str) -> float | None:
+    """Parse an optional non-negative float CLI value."""
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {name}: {value}") from exc
+    if parsed < 0:
+        raise ValueError(f"Invalid {name}: {value}")
+    return parsed
+
+
 # ---------------------------------------------------------------------------
 # CLI: process subcommand
 # ---------------------------------------------------------------------------
@@ -389,6 +485,11 @@ def cmd_process(args: argparse.Namespace) -> None:
 
     # Resolve video path
     video_path = Path(args.video) if args.video else None
+    source_frames = parse_source_frames(args.source_frames)
+    source_frames_dedupe_threshold = parse_optional_non_negative_float(
+        args.source_frames_dedupe_threshold,
+        "--source-frames-dedupe-threshold",
+    )
 
     results = []
     for action in args.actions:
@@ -404,6 +505,7 @@ def cmd_process(args: argparse.Namespace) -> None:
             action=action_name,
             ffmpeg=ffmpeg,
             fps=args.fps,
+            frame_ms=args.frame_ms,
             video_path=video_path,
             manifest_name=manifest_name,
             no_loop=args.no_loop,
@@ -418,9 +520,15 @@ def cmd_process(args: argparse.Namespace) -> None:
             search_start=args.search_start,
             search_end=args.search_end,
             use_full_range=args.use_full_range,
+            source_frames=source_frames,
+            source_frames_dedupe_threshold=source_frames_dedupe_threshold,
             trim_ground_alpha=args.trim_ground_alpha,
             trim_ground_padding=args.trim_ground_padding,
             trim_ground_alpha_auto=args.trim_ground_alpha_auto,
+            clean_detached_artifacts=args.clean_detached_artifacts,
+            detached_artifact_max_area=args.detached_artifact_max_area,
+            detached_artifact_max_span=args.detached_artifact_max_span,
+            detached_artifact_min_gap=args.detached_artifact_min_gap,
             stable_ground=args.stable_ground,
             stable_ground_max_shift=args.stable_ground_max_shift,
             visible_height=args.visible_height,
@@ -449,11 +557,17 @@ def cmd_process(args: argparse.Namespace) -> None:
 def cmd_replace(args: argparse.Namespace) -> None:
     ffmpeg = find_ffmpeg(args.ffmpeg)
     print(f"Using ffmpeg: {ffmpeg}")
+    source_frames = parse_source_frames(args.source_frames)
+    source_frames_dedupe_threshold = parse_optional_non_negative_float(
+        args.source_frames_dedupe_threshold,
+        "--source-frames-dedupe-threshold",
+    )
 
     metadata = process_action_core(
         action=args.action,
         ffmpeg=ffmpeg,
         fps=args.fps,
+        frame_ms=args.frame_ms,
         video_path=Path(args.video),
         manifest_name=args.manifest,
         no_loop=args.no_loop,
@@ -468,9 +582,15 @@ def cmd_replace(args: argparse.Namespace) -> None:
         search_start=args.search_start,
         search_end=args.search_end,
         use_full_range=args.use_full_range,
+        source_frames=source_frames,
+        source_frames_dedupe_threshold=source_frames_dedupe_threshold,
         trim_ground_alpha=args.trim_ground_alpha,
         trim_ground_padding=args.trim_ground_padding,
         trim_ground_alpha_auto=args.trim_ground_alpha_auto,
+        clean_detached_artifacts=args.clean_detached_artifacts,
+        detached_artifact_max_area=args.detached_artifact_max_area,
+        detached_artifact_max_span=args.detached_artifact_max_span,
+        detached_artifact_min_gap=args.detached_artifact_min_gap,
         stable_ground=args.stable_ground,
         stable_ground_max_shift=args.stable_ground_max_shift,
         visible_height=args.visible_height,
@@ -505,6 +625,7 @@ def cmd_replace(args: argparse.Namespace) -> None:
 def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ffmpeg", default=None, help="Path to ffmpeg.exe.")
     parser.add_argument("--fps", default="100/3", help="Extraction frame rate. Default matches 30ms playback.")
+    parser.add_argument("--frame-ms", type=int, default=FRAME_MS, help="Runtime playback duration per frame in loop.json.")
     parser.add_argument("--no-loop", action="store_true", help="Skip loop selection, only generate processed_frames.")
     parser.add_argument("--skip-frames", default="auto", help="Exclude head frames from processed_frames. 'auto' (default), '0' (none), or a number like '6'.")
     parser.add_argument("--long-loop", action="store_true", help="Prefer a longer seamless loop when selecting source frames.")
@@ -514,12 +635,18 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--length-bias", type=float, default=0.025, help="Penalty for loops shorter than --loop-target.")
     parser.add_argument("--source-start", type=int, default=None, help="Manual source start frame after extraction.")
     parser.add_argument("--source-end", type=int, default=None, help="Manual source end frame after extraction.")
+    parser.add_argument("--source-frames", default=None, help="Explicit comma/space separated processed frame indices to copy to runtime frames.")
+    parser.add_argument("--source-frames-dedupe-threshold", default=None, help="Record explicit source frames as an adjacent-deduplicated manual selection with this threshold.")
     parser.add_argument("--search-start", type=int, default=None, help="Limit automatic loop selection to this source start frame.")
     parser.add_argument("--search-end", type=int, default=None, help="Limit automatic loop selection to this source end frame.")
     parser.add_argument("--use-full-range", action="store_true", help="Use the full extracted frame range instead of auto loop selection.")
     parser.add_argument("--trim-ground-alpha", type=int, default=0, help="Clear rows below last solid-alpha row. Disabled by default.")
     parser.add_argument("--trim-ground-padding", type=int, default=1, help="Rows to keep below last solid-alpha row when --trim-ground-alpha is enabled.")
     parser.add_argument("--trim-ground-alpha-auto", action="store_true", help="Apply safe ground-alpha cleanup to processed_frames before runtime frames are selected.")
+    parser.add_argument("--clean-detached-artifacts", action="store_true", help="Remove small detached alpha components outside the main subject in processed_frames.")
+    parser.add_argument("--detached-artifact-max-area", type=int, default=256, help="Maximum area for --clean-detached-artifacts components.")
+    parser.add_argument("--detached-artifact-max-span", type=int, default=64, help="Maximum width/height for --clean-detached-artifacts components.")
+    parser.add_argument("--detached-artifact-min-gap", type=int, default=2, help="Minimum pixel gap from the subject for --clean-detached-artifacts components.")
     parser.add_argument("--stable-ground", action="store_true", help="Use subject-component analysis to clear small bottom artifacts and align frames to a stable subject bottom.")
     parser.add_argument("--stable-ground-max-shift", type=int, default=32, help="Maximum vertical shift for --stable-ground.")
     parser.add_argument("--visible-height", type=int, default=None, help="Override sprite visible height for this action.")

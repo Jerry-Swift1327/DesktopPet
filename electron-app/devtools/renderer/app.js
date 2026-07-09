@@ -937,6 +937,12 @@ function actionsFromDetails(details) {
   return Array.from(new Set((details.profile.actionButtons || details.profile.actions || []).concat(details.profile.actionAssets || details.profile.extraAnimationAssets || [])));
 }
 
+function maintainReplaceActions(details) {
+  const configured = actionsFromDetails(details);
+  const knownActions = Object.keys(state.options.actions || {});
+  return Array.from(new Set(configured.concat(knownActions)));
+}
+
 function syncMaintainFields(details) {
   if (!details || !details.profile) {
     return;
@@ -953,7 +959,7 @@ function syncMaintainFields(details) {
     featuresEnable: enabledFeatures.slice(),
     featuresDisable: []
   };
-  const actions = actionsFromDetails(details);
+  const actions = maintainReplaceActions(details);
   if (!state.maintain.action || !actions.includes(state.maintain.action)) {
     state.maintain.action = actions[0] || "";
   }
@@ -1016,7 +1022,7 @@ function renderMaintainMetadataControls(fields, disabled) {
 function renderMaintainVariant() {
   const details = state.maintain.details;
   const fields = state.maintain.metadataFields;
-  const actions = actionsFromDetails(details);
+  const actions = maintainReplaceActions(details);
   const disabled = busy() ? " disabled" : "";
   return `<div class="wizard">
     <div class="wizard-left">

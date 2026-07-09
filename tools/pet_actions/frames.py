@@ -256,3 +256,32 @@ def build_enhanced_loop_frames(
         output_index += 1
 
     return output_index
+
+
+def build_enhanced_frames_from_source_indices(
+    processed_dir: Path,
+    output_dir: Path,
+    source_indices: list[int],
+    trim_ground_alpha: int,
+    trim_ground_padding: int,
+) -> int:
+    """Copy explicitly selected processed frame indices into transparent_frames."""
+    processed_frames = sorted(processed_dir.glob("frame_*.png"))
+    if not processed_frames:
+        raise RuntimeError(f"No processed frames found in {processed_dir}")
+    if not source_indices:
+        raise RuntimeError("No source frames were provided.")
+
+    clear_frame_dir(output_dir)
+    for output_index, source_index in enumerate(source_indices):
+        if source_index < 0 or source_index >= len(processed_frames):
+            raise RuntimeError(f"Invalid source frame {source_index} for {len(processed_frames)} processed frames")
+        src = processed_dir / f"frame_{source_index:03d}.png"
+        if not src.exists():
+            raise RuntimeError(f"Missing processed frame: {src}")
+
+        frame = Image.open(src).convert("RGBA")
+        frame = trim_ground_alpha_remnants(frame, trim_ground_alpha, trim_ground_padding)
+        frame.save(output_dir / f"frame_{output_index:03d}.png")
+
+    return len(source_indices)

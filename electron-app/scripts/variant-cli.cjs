@@ -397,7 +397,7 @@ function buildRenameAssetsPlan(args, options = {}) {
   }
 
   const copied = [];
-  for (const action of profile.actionButtons || profile.actions || PET_ACTION_ORDER) {
+  for (const action of getProfileActionKeys(profile)) {
     const actionName = getProfileActionFolderName(profile, action);
     const actionDir = path.join(animationsRoot, actionName);
     const source = findSourceVideo(sourceDir, action);
@@ -853,6 +853,24 @@ function findMissingActionResources(profile, animationsRoot) {
     .filter((resourcePath) => !fs.existsSync(resourcePath));
 }
 
+function findFeatureMissingActionResources(profile, animationsRoot) {
+  const requiredActions = [];
+  if (profile.features?.idleYawn && !(profile.actionAssets || profile.extraAnimationAssets || []).includes("yawn")) {
+    requiredActions.push("yawn");
+  }
+  const assetPrefix = profile.assetPrefix || profile.animationPrefix || profile.id;
+  const actionAssets = profile.actionAssets || profile.extraAnimationAssets || [];
+  return uniqueList(requiredActions)
+    .map((action) => ({
+      feature: action === "yawn" ? "idleYawn" : "",
+      action,
+      resourcePath: getActionResourcePath(animationsRoot, assetPrefix, action),
+      hasActionAsset: actionAssets.includes(action),
+      hasResource: fs.existsSync(getActionResourcePath(animationsRoot, assetPrefix, action))
+    }))
+    .filter((item) => !item.hasActionAsset || !item.hasResource);
+}
+
 function buildMetadataEditPreview(payload = {}, options = {}) {
   const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
   const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
@@ -871,18 +889,29 @@ function buildMetadataEditPreview(payload = {}, options = {}) {
   const missingResources = Object.prototype.hasOwnProperty.call(fields, "actions")
     ? findMissingActionResources(profile, animationsRoot)
     : [];
-  const canApply = missingResources.length === 0;
+  const missingFeatureResources = Object.prototype.hasOwnProperty.call(fields, "features") || Object.prototype.hasOwnProperty.call(fields, "actions")
+    ? findFeatureMissingActionResources(profile, animationsRoot)
+    : [];
+  const canApply = missingResources.length === 0 && missingFeatureResources.length === 0;
+  const reason = missingResources.length > 0
+    ? `Missing action resource(s): ${missingResources.join(", ")}`
+    : missingFeatureResources.length > 0
+      ? missingFeatureResources
+        .map((item) => `变体 ${profile.id} 缺少 ${item.feature} 所需的 ${item.action} 动作。请先在“替换动作”或“批量导入目录”中导入 ${item.action}，再把它加入 actions.assets。`)
+        .join(" ")
+      : null;
   return {
     kind: "metadataEdit",
     id,
     metadataFile,
     animationsRoot,
     canApply,
-    reason: canApply ? null : `Missing action resource(s): ${missingResources.join(", ")}`,
+    reason,
     diff,
     before,
     after,
     missingResources,
+    missingFeatureResources,
     metadataAfterApply
   };
 }

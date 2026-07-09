@@ -157,6 +157,29 @@ test("variant CLI can preview rename-assets before applying copied videos", () =
   assert.equal(fs.readFileSync(path.join(animationsRoot, "pettest01_squat", "pettest01_squat.mp4"), "utf8"), "squat");
 });
 
+test("variant CLI rename-assets includes extra action assets", () => {
+  const tempDir = createTempDir();
+  const sourceDir = path.join(tempDir, "downloads");
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball", "yawn"]);
+
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+  metadata.variants.pettest01.actions.assets = ["yawn"];
+  fs.writeFileSync(metadataFile, JSON.stringify(metadata, null, 2), "utf8");
+
+  const plan = buildRenameAssetsPlan({ id: "pettest01", from: sourceDir }, { metadataFile, animationsRoot });
+
+  assert.deepEqual(plan.copied.map((item) => item.action), ["squat", "walk", "feed", "ball", "yawn"]);
+  assert.equal(path.basename(plan.copied.at(-1).target), "pettest01_yawn.mp4");
+
+  const result = applyRenameAssetsPlan(plan);
+
+  assert.equal(result.copied.length, 5);
+  assert.equal(fs.readFileSync(path.join(animationsRoot, "pettest01_yawn", "pettest01_yawn.mp4"), "utf8"), "yawn");
+});
+
 test("variant CLI list output uses V2 columns", () => {
   const output = formatList([
     getVariantSummary("pet2601"),
@@ -541,6 +564,52 @@ test("metadata edit preview blocks action lists that reference missing resources
   assert.equal(preview.canApply, false);
   assert.match(preview.reason, /pettest01_lie/);
   assert.throws(() => applyMetadataEdit(preview, { metadataFile }), /Cannot apply metadata edit/);
+});
+
+test("metadata edit preview blocks idleYawn without a yawn action asset", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+
+  const preview = buildMetadataEditPreview(
+    {
+      id: "pettest01",
+      fields: {
+        features: { enable: ["autoStart", "idleYawn"], disable: [] }
+      }
+    },
+    { metadataFile, animationsRoot }
+  );
+
+  assert.equal(preview.canApply, false);
+  assert.equal(preview.missingFeatureResources[0].action, "yawn");
+  assert.match(preview.reason, /缺少 idleYawn 所需的 yawn 动作/);
+  assert.throws(() => applyMetadataEdit(preview, { metadataFile }), /Cannot apply metadata edit/);
+});
+
+test("metadata edit preview requires idleYawn yawn resources to be listed as action assets", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball", "yawn"]);
+
+  const preview = buildMetadataEditPreview(
+    {
+      id: "pettest01",
+      fields: {
+        features: { enable: ["autoStart", "idleYawn"], disable: [] }
+      }
+    },
+    { metadataFile, animationsRoot }
+  );
+
+  assert.equal(preview.canApply, false);
+  assert.equal(preview.missingFeatureResources[0].action, "yawn");
+  assert.equal(preview.missingFeatureResources[0].hasResource, true);
+  assert.equal(preview.missingFeatureResources[0].hasActionAsset, false);
 });
 
 test("replace action plan builds process_pet_actions replace command with frame mode args", () => {

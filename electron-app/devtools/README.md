@@ -37,9 +37,9 @@ npm.cmd run devtools
 ## 维护宠物流程
 
 1. 在“维护宠物”中选择已有宠物。
-2. 替换资源时选择动作和新的 `.mp4`，设置运行帧段模式，生成替换预览后确认执行。底层调用 `tools/process_pet_actions.py replace` 更新动作资源和 manifest。
+2. 替换资源时选择动作和新的 `.mp4`，设置运行帧段模式，生成替换预览后确认执行。动作下拉包含当前变体已配置动作和动作池中的已知动作（例如尚未写入 metadata 的 `yawn`），便于先导入/替换资源后再更新 `actions.assets`。底层调用 `tools/process_pet_actions.py replace` 更新动作资源和 manifest。
 3. 批量导入动作源视频时选择源文件夹，生成 `rename-assets` 复制预览后确认执行。
-4. 修改信息/元数据时通过下拉、多选和 notes 标准项/自定义输入编辑 `species`、`tier`、`notes`、动作列表和功能列表。工具会先生成 diff 预览；若动作列表引用缺失的资源目录，会阻止写入并提示先替换或生成资源。
+4. 修改信息/元数据时通过下拉、多选和 notes 标准项/自定义输入编辑 `species`、`tier`、`notes`、动作列表和功能列表。工具会先生成 diff 预览；若动作列表引用缺失的资源目录，或启用 `idleYawn` 但没有可用 `yawn` 动作资源，会阻止写入并提示先替换或生成资源。
 5. 修改信息前可点击“取消修改并清空记录”恢复当前宠物元数据草稿，并清空 diff 和执行记录。
 6. 确认 diff 后再写入 `electron/pet-variant-metadata.json`。
 

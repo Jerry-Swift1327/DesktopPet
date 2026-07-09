@@ -80,6 +80,7 @@ npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --dat
 | `pet2608` | cat | basic | custom | Windows | `squat`、`walk`、`feed`、`ball` |
 | `pet2609` | cat | advanced | internal | Windows | `squat`、`walk`、`feed`、`ball`、`spin`、`lick`、`stretch`、`splits`，额外资源 `yawn`、`hiss` |
 | `pet2610` | cat | advanced | custom | Windows | `squat`、`walk`、`feed`、`ball`，额外资源 `shake`、`yawn` |
+| `pet2611` | cat | basic | custom | Windows | `squat`、`walk`、`feed`、`ball`，额外资源 `yawn` |
 
 资源目录命名为 `assets/animations/<variant>_<action>`，运行时主要使用：
 

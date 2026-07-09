@@ -579,6 +579,89 @@ def detect_ground_artifacts(
     return info
 
 
+def clean_detached_artifacts(
+    image: Image.Image,
+    *,
+    enabled: bool = False,
+    subject_threshold: int = 128,
+    component_threshold: int = 0,
+    max_area: int = 256,
+    max_span: int = 64,
+    min_gap: int = 2,
+) -> tuple[Image.Image, dict[str, object]]:
+    """Remove small detached alpha components outside the main subject."""
+    empty_info: dict[str, object] = {
+        "enabled": bool(enabled),
+        "applied": False,
+        "cleanedComponents": 0,
+        "cleanedPixels": 0,
+        "maxCleanedArea": 0,
+        "keptComponents": 0,
+        "warningCount": 0,
+        "warnings": [],
+    }
+    if not enabled:
+        return image, empty_info
+
+    output = image.convert("RGBA")
+    pixels = np.array(output)
+    alpha = pixels[:, :, 3]
+    subject = _select_subject_component(alpha, subject_threshold)
+    if subject is None:
+        return output, {**empty_info, "warningCount": 1, "warnings": ["no subject component"]}
+
+    clean_masks: list[tuple[np.ndarray, np.ndarray, int]] = []
+    kept_components = 0
+    warnings: list[str] = []
+    subject_left = int(subject["left"])
+    subject_top = int(subject["top"])
+    subject_right = int(subject["right"])
+    subject_bottom = int(subject["bottom"])
+    resolved_max_area = max(1, int(max_area))
+    resolved_max_span = max(1, int(max_span))
+    resolved_gap = max(0, int(min_gap))
+
+    for component in _alpha_component_records(alpha, component_threshold):
+        if component is subject:
+            continue
+        if int(component["left"]) == subject_left and int(component["right"]) == subject_right and int(component["top"]) == subject_top and int(component["bottom"]) == subject_bottom:
+            continue
+        separated = (
+            int(component["bottom"]) < subject_top - resolved_gap
+            or int(component["top"]) > subject_bottom + resolved_gap
+            or int(component["right"]) < subject_left - resolved_gap
+            or int(component["left"]) > subject_right + resolved_gap
+        )
+        is_small = (
+            int(component["area"]) <= resolved_max_area
+            and int(component["width"]) <= resolved_max_span
+            and int(component["height"]) <= resolved_max_span
+        )
+        if separated and is_small:
+            clean_masks.append((component["ys"], component["xs"], int(component["area"])))
+        elif separated:
+            kept_components += 1
+            warnings.append(f"detached component kept area={component['area']} box={component['left']},{component['top']},{component['right']},{component['bottom']}")
+
+    for ys, xs, _area in clean_masks:
+        pixels[ys, xs, 3] = 0
+        pixels[ys, xs, :3] = 0
+
+    if clean_masks:
+        output = Image.fromarray(pixels, "RGBA")
+
+    return output, {
+        **empty_info,
+        "applied": bool(clean_masks),
+        "cleanedComponents": len(clean_masks),
+        "cleanedPixels": sum(area for _ys, _xs, area in clean_masks),
+        "maxCleanedArea": max((area for _ys, _xs, area in clean_masks), default=0),
+        "keptComponents": kept_components,
+        "warningCount": len(warnings),
+        "warnings": warnings[:12],
+    }
+
+
 def stabilize_frames_to_ground(
     frames: list[tuple[str, Image.Image]],
     *,
@@ -868,6 +951,10 @@ def process_frames_to_processed(
     trim_ground_alpha_auto: bool = False,
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
+    clean_detached_artifacts_enabled: bool = False,
+    detached_artifact_max_area: int = 256,
+    detached_artifact_max_span: int = 64,
+    detached_artifact_min_gap: int = 2,
     stable_ground: bool = False,
     stable_ground_max_shift: int = 32,
     center_visible_action_x: bool = False,
@@ -889,6 +976,16 @@ def process_frames_to_processed(
     source_canvas_size: list[int] | None = None
     global_bounds = get_global_bounds(raw_frames) if normalization_mode == CROP_NORMALIZATION else None
     enhanced_frames: list[tuple[str, Image.Image]] = []
+    detached_artifact_info: dict[str, object] = {
+        "enabled": bool(clean_detached_artifacts_enabled),
+        "applied": False,
+        "cleanedComponents": 0,
+        "cleanedPixels": 0,
+        "maxCleanedArea": 0,
+        "keptComponents": 0,
+        "warningCount": 0,
+        "warnings": [],
+    }
     for raw_frame in raw_frames:
         keyed = chroma_key_green_image(raw_frame)
         if source_canvas_size is None:
@@ -908,6 +1005,23 @@ def process_frames_to_processed(
             solid_threshold=trim_ground_alpha,
             row_padding=trim_ground_padding,
         )
+        enhanced, frame_detached_info = clean_detached_artifacts(
+            enhanced,
+            enabled=clean_detached_artifacts_enabled,
+            max_area=detached_artifact_max_area,
+            max_span=detached_artifact_max_span,
+            min_gap=detached_artifact_min_gap,
+        )
+        if clean_detached_artifacts_enabled:
+            detached_artifact_info["applied"] = bool(detached_artifact_info["applied"] or frame_detached_info["applied"])
+            detached_artifact_info["cleanedComponents"] = int(detached_artifact_info["cleanedComponents"]) + int(frame_detached_info["cleanedComponents"])
+            detached_artifact_info["cleanedPixels"] = int(detached_artifact_info["cleanedPixels"]) + int(frame_detached_info["cleanedPixels"])
+            detached_artifact_info["maxCleanedArea"] = max(int(detached_artifact_info["maxCleanedArea"]), int(frame_detached_info["maxCleanedArea"]))
+            detached_artifact_info["keptComponents"] = int(detached_artifact_info["keptComponents"]) + int(frame_detached_info["keptComponents"])
+            warnings = list(detached_artifact_info["warnings"])
+            warnings.extend(f"{raw_frame.name}: {warning}" for warning in frame_detached_info.get("warnings", []))
+            detached_artifact_info["warnings"] = warnings[:12]
+            detached_artifact_info["warningCount"] = int(detached_artifact_info["warningCount"]) + int(frame_detached_info["warningCount"])
         enhanced_frames.append((raw_frame.name, enhanced))
 
     enhanced_frames, stable_ground_info = stabilize_frames_to_ground(
@@ -951,6 +1065,8 @@ def process_frames_to_processed(
         info["sourceCanvasSize"] = source_canvas_size
     if stable_ground:
         info["stableGround"] = stable_ground_info
+    if clean_detached_artifacts_enabled:
+        info["detachedArtifacts"] = detached_artifact_info
     return sorted(processed_dir.glob("frame_*.png")), info
 
 

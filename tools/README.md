@@ -38,6 +38,8 @@
                               ↓
                      亮色毛发 alpha 稳定化（内部针孔/低透明裂纹修复）
                               ↓
+                     [可选] 主体外离散组件清理（水印/悬浮碎片）
+                              ↓
                      [可选/自动编排] 稳定贴地（主体组件识别、底部离散残点清理、稳定主体底线对齐）
                               ↓
                      [默认] 亮度异常检测 → 确定 excludedFrames
@@ -78,15 +80,22 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--video` | 源视频路径。省略时从动作目录内查找 `.mp4` 文件 |
 | `--ffmpeg` | 指定 ffmpeg 路径 |
 | `--fps` | 抽帧帧率，默认 `100/3` |
+| `--frame-ms` | 写入 `loop.json` 的运行帧间隔，默认 30ms |
 | `--no-loop` | 跳过循环选取，只生成素材池 |
 | `--skip-frames` | 排除素材池前 N 帧：`auto`（默认，自动检测亮度异常）、`0`（不排除）、数字（手动指定） |
 | `--direction-count` | 采样 N 帧方向帧（用于眼球追踪动作如 `tabby_look`） |
 | `--long-loop` | 倾向选择更长循环段 |
 | `--source-start` / `--source-end` | 手动指定源循环范围 |
+| `--source-frames` | 显式指定要导出到运行帧的素材池帧序号列表，支持逗号或空格分隔 |
+| `--source-frames-dedupe-threshold` | 配合 `--source-frames` 记录这些显式帧来自相邻去重选择，并写入去重阈值 |
 | `--search-start` / `--search-end` | 限制自动寻找循环段的源范围 |
 | `--use-full-range` | 使用完整抽帧范围 |
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
 | `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
+| `--clean-detached-artifacts` | 在素材池阶段清理主体外的小型离散 alpha 组件，例如抠像后残留的水印碎片 |
+| `--detached-artifact-max-area` | 限制 `--clean-detached-artifacts` 可清理组件的最大像素面积，默认 256px |
+| `--detached-artifact-max-span` | 限制 `--clean-detached-artifacts` 可清理组件的最大宽高，默认 64px |
+| `--detached-artifact-min-gap` | 限制 `--clean-detached-artifacts` 只清理与主体至少相隔的像素距离，默认 2px |
 | `--stable-ground` | 使用主体组件分析清理底部小型离散残点，并按稳定主体底线做垂直对齐 |
 | `--stable-ground-max-shift` | 限制 `--stable-ground` 的最大垂直平移，默认 32px |
 | `--normalization-mode` | 帧归一化模式，默认 `source-canvas` 保留源视频完整画布构图；`crop` 使用旧版裁剪贴地归一化 |
@@ -130,6 +139,10 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 ### alpha 稳定化
 
 抠像后的归一化帧会自动执行亮色毛发安全处理：对高亮、低饱和的近白前景采用更保守的绿幕判定，并在 256px/128px 帧内修复局部前景密度较高区域中的透明针孔和低透明裂纹。该步骤用于避免 ragdoll、van、pomeranian 等浅色毛发在播放时因 alpha 破洞产生闪烁，同时不会整体外扩外轮廓。
+
+### 主体外离散组件清理
+
+`--clean-detached-artifacts` 会在素材池生成阶段按 alpha 连通组件识别主体，再清理与主体分离、面积和宽高都低于阈值的小组件。它用于处理抠像后残留在主体外的水印、悬浮碎片或小块杂色；较大的离散组件会被保留，并在 `loop.json`/manifest 的 `detachedArtifacts.warnings` 中暴露风险。该能力默认关闭，避免误删动作本身需要的分离道具或特效。
 
 ### 稳定贴地
 

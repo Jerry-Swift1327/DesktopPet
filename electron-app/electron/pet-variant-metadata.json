@@ -57,7 +57,9 @@
           "feed",
           "ball"
         ],
-        "assets": []
+        "assets": [
+          "yawn"
+        ]
       },
       "features": {
         "enable": [
@@ -375,11 +377,14 @@
           "feed",
           "ball"
         ],
-        "assets": []
+        "assets": [
+          "yawn"
+        ]
       },
       "features": {
         "enable": [
-          "autoStart"
+          "autoStart",
+          "idleYawn"
         ],
         "disable": []
       }

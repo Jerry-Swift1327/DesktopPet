@@ -155,7 +155,7 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
   ]);
   assert.equal(pet2611Config.features.autoStart, true);
   assert.equal(pet2611Config.features.windowDocking, true);
-  assert.equal(Boolean(pet2611Config.features.idleYawn), false);
+  assert.equal(pet2611Config.features.idleYawn, true);
 });
 
 test("installer channel hides debug timers and uses compact panel height", () => {
@@ -181,6 +181,7 @@ test("variant metadata resolves pet ids species tiers and delivery fields", () =
   assert.deepEqual(getPetVariantProfile("pet2609").actions, ["squat", "walk", "feed", "ball", "spin", "lick", "stretch", "splits"]);
   assert.deepEqual(getPetVariantProfile("pet2609").extraAnimationAssets, ["yawn", "hiss"]);
   assert.deepEqual(getPetVariantProfile("pet2610").extraAnimationAssets, ["shake", "yawn"]);
+  assert.deepEqual(getPetVariantProfile("pet2611").extraAnimationAssets, ["yawn"]);
   assert.deepEqual(getPetVariantProfile("pet2604").platforms, ["darwin"]);
 });
 
@@ -451,7 +452,8 @@ test("existing variants keep the current animation folder convention", () => {
     "pet2611_squat",
     "pet2611_walk",
     "pet2611_feed",
-    "pet2611_ball"
+    "pet2611_ball",
+    "pet2611_yawn"
   ]);
   assert.equal(getVariantManifestName("pet2602"), "cat_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2605"), "tabby_actions_manifest.json");

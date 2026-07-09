@@ -16,7 +16,7 @@
 | `van` | `van_squat`、`van_walk`、`van_feed`、`van_ball` |
 | `pomeranian` | `pomeranian_squat`、`pomeranian_walk`、`pomeranian_feed`、`pomeranian_ball` |
 | `pet2610` | `pet2610_squat`、`pet2610_walk`、`pet2610_feed`、`pet2610_ball`、`pet2610_shake`、`pet2610_yawn` |
-| `pet2611` | `pet2611_squat`、`pet2611_walk`、`pet2611_feed`、`pet2611_ball` |
+| `pet2611` | `pet2611_squat`、`pet2611_walk`、`pet2611_feed`、`pet2611_ball`、`pet2611_yawn` |
 
 ## 单个动作目录
 
@@ -64,7 +64,7 @@
 - `pet2610_actions_manifest.json`
 - `pet2611_actions_manifest.json`
 
-manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新。
+manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新；生成阶段启用稳定贴地或主体外离散组件清理时，也会记录 `stableGround`、`detachedArtifacts` 等审计信息。
 
 ## 常用命令
 
@@ -115,6 +115,6 @@ python tools\build_quality_previews.py --actions dog_feed --clean
 - `electron-app/electron/pet-variant-metadata.json` 维护 V2 变体元数据，`electron-app/electron/pet-catalog.cjs` 维护动作池/功能池/tier/notes，`electron-app/electron/pet-variants.cjs` 展开动作顺序和打包资源列表。
 - 打包脚本只复制运行需要的 `transparent_frames`、`loop.json` 和 manifest。
 - `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库；`raw_frames` 默认保留但可用 `--clean-raw` 清理。
-- 底部低透明 alpha、底部小型离散残点、动作级画布偏心、动作偏移或缩放突变应优先在素材池生成阶段处理，再重新导出 `transparent_frames`。只有需要旧版裁剪贴地效果时才使用 `--normalization-mode crop`。
+- 底部低透明 alpha、底部小型离散残点、主体外水印/悬浮碎片、动作级画布偏心、动作偏移或缩放突变应优先在素材池生成阶段处理，再重新导出 `transparent_frames`。只有需要旧版裁剪贴地效果时才使用 `--normalization-mode crop`。
 - 替换资源后，先检查 `loop.json` 和 manifest，再启动应用确认动作播放、落地点和循环是否正常。
 - 如果动作帧尺寸或命名规则变化，需要同步主进程资源加载、渲染层播放逻辑和测试。

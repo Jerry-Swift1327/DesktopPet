@@ -194,6 +194,26 @@ class PetActionProcessingTests(unittest.TestCase):
         self.assertEqual(info["cleanedComponents"], 0)
         self.assertGreater(info["warningCount"], 0)
 
+    def test_clean_detached_artifacts_removes_small_subject_external_component(self) -> None:
+        from pet_actions.chroma import clean_detached_artifacts
+
+        image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        pixels = image.load()
+        for y in range(26, 50):
+            for x in range(18, 48):
+                pixels[x, y] = (220, 216, 210, 255)
+        for y in range(6, 12):
+            for x in range(8, 22):
+                pixels[x, y] = (150, 150, 150, 180)
+
+        cleaned, info = clean_detached_artifacts(image, enabled=True, max_area=128, max_span=32, min_gap=2)
+        alpha = cleaned.getchannel("A")
+
+        self.assertEqual(info["applied"], True)
+        self.assertEqual(info["cleanedComponents"], 1)
+        self.assertEqual(alpha.getpixel((12, 8)), 0)
+        self.assertEqual(alpha.getpixel((24, 30)), 255)
+
     def test_stabilize_alpha_mask_repairs_enclosed_pinhole_without_expanding_edge(self) -> None:
         from pet_actions.chroma import detect_interior_alpha_holes, stabilize_alpha_mask_pixels
 
@@ -354,6 +374,113 @@ class PetActionProcessingTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "visible-height"):
                 process_frames_to_processed(raw_dir, processed_dir, visible_height=100)
+
+    def test_build_enhanced_frames_from_source_indices_preserves_explicit_order(self) -> None:
+        from pet_actions.frames import build_enhanced_frames_from_source_indices
+
+        with tempfile.TemporaryDirectory() as tmp:
+            processed_dir = Path(tmp) / "processed_frames"
+            output_dir = Path(tmp) / "transparent_frames"
+            processed_dir.mkdir()
+            for index, color in enumerate([(10, 0, 0, 255), (20, 0, 0, 255), (30, 0, 0, 255)]):
+                image = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+                pixels = image.load()
+                for y in range(4, 12):
+                    for x in range(4, 12):
+                        pixels[x, y] = color
+                image.save(processed_dir / f"frame_{index:03d}.png")
+
+            count = build_enhanced_frames_from_source_indices(processed_dir, output_dir, [2, 0], 0, 1)
+
+            self.assertEqual(count, 2)
+            self.assertEqual(Image.open(output_dir / "frame_000.png").convert("RGBA").getpixel((6, 6)), (30, 0, 0, 255))
+            self.assertEqual(Image.open(output_dir / "frame_001.png").convert("RGBA").getpixel((6, 6)), (10, 0, 0, 255))
+
+    def test_score_explicit_source_frames_uses_loop_seam_distance(self) -> None:
+        import process_pet_actions as cli
+        from pet_actions.frames import frame_signature, motion_distance, signature_distance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            processed_dir = Path(tmp) / "processed_frames"
+            processed_dir.mkdir()
+            colors = [(20, 0, 0, 255), (40, 0, 0, 255), (80, 0, 0, 255), (120, 0, 0, 255), (180, 0, 0, 255)]
+            for index, color in enumerate(colors):
+                image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+                pixels = image.load()
+                for y in range(8, 24):
+                    for x in range(8, 24):
+                        pixels[x, y] = color
+                image.save(processed_dir / f"frame_{index:03d}.png")
+
+            frames = sorted(processed_dir.glob("frame_*.png"))
+            expected = signature_distance(frame_signature(frames[1]), frame_signature(frames[3]))
+            expected += motion_distance(
+                frame_signature(frames[0]),
+                frame_signature(frames[1]),
+                frame_signature(frames[3]),
+                frame_signature(frames[4]),
+            ) * 0.45
+
+            self.assertEqual(cli.score_explicit_source_frames(frames, [1, 3]), round(expected, 6))
+
+    def test_source_frames_dedupe_metadata_is_reproducible(self) -> None:
+        import process_pet_actions as cli
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            animations_root = tmp_path / "animations"
+            action_dir = animations_root / "test_walk"
+            action_dir.mkdir(parents=True)
+            video_path = tmp_path / "source.mp4"
+            video_path.write_bytes(b"fake video")
+
+            original_root = cli.ANIMATIONS_ROOT
+            original_extract = cli.extract_frames
+            original_process = cli.process_frames_to_processed
+            try:
+                cli.ANIMATIONS_ROOT = animations_root
+
+                def fake_extract_frames(_ffmpeg, _video_path, raw_dir, _fps):
+                    raw_dir.mkdir(parents=True, exist_ok=True)
+                    for index in range(5):
+                        make_green_frame(raw_dir / f"frame_{index:03d}.png", (8, 8, 15, 15))
+
+                def fake_process_frames_to_processed(raw_dir, processed_dir, *args, **kwargs):
+                    processed_dir.mkdir(parents=True, exist_ok=True)
+                    for index in range(5):
+                        image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+                        pixels = image.load()
+                        for y in range(8, 16):
+                            for x in range(8, 16):
+                                pixels[x, y] = (60 + index * 30, 40, 30, 255)
+                        image.save(processed_dir / f"frame_{index:03d}.png")
+                    return sorted(processed_dir.glob("frame_*.png")), {"normalizationMode": "source-canvas"}
+
+                cli.extract_frames = fake_extract_frames
+                cli.process_frames_to_processed = fake_process_frames_to_processed
+                metadata = cli.process_action_core(
+                    action="test_walk",
+                    ffmpeg="ffmpeg",
+                    fps="1",
+                    video_path=video_path,
+                    source_frames=[1, 3, 4],
+                    source_frames_dedupe_threshold=0.0005,
+                    clean_raw=True,
+                )
+
+                self.assertEqual(metadata["loopSelection"], "manual-deduplicated")
+                self.assertEqual(metadata["sourceSampling"], "explicit-adjacent-deduplicated")
+                self.assertEqual(metadata["sourceLoopStart"], 1)
+                self.assertEqual(metadata["sourceLoopEnd"], 4)
+                self.assertEqual(metadata["sourceFrames"], [1, 3, 4])
+                self.assertEqual(metadata["droppedDuplicateFrames"], 1)
+                self.assertEqual(metadata["dedupeThreshold"], 0.0005)
+                self.assertGreater(metadata["score"], 0)
+                self.assertEqual(len(list((action_dir / "transparent_frames").glob("frame_*.png"))), 3)
+            finally:
+                cli.ANIMATIONS_ROOT = original_root
+                cli.extract_frames = original_extract
+                cli.process_frames_to_processed = original_process
 
 
 if __name__ == "__main__":
