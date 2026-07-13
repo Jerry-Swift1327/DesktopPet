@@ -97,29 +97,24 @@ test("pet2611 includes yawn with a frozen final sleep frame", () => {
   assert.deepEqual(manifestYawn, yawnLoop);
 });
 
-test("pet2611 walk uses a deduplicated manual loop segment", () => {
+test("pet2611 walk uses a complete deduplicated gait cycle", () => {
   const walkLoop = readLoop("pet2611_walk");
   const manifestWalk = manifest.find((item) => item.action === "pet2611_walk");
 
   assert.equal(walkLoop.frameMs, 41);
-  assert.equal(walkLoop.frameCount, 38);
-  assert.equal(countFrames("pet2611_walk"), 38);
+  assert.equal(walkLoop.frameCount, 64);
+  assert.equal(countFrames("pet2611_walk"), 64);
   assert.equal(walkLoop.loopStart, 0);
-  assert.equal(walkLoop.loopEnd, 37);
-  assert.equal(walkLoop.sourceLoopStart, 85);
-  assert.equal(walkLoop.sourceLoopEnd, 136);
+  assert.equal(walkLoop.loopEnd, 63);
+  assert.equal(walkLoop.sourceLoopStart, 44);
+  assert.equal(walkLoop.sourceLoopEnd, 132);
   assert.equal(walkLoop.loopSelection, "manual-deduplicated");
   assert.equal(walkLoop.sourceSampling, "explicit-adjacent-deduplicated");
-  assert.equal(walkLoop.droppedDuplicateFrames, 14);
+  assert.equal(walkLoop.droppedDuplicateFrames, 25);
   assert.equal(walkLoop.dedupeThreshold, 0.0005);
-  assert.equal(walkLoop.detachedArtifactMode, "processed-subject-components");
-  assert.equal(walkLoop.detachedArtifactMaxArea, 384);
-  assert.equal(walkLoop.detachedArtifacts.applied, true);
-  assert.equal(walkLoop.detachedArtifacts.keptComponents, 0);
-  assert.equal(walkLoop.detachedArtifacts.warningCount, 0);
-  assert.equal(walkLoop.sourceFrames.length, 38);
-  assert.deepEqual(walkLoop.sourceFrames.slice(0, 5), [85, 86, 88, 89, 90]);
-  assert.deepEqual(walkLoop.sourceFrames.slice(-5), [131, 132, 133, 135, 136]);
+  assert.equal(walkLoop.sourceFrames.length, 64);
+  assert.deepEqual(walkLoop.sourceFrames.slice(0, 5), [44, 46, 47, 49, 50]);
+  assert.deepEqual(walkLoop.sourceFrames.slice(-5), [126, 128, 129, 131, 132]);
   assert.equal(new Set(walkLoop.sourceFrames).size, walkLoop.sourceFrames.length);
   assert.deepEqual(detachedComponentsAboveSubject("pet2611_walk"), []);
   assert.deepEqual(manifestWalk, walkLoop);
