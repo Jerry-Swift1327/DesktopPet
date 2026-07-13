@@ -414,14 +414,15 @@ test("window surface polling waits while dock settlement is in progress", () => 
     dockInProgress = false;
     pollCallback();
     assert.equal(currentSurface.type, "taskbar");
-    assert.equal(calls.some((call) => call.type === "setPosition"), true);
+    assert.equal(calls.some((call) => call.type === "setPosition"), false);
+    assert.equal(calls.some((call) => call.type === "refreshWalk"), true);
   } finally {
     global.setInterval = originalSetInterval;
     global.clearInterval = originalClearInterval;
   }
 });
 
-test("window fallback to taskbar sets the final position directly", () => {
+test("window fallback to taskbar rebuilds the walk runway without moving the native window", () => {
   let currentSurface = createSurface("window-a", { left: 300, right: 700, groundY: 520 });
   let petBounds = { x: 410, y: 380, width: 120, height: 120 };
   const taskbarSurface = { type: "taskbar", left: 0, right: 1200, groundY: 900 };
@@ -509,10 +510,10 @@ test("window fallback to taskbar sets the final position directly", () => {
 
   controller.fallbackCurrentSurfaceToTaskbar("test-window-invalid");
 
-  assert.equal(calls.some((call) => call.type === "setPosition"), true);
+  assert.equal(calls.some((call) => call.type === "setPosition"), false);
   assert.equal(calls.some((call) => call.type === "transition" || call.type === "animate"), false);
   assert.equal(calls.some((call) => call.type === "refreshWalk"), true);
-  assert.equal(petBounds.y + 24 + 82, taskbarSurface.groundY);
+  assert.deepEqual(petBounds, { x: 410, y: 380, width: 120, height: 120 });
 });
 
 test("drag release onto a window surface sets position directly", () => {

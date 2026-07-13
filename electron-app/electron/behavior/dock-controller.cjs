@@ -22,6 +22,8 @@ function createDockController(context) {
     clampPetWindowPositionToSurface,
     setPetWindowPosition,
     syncWalkTrackX,
+    getWalkVisibleCenterFromWindowX,
+    ensureTaskbarWalkRunwayForCenter,
     isWalkingState,
     refreshWalkLoopAfterSurfaceChange,
     clearDragState,
@@ -105,8 +107,16 @@ function createDockController(context) {
       setWindowDockHoverSuppressedUntil(Date.now() + WINDOW_DOCK_DRAG_HOVER_SUPPRESS_MS);
       const snappedBounds = getPetWindow().getBounds();
       const target = clampPetWindowPositionToSurface(draggedX, snappedBounds.y, nextSurface, activeState, walkDirection);
-      setPetWindowPosition(target.x, target.y);
-      syncWalkTrackX(target.x);
+      if (isWalkingState()) {
+        const centerX = getWalkVisibleCenterFromWindowX(target.x, target.y, activeState, walkDirection);
+        ensureTaskbarWalkRunwayForCenter(centerX, target.y, walkDirection, nextSurface, {
+          force: true,
+          reason: "dock-after-drag"
+        });
+      } else {
+        setPetWindowPosition(target.x, target.y);
+        syncWalkTrackX(target.x);
+      }
       setLastWindowSurfaceHeavyCheckAt(Date.now());
     }
     if (isWalkingState()) {
@@ -230,6 +240,14 @@ function createDockController(context) {
     const previousCenterX = previousVisibleRect.x + Math.round(previousVisibleRect.width / 2);
     const fallback = resetToTaskbarSurface(previousBounds);
     applySurfaceScale(fallback, getActiveState(), getWalkDirection());
+    if (isWalkingState()) {
+      refreshWalkLoopAfterSurfaceChange();
+      if (WINDOW_DOCK_DEBUG) {
+        log(`${reason} -> fallback taskbar runway center=${previousCenterX} state=${getActiveState()}`);
+      }
+      setWindowSurfaceMissingTicks(0);
+      return;
+    }
     const groundedY = getGroundedWindowYForSurface(fallback, getActiveState(), getWalkDirection());
     const nextBounds = getPetWindow().getBounds();
     const nextVisibleInsets = getVisibleSpriteInsets(getActiveState(), getWalkDirection());
@@ -239,9 +257,6 @@ function createDockController(context) {
     const next = clampPetWindowPositionToSurface(target.x, groundedY, fallback, getActiveState(), getWalkDirection());
     setPetWindowPosition(next.x, next.y);
     syncWalkTrackX(next.x);
-    if (isWalkingState()) {
-      refreshWalkLoopAfterSurfaceChange();
-    }
     if (WINDOW_DOCK_DEBUG) {
       log(`${reason} -> fallback taskbar target=${next.x},${next.y} state=${getActiveState()}`);
     }

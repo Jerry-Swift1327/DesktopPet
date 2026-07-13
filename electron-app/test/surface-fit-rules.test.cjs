@@ -37,7 +37,7 @@ test("surface-fit-rules 不引用 nativeImage/窗口/screen/IPC/bubble/运行态
   assert.doesNotMatch(sourceCode, /\bscreen\b/);
 });
 
-test("surface-fit-rules 导出 13 个函数", () => {
+test("surface-fit-rules 导出 14 个函数", () => {
   const expected = [
     "getSurfaceVisibleTopFromGroundY",
     "getGroundedWindowYFromSurface",
@@ -48,6 +48,7 @@ test("surface-fit-rules 导出 13 个函数", () => {
     "getVisibleRectFromSpriteLeft",
     "getTaskbarWalkCenterLimits",
     "getWindowSurfaceWalkCenterLimits",
+    "getWindowSurfaceWalkRunwayBounds",
     "getSafeWindowXForDirection",
     "validateWindowSurfaceBounds",
     "stabilizeWindowSurfaceGeometry",
@@ -56,7 +57,21 @@ test("surface-fit-rules 导出 13 个函数", () => {
   for (const fn of expected) {
     assert.equal(typeof surfaceFit[fn], "function", `应导出 ${fn}`);
   }
-  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 13");
+  assert.equal(Object.keys(surfaceFit).length, expected.length, "导出数量应为 14");
+});
+
+test("getWindowSurfaceWalkRunwayBounds 为目标窗口两侧保留一个 sprite 宽度", () => {
+  assert.deepEqual(
+    surfaceFit.getWindowSurfaceWalkRunwayBounds(300, 900, 141, 198),
+    { x: 159, width: 882 }
+  );
+});
+
+test("getWindowSurfaceWalkRunwayBounds 不小于标准宠物窗口宽度", () => {
+  assert.deepEqual(
+    surfaceFit.getWindowSurfaceWalkRunwayBounds(300, 320, 64, 180),
+    { x: 236, width: 180 }
+  );
 });
 
 // getSurfaceVisibleTopFromGroundY

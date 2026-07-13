@@ -485,11 +485,14 @@ const surfaceScaleController = createSurfaceScaleController({
   getGroundedWindowYForSurface,
   clampPetWindowPositionToSurface,
   getTaskbarWalkCenterLimits,
+  getWalkRunwayCenterLimits,
   ensureTaskbarWalkRunwayForCenter,
   isTaskbarWalkActive,
+  isWalkRunwayActive,
   clearPetWindowHitRegion,
   getWalkVisibleCenterFromWindowX,
   getTaskbarWalkRunwayWindowWidth,
+  getWalkRunwayWindowWidth,
   setPetWindowPosition,
   syncWalkTrackX,
   updatePetWindowMousePassthrough,
@@ -570,7 +573,7 @@ const overlayGeometry = createOverlayGeometry({
   getStateHeadBounds,
   getState,
   getTaskbarWalkOverlayPetRect,
-  isTaskbarWalkActive,
+  isTaskbarWalkActive: isWalkRunwayActive,
   // 纯工具函数（来自 shared/bounds.cjs）
   expandRect,
   clamp,
@@ -667,7 +670,7 @@ const bubbleController = createBubbleController({
   // 行走和任务栏
   isWalkingState,
   getTaskbarWalkRunway: () => taskbarWalkRunway,
-  isTaskbarWalkActive,
+  isTaskbarWalkActive: isWalkRunwayActive,
   getTaskbarWalkOverlayPetRect,
   // 宠物可视区域
   getCurrentPetVisualRect,
@@ -739,7 +742,7 @@ const customizationController = createCustomizationController({
   getVisiblePetRect,
   getWindowRect,
   // 任务栏行走
-  isTaskbarWalkActive,
+  isTaskbarWalkActive: isWalkRunwayActive,
   getTaskbarWalkOverlayPetRect,
   getTaskbarWalkRunway: () => taskbarWalkRunway,
   // 共享几何（从 overlay-geometry 注入）
@@ -909,7 +912,7 @@ const hoverController = createHoverController({
   getState,
   getRenderedFrameVisibleRect,
   // 任务栏行走
-  isTaskbarWalkActive,
+  isTaskbarWalkActive: isWalkRunwayActive,
   getTaskbarWalkOverlayPetRect,
   getTaskbarWalkRunway: () => taskbarWalkRunway,
   // 光标检测
@@ -1114,6 +1117,8 @@ const windowRoamController = createWindowRoamController({
   clampPetWindowPositionToSurface,
   setPetWindowPosition,
   syncWalkTrackX,
+  getWalkVisibleCenterFromWindowX,
+  ensureTaskbarWalkRunwayForCenter,
   isWalkingState,
   refreshWalkLoopAfterSurfaceChange,
   safeSend,
@@ -1168,7 +1173,7 @@ const walkController = createWalkController({
   showStatMessages,
   syncWalkTrackX,
   getWalkVisibleCenterFromWindowX,
-  getTaskbarWalkCenterLimits,
+  getWalkRunwayCenterLimits,
   clamp,
   setWalkDirection,
   setTaskbarWalkRunwayForEdge,
@@ -1242,6 +1247,8 @@ const dockController = createDockController({
   clampPetWindowPositionToSurface,
   setPetWindowPosition,
   syncWalkTrackX,
+  getWalkVisibleCenterFromWindowX,
+  ensureTaskbarWalkRunwayForCenter,
   isWalkingState,
   refreshWalkLoopAfterSurfaceChange,
   clearDragState,
@@ -1746,6 +1753,26 @@ function isTaskbarWalkActive(surface = getCurrentSurface()) {
   return activeState === STATE_WALK && surface?.type !== "window";
 }
 
+function getWalkRunwaySurfaceType(surface = getCurrentSurface()) {
+  return surface?.type === "window" ? "window" : "taskbar";
+}
+
+function getWalkRunwaySurfaceSignature(surface = getCurrentSurface()) {
+  return [
+    getWalkRunwaySurfaceType(surface),
+    surface?.displayId ?? "",
+    surface?.left ?? "",
+    surface?.right ?? "",
+    surface?.groundY ?? ""
+  ].join(":");
+}
+
+function isWalkRunwayActive(surface = getCurrentSurface()) {
+  return activeState === STATE_WALK
+    && Boolean(taskbarWalkRunway)
+    && taskbarWalkRunway.surfaceSignature === getWalkRunwaySurfaceSignature(surface);
+}
+
 function getSurfaceDisplay(surface = currentSurface) {
   return screenMetricsController.getSurfaceDisplay(surface);
 }
@@ -1881,7 +1908,7 @@ function getRenderedFrameBottomAnchor(bounds = getPetWindowBoundsSafe(), stateId
 }
 
 function getTransitionBottomAnchor(stateId = activeState, direction = walkDirection) {
-  const visibleRect = taskbarWalkRunway && isTaskbarWalkActive()
+  const visibleRect = isWalkRunwayActive()
     ? getRenderedFrameVisibleRect()
     : null;
   if (visibleRect) {
@@ -2411,7 +2438,7 @@ function getRenderedFrameVisibleRect() {
     ? renderedFrameDirection
     : walkDirection;
   const frameIndex = renderedFrameState === activeState ? renderedFrameIndex : 0;
-  if (taskbarWalkRunway && isTaskbarWalkActive()) {
+  if (isWalkRunwayActive()) {
     const spriteLeft = getTaskbarRunwaySpriteLeftForRect(stateId, direction);
     if (Number.isFinite(spriteLeft)) {
       return getFrameVisibleRectFromBounds({
@@ -2486,7 +2513,7 @@ function getCurrentPetVisualRect(stateId = activeState, direction = walkDirectio
   if (!getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
-  return taskbarWalkRunway && isTaskbarWalkActive()
+  return isWalkRunwayActive()
     ? getTaskbarRunwayVisualRect(stateId, direction)
     : getVisiblePetRectFromBounds(getPetWindow().getBounds(), stateId, direction);
 }
@@ -2503,7 +2530,7 @@ function getSpriteRectFromBounds(bounds) {
   return frameGeometry.getSpriteRectFromBounds(bounds, {
     spriteSize: getPetSpriteSize(),
     runwayInfo: taskbarWalkRunway,
-    isTaskbarWalkActive: isTaskbarWalkActive(),
+    isTaskbarWalkActive: isWalkRunwayActive(),
     getSpriteLocalXForWindowWidth
   });
 }
@@ -2610,7 +2637,7 @@ function markResolvedOverlayPetRect(rect) {
 }
 
 function getTaskbarWalkOverlayPetRect() {
-  if (!taskbarWalkRunway || !isTaskbarWalkActive()) {
+  if (!isWalkRunwayActive()) {
     return null;
   }
   return markResolvedOverlayPetRect(
@@ -2725,7 +2752,7 @@ function isPointInsideRenderedFrame(point, frameInfo = null) {
     return false;
   }
 
-  const spriteLeft = taskbarWalkRunway && isTaskbarWalkActive()
+  const spriteLeft = isWalkRunwayActive()
     ? getTaskbarRunwaySpriteLeftForRect(safeFrameInfo.stateId, safeFrameInfo.direction)
     : null;
   const spriteRect = Number.isFinite(spriteLeft)
@@ -2905,7 +2932,7 @@ function isCursorInsideSpriteRect() {
 }
 
 function isCursorInsideHoverIntentTarget() {
-  if (isTaskbarWalkActive()) {
+  if (isWalkRunwayActive()) {
     return isPointInsideRect(screen.getCursorScreenPoint(), getCurrentPetVisualRect());
   }
   return isCursorInsidePetVisibleRect();
@@ -3107,21 +3134,18 @@ function alignWalkLoopToSurface(fallbackDirection = -1) {
   const bounds = getPetWindow().getBounds();
   const groundedY = getGroundedWindowYForSurface(getCurrentSurface(), activeState, walkDirection);
   const activeSurface = getCurrentSurface();
-  if (isTaskbarWalkActive(activeSurface)) {
+  if (isWalkRunwayActive(activeSurface)) {
     const centerX = Number.isFinite(visualCenterX)
       ? visualCenterX
       : (taskbarWalkRunway?.centerX
         ?? walkTrackX
         ?? getWalkVisibleCenterFromWindowX(bounds.x, groundedY, activeState, walkDirection));
-    const centerLimits = getTaskbarWalkCenterLimits(activeSurface, activeState);
+    const centerLimits = getWalkRunwayCenterLimits(activeSurface, activeState);
     const safeCenterX = clamp(centerX, centerLimits.left, centerLimits.right);
-    setTaskbarWalkWindowPositionForCenter(safeCenterX, groundedY, walkDirection);
-  } else if (activeSurface?.type === "window") {
-    const centerX = Number.isFinite(visualCenterX)
-      ? visualCenterX
-      : getWalkVisibleCenterFromWindowX(bounds.x, groundedY, activeState, walkDirection);
-    const targetX = getWindowXForVisibleCenter(centerX, activeState, walkDirection);
-    setWalkWindowPosition(targetX, groundedY, activeSurface, walkDirection);
+    ensureTaskbarWalkRunwayForCenter(safeCenterX, groundedY, walkDirection, activeSurface, {
+      force: true,
+      reason: "align"
+    });
   } else {
     const safeX = getSafeWindowXForDirection(bounds.x, activeSurface, activeState, walkDirection);
     setWalkWindowPosition(safeX, groundedY, activeSurface, walkDirection);
@@ -3224,18 +3248,50 @@ function getWindowWalkCenterLimits(surface = getCurrentSurface(), stateId = acti
   return surfaceFitRules.getWindowSurfaceWalkCenterLimits(limits, spriteSize, leftInsets, rightInsets);
 }
 
+function getWalkRunwayCenterLimits(surface = getCurrentSurface(), stateId = activeState) {
+  return surface?.type === "window"
+    ? getWindowWalkCenterLimits(surface, stateId)
+    : getTaskbarWalkCenterLimits(surface, stateId);
+}
+
+function getWalkRunwayWindowWidth(surface = getCurrentSurface()) {
+  if (surface?.type !== "window") {
+    return getTaskbarWalkRunwayWindowWidth(surface);
+  }
+  return surfaceFitRules.getWindowSurfaceWalkRunwayBounds(
+    surface.left,
+    surface.right,
+    getPetSpriteSize(),
+    getPetWindowWidth()
+  ).width;
+}
+
+function getWalkRunwayWindowX(surface = getCurrentSurface()) {
+  if (surface?.type !== "window") {
+    const area = getSurfaceWorkArea(surface);
+    return Math.round(area.x - getTaskbarWalkRunwayScreenBuffer());
+  }
+  return surfaceFitRules.getWindowSurfaceWalkRunwayBounds(
+    surface.left,
+    surface.right,
+    getPetSpriteSize(),
+    getPetWindowWidth()
+  ).x;
+}
+
 function buildTaskbarRunwayLayout(centerX, y, direction = walkDirection, surface = getCurrentSurface()) {
-  const windowWidth = getTaskbarWalkRunwayWindowWidth(surface);
+  const windowWidth = getWalkRunwayWindowWidth(surface);
   const windowHeight = getPetWindowHeight();
   const padding = getTaskbarWalkRunwayPadding();
   const recenterPadding = Math.max(1, Math.round(padding * TASKBAR_WALK_RUNWAY_RECENTER_RATIO));
-  const centerLimits = getTaskbarWalkCenterLimits(surface, activeState);
+  const centerLimits = getWalkRunwayCenterLimits(surface, activeState);
   const safeCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
   const spriteLeft = getSpriteLeftForVisibleCenter(safeCenterX, activeState, direction);
-  const area = getSurfaceWorkArea(surface);
-  const windowX = Math.round(area.x - getTaskbarWalkRunwayScreenBuffer());
+  const windowX = getWalkRunwayWindowX(surface);
   const spriteOffsetX = Math.round(spriteLeft - windowX);
   return {
+    surfaceType: getWalkRunwaySurfaceType(surface),
+    surfaceSignature: getWalkRunwaySurfaceSignature(surface),
     windowX,
     windowY: Math.round(y),
     windowWidth,
@@ -3254,6 +3310,8 @@ function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
   }
   const bounds = getPetWindow().getBounds();
   const nextRunway = {
+    surfaceType: layout.surfaceType,
+    surfaceSignature: layout.surfaceSignature,
     windowX: Math.round(layout.windowX),
     windowY: Math.round(layout.windowY),
     windowWidth: Math.round(layout.windowWidth),
@@ -3270,8 +3328,7 @@ function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
   };
   taskbarWalkRunway = nextRunway;
   walkTrackX = nextRunway.centerX;
-  const boundsChanged = force
-    || bounds.x !== nextRunway.windowX
+  const boundsChanged = bounds.x !== nextRunway.windowX
     || bounds.y !== nextRunway.windowY
     || bounds.width !== nextRunway.windowWidth
     || bounds.height !== nextRunway.windowHeight;
@@ -3349,7 +3406,7 @@ function clearPetWindowHitRegion() {
 }
 
 function getTaskbarWalkHitRect() {
-  if (!taskbarWalkRunway || !isTaskbarWalkActive() || !getPetWindow() || getPetWindow().isDestroyed()) {
+  if (!isWalkRunwayActive() || !getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
   }
   const visualRect = getTaskbarRunwayVisualRect(activeState, walkDirection);
@@ -3409,7 +3466,7 @@ function applyPetWindowHitRegion(rect) {
 
 function updatePetWindowMousePassthrough() {
   setPetWindowMousePassthrough(false);
-  if (!taskbarWalkRunway || !isTaskbarWalkActive() || dragController.getDragState()) {
+  if (!isWalkRunwayActive() || dragController.getDragState()) {
     clearPetWindowHitRegion();
     return;
   }
@@ -3474,11 +3531,11 @@ function materializeTaskbarWalkRunwayForState(stateId, direction = getDefaultDir
 }
 
 function restoreTaskbarRunwayFromPoint(point, direction = walkDirection, surface = getCurrentSurface()) {
-  if (!point || !isTaskbarWalkActive(surface) || !getPetWindow() || getPetWindow().isDestroyed()) {
+  if (!point || !isWalkingState() || !getPetWindow() || getPetWindow().isDestroyed()) {
     return false;
   }
   const groundedY = getGroundedWindowYForSurface(surface, activeState, direction);
-  const centerLimits = getTaskbarWalkCenterLimits(surface, activeState);
+  const centerLimits = getWalkRunwayCenterLimits(surface, activeState);
   const centerX = clamp(Math.round(point.x), centerLimits.left, centerLimits.right);
   ensureTaskbarWalkRunwayForCenter(centerX, groundedY, direction, surface, {
     force: true,
@@ -3490,7 +3547,7 @@ function restoreTaskbarRunwayFromPoint(point, direction = walkDirection, surface
 
 function ensureTaskbarWalkRunwayForCenter(centerX, y, direction = walkDirection, surface = getCurrentSurface(), { force = false, reason = "ensure" } = {}) {
   const nextDirection = direction >= 0 ? 1 : -1;
-  const centerLimits = getTaskbarWalkCenterLimits(surface, activeState);
+  const centerLimits = getWalkRunwayCenterLimits(surface, activeState);
   const nextCenterX = clamp(Math.round(centerX), centerLimits.left, centerLimits.right);
   const visibleInsets = getVisibleSpriteInsets(activeState, nextDirection);
   const visibleWidth = Math.max(1, getPetSpriteSize() - visibleInsets.left - visibleInsets.right);
@@ -3498,7 +3555,8 @@ function ensureTaskbarWalkRunwayForCenter(centerX, y, direction = walkDirection,
   const current = taskbarWalkRunway;
   const needsRecenter = force
     || !current
-    || current.windowWidth !== getTaskbarWalkRunwayWindowWidth(surface)
+    || current.surfaceSignature !== getWalkRunwaySurfaceSignature(surface)
+    || current.windowWidth !== getWalkRunwayWindowWidth(surface)
     || current.windowHeight !== getPetWindowHeight()
     || Math.round(nextY) !== current.windowY;
   if (needsRecenter) {
@@ -3554,9 +3612,9 @@ function syncWalkTrackX(x = null) {
     : surface?.type === "window" && isWalkingState() && Number.isFinite(walkTrackX)
       ? walkTrackX
       : bounds.x;
-  if (isTaskbarWalkActive(surface)) {
+  if (isWalkRunwayActive(surface)) {
     const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
-    const centerLimits = getTaskbarWalkCenterLimits(surface, activeState);
+    const centerLimits = getWalkRunwayCenterLimits(surface, activeState);
     const centerX = Number.isFinite(x)
       ? getWalkVisibleCenterFromWindowX(sourceX, groundedY, activeState, walkDirection)
       : taskbarWalkRunway

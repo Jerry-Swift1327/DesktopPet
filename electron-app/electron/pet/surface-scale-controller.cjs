@@ -27,11 +27,14 @@ function createSurfaceScaleController(context) {
     getGroundedWindowYForSurface,
     clampPetWindowPositionToSurface,
     getTaskbarWalkCenterLimits,
+    getWalkRunwayCenterLimits = getTaskbarWalkCenterLimits,
     ensureTaskbarWalkRunwayForCenter,
     isTaskbarWalkActive,
+    isWalkRunwayActive = isTaskbarWalkActive,
     clearPetWindowHitRegion,
     getWalkVisibleCenterFromWindowX,
     getTaskbarWalkRunwayWindowWidth,
+    getWalkRunwayWindowWidth = getTaskbarWalkRunwayWindowWidth,
     setPetWindowPosition,
     syncWalkTrackX,
     updatePetWindowMousePassthrough,
@@ -137,8 +140,8 @@ function createSurfaceScaleController(context) {
       return true;
     }
     const bounds = win.getBounds();
-    const taskbarWalkActive = isTaskbarWalkActive(surface);
-    if (!changed && !taskbarWalkActive) {
+    const walkRunwayRequested = isWalkingState();
+    if (!changed && !walkRunwayRequested) {
       const wasRunwayActive = Boolean(getTaskbarWalkRunway());
       const needsResize = bounds.width !== getPetWindowWidth() || bounds.height !== getPetWindowHeight();
       setTaskbarWalkRunway(null);
@@ -183,7 +186,7 @@ function createSurfaceScaleController(context) {
       }
       return true;
     }
-    const taskbarCenterAnchor = taskbarWalkActive
+    const runwayCenterAnchor = walkRunwayRequested
       ? (getTaskbarWalkRunway()?.centerX
         ?? getWalkTrackX()
         ?? getWalkVisibleCenterFromWindowX(
@@ -194,18 +197,19 @@ function createSurfaceScaleController(context) {
         ))
       : null;
     petScale = clampPetScale(nextScale);
-    if (taskbarWalkActive) {
+    if (walkRunwayRequested) {
       const runway = getTaskbarWalkRunway();
       const needsRunwayRefresh = !runway
-        || runway.windowWidth !== getTaskbarWalkRunwayWindowWidth(surface)
+        || !isWalkRunwayActive(surface)
+        || runway.windowWidth !== getWalkRunwayWindowWidth(surface)
         || runway.windowHeight !== getPetWindowHeight();
       if (!changed && !needsRunwayRefresh) {
         return true;
       }
       const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
-      const centerLimits = getTaskbarWalkCenterLimits(surface, stateId);
+      const centerLimits = getWalkRunwayCenterLimits(surface, stateId);
       ensureTaskbarWalkRunwayForCenter(
-        clamp(Math.round(taskbarCenterAnchor), centerLimits.left, centerLimits.right),
+        clamp(Math.round(runwayCenterAnchor), centerLimits.left, centerLimits.right),
         groundedY,
         direction,
         surface,
@@ -263,8 +267,8 @@ function createSurfaceScaleController(context) {
     }
     setCurrentSurface(activeSurface);
     const groundedY = getGroundedWindowYForSurface(activeSurface, stateId, direction);
-    if (isTaskbarWalkActive(activeSurface)) {
-      const centerLimits = getTaskbarWalkCenterLimits(activeSurface, stateId);
+    if (isWalkingState()) {
+      const centerLimits = getWalkRunwayCenterLimits(activeSurface, stateId);
       const centerX = clamp(
         getTaskbarWalkRunway()?.centerX
           ?? getWalkTrackX()
@@ -335,7 +339,7 @@ function createSurfaceScaleController(context) {
 
   function buildScaleSummary() {
     const runway = getTaskbarWalkRunway();
-    const runwayActive = Boolean(runway && isTaskbarWalkActive());
+    const runwayActive = Boolean(runway && isWalkRunwayActive());
     const windowWidth = runwayActive ? runway.windowWidth : getPetWindowWidth();
     const spriteOffsetX = runwayActive
       ? runway.spriteOffsetX
@@ -384,7 +388,7 @@ function createSurfaceScaleController(context) {
 
     const bounds = win.getBounds();
     const walkScaleAnchor = getWalkTrackAnchorForScale(bounds, surface);
-    if (isWalkingState() && isTaskbarWalkActive(surface)) {
+    if (isWalkingState()) {
       petScale = clampedScale;
       const surfaceAfterScale = getCurrentSurface();
       if (!restoreWalkTrackAnchorAfterScale(walkScaleAnchor, surfaceAfterScale)) {
@@ -454,10 +458,10 @@ function createSurfaceScaleController(context) {
     if (!bounds || !isWalkingState()) {
       return null;
     }
-    if (isTaskbarWalkActive(surface)) {
+    if (isWalkRunwayActive(surface)) {
       const groundedY = getGroundedWindowYForSurface(surface, getActiveState(), getWalkDirection());
       return {
-        type: "taskbar-center",
+        type: "runway-center",
         value: getTaskbarWalkRunway()?.centerX
           ?? getWalkTrackX()
           ?? getWalkVisibleCenterFromWindowX(bounds.x, groundedY, getActiveState(), getWalkDirection())
@@ -503,8 +507,8 @@ function createSurfaceScaleController(context) {
       return false;
     }
     const groundedY = getGroundedWindowYForSurface(surface, getActiveState(), getWalkDirection());
-    if (anchor.type === "taskbar-center" && isTaskbarWalkActive(surface)) {
-      const centerLimits = getTaskbarWalkCenterLimits(surface, getActiveState());
+    if (anchor.type === "runway-center") {
+      const centerLimits = getWalkRunwayCenterLimits(surface, getActiveState());
       const centerX = clamp(Math.round(anchor.value), centerLimits.left, centerLimits.right);
       setTaskbarWalkWindowPositionForCenter(centerX, groundedY, getWalkDirection());
       return true;

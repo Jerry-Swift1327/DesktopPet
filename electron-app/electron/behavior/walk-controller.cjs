@@ -32,6 +32,7 @@ function createWalkController(context) {
     syncWalkTrackX,
     getWalkVisibleCenterFromWindowX,
     getTaskbarWalkCenterLimits,
+    getWalkRunwayCenterLimits = getTaskbarWalkCenterLimits,
     clamp,
     setWalkDirection,
     setTaskbarWalkRunwayForEdge,
@@ -43,10 +44,6 @@ function createWalkController(context) {
     applySurfaceScale,
     resetToTaskbarSurface,
     getGroundedWindowYForSurface,
-    getWalkVisibleRectFromWindowX,
-    getWindowXForVisibleEdge,
-    getSafeWindowXForDirection,
-    setWalkWindowPosition,
     // 外部状态访问器（读取 main.cjs 实时状态）
     getPetWindow,
     getActiveState,
@@ -85,9 +82,7 @@ function createWalkController(context) {
     DEFAULT_STATE,
     WALK_STEP,
     WALK_EDGE_STUCK_STEPS_TO_FORCE_MIRROR,
-    WALK_SCALE_APPLY_THROTTLE_MS,
-    WALK_MIRROR_HYSTERESIS_PX,
-    WALK_MIRROR_COOLDOWN_STEPS
+    WALK_SCALE_APPLY_THROTTLE_MS
   } = context;
 
   function scheduleWalkLoopTimeout() {
@@ -141,6 +136,7 @@ function createWalkController(context) {
       startWalkLoop();
       return;
     }
+    materializeTaskbarWalkRunwayForState(getActiveState(), getWalkDirection(), { notifyScale: false });
     resetWalkRuntime({ keepLoop: true });
     alignWalkLoopToSurface(getWalkDirection());
     if (isInteractionPaused()) {
@@ -199,7 +195,7 @@ function createWalkController(context) {
     const previousCenterX = getWalkTrackX() ?? getWalkVisibleCenterFromWindowX(bounds.x, groundedY, getActiveState(), getWalkDirection());
     let nextDirection = getWalkDirection() >= 0 ? 1 : -1;
     const visibleLimits = getWalkVisibleLimits(activeSurface);
-    const centerLimits = getTaskbarWalkCenterLimits(activeSurface, getActiveState());
+    const centerLimits = getWalkRunwayCenterLimits(activeSurface, getActiveState());
     let nextCenterX = previousCenterX + nextDirection * WALK_STEP;
     let mirroredThisStep = false;
     let edgeFlipReason = "";
@@ -293,13 +289,6 @@ function createWalkController(context) {
     return result;
   }
 
-  function clampWindowWalkStepDistance(x, previousX) {
-    const nextX = Math.round(x);
-    const previous = Math.round(previousX);
-    const maxStep = Math.max(1, Math.round(Math.abs(WALK_STEP)));
-    return clamp(nextX, previous - maxStep, previous + maxStep);
-  }
-
   function advanceWalkStep(frameStep = 0, elapsedMs = 0) {
     const stepStartedAt = Date.now();
     if (!getPetWindow() || getPetWindow().isDestroyed() || !isWalkingState()) {
@@ -364,88 +353,13 @@ function createWalkController(context) {
     // window surface 的 groundY 不依赖可见区间（无 darwinBottomDock），用 state 级 stable bottom
     // 计算 groundedY 可避免逐帧 bottom 抖动。
     const groundedY = getGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection());
-    if (activeSurface?.type !== "window") {
-      return advanceTaskbarWalkStep({
-        frameStep,
-        stepStartedAt,
-        activeSurface,
-        groundedY,
-        bounds
-      });
-    }
-    if (getWalkTrackX() === null) {
-      syncWalkTrackX(bounds.x);
-    }
-
-    const previousX = getWalkTrackX() ?? bounds.x;
-    let nextDirection = getWalkDirection() >= 0 ? 1 : -1;
-    let nextX = previousX + nextDirection * WALK_STEP;
-    const limits = getWalkVisibleLimits(activeSurface);
-    const nextVisibleRect = getWalkVisibleRectFromWindowX(nextX, groundedY, getActiveState(), nextDirection);
-    const leftMirrorThreshold = limits.left + WALK_MIRROR_HYSTERESIS_PX;
-    const rightMirrorThreshold = limits.right - WALK_MIRROR_HYSTERESIS_PX;
-    const cooldownActive = getWalkMirrorCooldownSteps() > 0;
-    let mirroredThisStep = false;
-    let edgeFlipReason = "";
-
-    if (!cooldownActive && nextDirection < 0 && nextVisibleRect.x <= leftMirrorThreshold) {
-      nextDirection = 1;
-      nextX = getWindowXForVisibleEdge("left", limits.left, getActiveState(), nextDirection);
-      mirroredThisStep = true;
-      edgeFlipReason = "left-threshold";
-    } else if (!cooldownActive && nextDirection > 0 && nextVisibleRect.x + nextVisibleRect.width >= rightMirrorThreshold) {
-      nextDirection = -1;
-      nextX = getWindowXForVisibleEdge("right", limits.right, getActiveState(), nextDirection);
-      mirroredThisStep = true;
-      edgeFlipReason = "right-threshold";
-    }
-
-    if (cooldownActive && !mirroredThisStep) {
-      setWalkMirrorCooldownSteps(getWalkMirrorCooldownSteps() - 1);
-    }
-
-    const safeNextX = getSafeWindowXForDirection(nextX, activeSurface, getActiveState(), nextDirection);
-    nextX = clampWindowWalkStepDistance(safeNextX, previousX);
-    const shouldClampToSurface = nextX === Math.round(safeNextX);
-    if (!mirroredThisStep && nextDirection < 0) {
-      nextX = Math.min(previousX, nextX);
-    } else if (!mirroredThisStep && nextDirection > 0) {
-      nextX = Math.max(previousX, nextX);
-    }
-
-    setWalkDirection(nextDirection);
-    const actualX = setWalkWindowPosition(nextX, groundedY, activeSurface, getWalkDirection(), {
-      clampToSurface: shouldClampToSurface
+    return advanceTaskbarWalkStep({
+      frameStep,
+      stepStartedAt,
+      activeSurface,
+      groundedY,
+      bounds
     });
-    if (actualX === previousX) {
-      setStalledWalkSteps(getStalledWalkSteps() + 1);
-    } else {
-      setStalledWalkSteps(0);
-    }
-
-    if (getStalledWalkSteps() >= 8) {
-      syncWalkTrackX(actualX);
-      setStalledWalkSteps(0);
-    }
-
-    if (mirroredThisStep) {
-      setWalkMirrorCooldownSteps(WALK_MIRROR_COOLDOWN_STEPS);
-      setWalkLeftEdgeStuckSteps(0);
-      setWalkRightEdgeStuckSteps(0);
-    }
-
-    const result = {
-      state: getActiveState(),
-      moving: true,
-      direction: getWalkDirection(),
-      x: actualX,
-      y: Math.round(groundedY),
-      frameStep: Number.isFinite(frameStep) ? Math.round(frameStep) : 0,
-      moved: actualX !== previousX,
-      scale: buildScaleSummary()
-    };
-    logWalkStepDiagnostic(stepStartedAt, result, edgeFlipReason ? `edgeFlip=${edgeFlipReason} previousX=${previousX} actualX=${actualX}` : `previousX=${previousX} actualX=${actualX}`);
-    return result;
   }
 
   return {

@@ -24,6 +24,8 @@ function createWindowRoamController(context) {
     clampPetWindowPositionToSurface,
     setPetWindowPosition,
     syncWalkTrackX,
+    getWalkVisibleCenterFromWindowX,
+    ensureTaskbarWalkRunwayForCenter,
     isWalkingState,
     refreshWalkLoopAfterSurfaceChange,
     safeSend,
@@ -161,11 +163,14 @@ function createWindowRoamController(context) {
     }
     const activeState = getActiveState();
     const walkDirection = getWalkDirection();
-    if (!surface || !applySurfaceScale(surface, activeState, walkDirection)) {
+    if (!surface) {
       return false;
     }
 
     const nextSurface = setCurrentSurface(surface);
+    if (!applySurfaceScale(nextSurface, activeState, walkDirection)) {
+      return false;
+    }
     const visibleInsets = getVisibleSpriteInsets(activeState, walkDirection);
     const visibleWidth = getPetSpriteSize() - visibleInsets.left - visibleInsets.right;
     const visibleLeft = nextSurface.right - visibleWidth;
@@ -177,10 +182,15 @@ function createWindowRoamController(context) {
     );
     const next = clampPetWindowPositionToSurface(target.x, target.y, nextSurface, activeState, walkDirection);
     if (isWalkingState()) {
-      groundPetToSurface(activeState, walkDirection, nextSurface);
+      const centerX = getWalkVisibleCenterFromWindowX(next.x, next.y, activeState, walkDirection);
+      ensureTaskbarWalkRunwayForCenter(centerX, next.y, walkDirection, nextSurface, {
+        force: true,
+        reason: "window-roam-attach"
+      });
+    } else {
+      setPetWindowPosition(next.x, next.y);
+      syncWalkTrackX(next.x);
     }
-    setPetWindowPosition(next.x, next.y);
-    syncWalkTrackX(next.x);
     lastWindowSurfaceHeavyCheckAt = Date.now();
     manualTaskbarHold = false;
     if (isWalkingState()) {

@@ -85,9 +85,8 @@ test("walk-controller context 包含全部 getter/setter 访问器", () => {
   // setWalkDirection 和 syncWalkTrackX 应作为依赖函数存在（不在 getter/setter 区，但在 context 中）
   assert.match(contextBlock, /setWalkDirection/);
   assert.match(contextBlock, /syncWalkTrackX/);
-  assert.match(contextBlock, /getWalkVisibleRectFromWindowX/);
-  assert.match(contextBlock, /getWindowXForVisibleEdge/);
-  assert.match(contextBlock, /getSafeWindowXForDirection/);
+  assert.match(contextBlock, /getWalkRunwayCenterLimits/);
+  assert.match(contextBlock, /ensureTaskbarWalkRunwayForCenter/);
   assert.doesNotMatch(contextBlock, /getWindowXForWalkFrameVisibleCenter/);
 });
 
@@ -154,8 +153,6 @@ test("walk-controller 保留关键分支标记确保逻辑未丢失", () => {
   assert.match(controllerSource, /edgeFlip=/);
   assert.match(controllerSource, /left-center/);
   assert.match(controllerSource, /right-center/);
-  assert.match(controllerSource, /left-threshold/);
-  assert.match(controllerSource, /right-threshold/);
   // left-stuck / right-stuck 原位于窗口分支 isTaskbarSurface 死分支内（该标志在窗口路径恒为
   // false，非 window 表面已提前走 advanceTaskbarWalkStep），Phase 2 重构移除该死分支；
   // 此处保留 left-center-stuck / right-center-stuck（taskbar 路径，可达）。
@@ -166,30 +163,28 @@ test("walk-controller 保留关键分支标记确保逻辑未丢失", () => {
   assert.doesNotMatch(controllerSource, /preserveRightEdgeX/);
 });
 
-test("window surface walk 使用 state 级可见中心而非逐帧 X 补偿", () => {
+test("window surface walk 与 taskbar 共用固定 runway，逐帧不再移动 BrowserWindow", () => {
   assert.match(
     controllerSource,
-    /const previousX = getWalkTrackX\(\) \?\? bounds\.x;/
+    /return advanceTaskbarWalkStep\(\{[\s\S]*activeSurface,[\s\S]*groundedY,[\s\S]*bounds/
   );
   assert.match(
     controllerSource,
-    /const actualX = setWalkWindowPosition\(nextX, groundedY, activeSurface, getWalkDirection\(\), \{/
+    /ensureTaskbarWalkRunwayForCenter\(nextCenterX,\s*groundedY/
   );
-  assert.doesNotMatch(controllerSource, /trackCenterX/);
-  assert.doesNotMatch(controllerSource, /getWindowXForWalkFrameVisibleCenter/);
-  assert.doesNotMatch(mainSource, /getWindowXForWalkFrameVisibleCenter/);
-  assert.doesNotMatch(mainSource, /getWalkFrameIndexForStep/);
+  assert.doesNotMatch(controllerSource, /setWalkWindowPosition/);
+  assert.doesNotMatch(controllerSource, /getWindowXForVisibleEdge/);
 });
 
-test("main.cjs window surface walk alignment writes a plain window X target", () => {
+test("main.cjs window surface walk alignment materializes a fixed runway", () => {
   assert.match(
     mainSource,
-    /setWalkWindowPosition\(targetX,\s*groundedY,\s*activeSurface,\s*walkDirection\);/
+    /ensureTaskbarWalkRunwayForCenter\(safeCenterX,\s*groundedY,\s*walkDirection,\s*activeSurface/
   );
-  assert.doesNotMatch(mainSource, /trackCenterX/);
+  assert.match(mainSource, /surfaceSignature:\s*getWalkRunwaySurfaceSignature\(surface\)/);
 });
 
-test("main.cjs window walk sync keeps an existing real X track instead of reading stale bounds", () => {
+test("main.cjs window runway sync keeps its center instead of reading stale bounds", () => {
   assert.match(
     mainSource,
     /surface\?\.type === "window" && isWalkingState\(\) && Number\.isFinite\(walkTrackX\)/
@@ -197,6 +192,16 @@ test("main.cjs window walk sync keeps an existing real X track instead of readin
   assert.match(
     mainSource,
     /\? walkTrackX\s*:\s*bounds\.x;/
+  );
+});
+
+test("main.cjs window runway drives visual anchors and hit testing", () => {
+  assert.doesNotMatch(mainSource, /taskbarWalkRunway && isTaskbarWalkActive\(\)/);
+  assert.match(mainSource, /function getTaskbarWalkOverlayPetRect\(\)[\s\S]*?if \(!isWalkRunwayActive\(\)\)/);
+  assert.match(mainSource, /function isCursorInsideHoverIntentTarget\(\)[\s\S]*?if \(isWalkRunwayActive\(\)\)/);
+  assert.equal(
+    (mainSource.match(/isTaskbarWalkActive:\s*isWalkRunwayActive,/g) || []).length,
+    4
   );
 });
 

@@ -28,7 +28,7 @@
 | `pet/frame-bounds-controller.cjs` | 帧缓存与读图控制器（visible/head/pixel 缓存、nativeImage 读图、state bounds 合并），工厂形式注入 nativeImage/getState/listFramePaths/常量，不直接接触窗口/IPC/bubble |
 | `pet/frame-hit-test.cjs` | 透明像素命中检测纯规则（point→imageX/imageY 镜像/缩放、alpha 半径扫描），不依赖 electron/fs/nativeImage/缓存/窗口/screen |
 | `pet/pet-scale-rules.cjs` | pet scale 与 spriteSize 纯计算（clampPetScale、windowWidth/Height/SpriteSize、spriteLocalX、overlay/hover padding），不依赖 electron/fs/窗口/IPC/screen/bubble |
-| `pet/surface-fit-rules.cjs` | surface-fit 纯规则（visibleTop/windowY、window 位置约束、scale 候选适配、visible edge/center 互推、taskbar/window walk center limits、safe window X），不依赖 electron/fs/窗口/IPC/screen/bubble |
+| `pet/surface-fit-rules.cjs` | surface-fit 纯规则（visibleTop/windowY、window 位置约束、scale 候选适配、visible edge/center 互推、taskbar/window walk center limits、窗口表面固定跑道 bounds、safe window X），不依赖 electron/fs/窗口/IPC/screen/bubble |
 | `pet/surface-scale-controller.cjs` | surface 缩放副作用编排控制器（petScale/preferredPetScale 运行态、surface 缩放适配、落地编排、overlay 锚点刷新、偏好持久化），工厂形式注入依赖，不直接接触窗口/IPC/bubble |
 | `shared/bounds.cjs` | 纯几何工具函数，无副作用 |
 | `shared/messaging.cjs` | 封装 webContents.send 安全发送和多窗口广播 |
@@ -38,7 +38,7 @@
 | `windows/menu-controller.cjs` | 菜单窗口控制器（创建、显示、隐藏、定位、可见性） |
 | `windows/hover-controller.cjs` | 悬停面板控制器（创建、显示、隐藏、轮询、可见性） |
 | `windows/customization-controller.cjs` | 自定义面板控制器（创建、显示、隐藏、定位） |
-| `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏跑道） |
+| `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏与窗口表面共用的固定透明跑道） |
 | `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
 | `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
 | `behavior/state-controller.cjs` | 状态控制器（状态切换、one-shot 动作结算、起点复位、静默归位），工厂形式注入依赖，持有 pendingActionStatsState，不直接接触窗口/IPC/bubble |
@@ -82,7 +82,7 @@
 | 帧缓存与读图 | `pet/frame-bounds-controller.cjs`、`getFrameVisibleBounds`、`getFramePixelData`、`getFrameHeadBounds`、`getStateVisibleBounds`、`getStateHeadBounds` |
 | 像素命中检测 | `pet/frame-hit-test.cjs`、`isPointInsideRenderedFrame`、`isPointInsideVisiblePixels` |
 | 缩放纯计算 | `pet/pet-scale-rules.cjs`、`clampPetScale`、`getPetWindowWidth`、`getPetWindowHeight`、`getPetSpriteSize`、`getSpriteLocalXForWindowWidth`、`getScaledOverlayCollisionPadding`、`getScaledHoverBodyHitPadding`、`getScaledHoverAvoidPadding`、`buildScaleSummaryFromState`（main.cjs 保留薄包装委托 surfaceScaleController） |
-| surface-fit 纯规则 | `pet/surface-fit-rules.cjs`、`getSurfaceVisibleTop`、`getGroundedWindowYForSurface`、`clampPetWindowPositionToSurface`、`getScaleForSurface`、`getWindowXForVisibleEdge`、`getVisibleRectFromSpriteLeft`、`getWindowXForVisibleCenter`、`getTaskbarWalkCenterLimits`、`getWindowSurfaceWalkCenterLimits`、`getSafeWindowXForDirection`、`validateWindowSurfaceBounds`、`getSurfaceGroundYFromSurface`（main.cjs 保留薄包装委托 surfaceScaleController） |
+| surface-fit 纯规则 | `pet/surface-fit-rules.cjs`、`getSurfaceVisibleTop`、`getGroundedWindowYForSurface`、`clampPetWindowPositionToSurface`、`getScaleForSurface`、`getWindowXForVisibleEdge`、`getVisibleRectFromSpriteLeft`、`getWindowXForVisibleCenter`、`getTaskbarWalkCenterLimits`、`getWindowSurfaceWalkCenterLimits`、`getWindowSurfaceWalkRunwayBounds`、`getSafeWindowXForDirection`、`validateWindowSurfaceBounds`、`getSurfaceGroundYFromSurface`（main.cjs 保留薄包装委托 surfaceScaleController） |
 | surface 缩放编排 | `pet/surface-scale-controller.cjs`、`createSurfaceScaleController`、`applySurfaceScale`、`setPetScale`、`groundPetToSurface` |
 | 消息广播 | `shared/messaging.cjs`、`safeSend`、`broadcastToWindows` |
 | IPC 注册 | `ipc/register-ipc-handlers.cjs`、`registerIpcHandlers` |

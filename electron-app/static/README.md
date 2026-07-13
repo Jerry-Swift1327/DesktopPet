@@ -43,7 +43,8 @@
 ## 动画播放注意
 
 - 宠物帧来自主进程返回的 `config.states[].frames`。
-- 行走状态通过 `advanceWalkStep` 让主进程计算真实窗口位置。
+- 行走状态通过 `advanceWalkStep` 让主进程推进固定透明跑道内的 `spriteOffsetX`；任务栏和窗口表面均不在普通逐帧步进中移动原生宠物窗口。
+- 拖拽、缩放、状态切换或 surface 变化前，主进程会把跑道内位置实体化为普通宠物窗口 bounds，渲染层继续只消费返回的 scale 与 sprite offset。
 - `loopStart`、`loopEnd`、`frameSequence` 会影响播放帧序列。
 - yawn 动作元数据可声明 `freezeLastFrame: true`，渲染层会在最后一帧定格并把它视为睡眠阶段；未声明时仍按 `tailLoopStart` 尾段循环。
 - 一次性动作完成后，渲染层会调用 `completeOneShot` 通知主进程恢复默认状态。
