@@ -408,6 +408,34 @@ function createVariantWorkflow(options = {}) {
     return storePreview("replaceAction", buildReplaceActionPlan(payload, { metadataFile, animationsRoot }));
   }
 
+  function buildActionPlans(payload = {}) {
+    const actionVideos = payload.actionVideos || payload.replacements || {};
+    const loopModes = payload.loopModes || {};
+    return Object.entries(actionVideos)
+      .filter(([, video]) => Boolean(typeof video === "string" ? video : video?.path))
+      .map(([action, video]) => buildReplaceActionPlan({
+        id: payload.id,
+        action,
+        video: typeof video === "string" ? video : video.path,
+        loopMode: loopModes[action] || video.loopMode || { mode: "full" }
+      }, { metadataFile, animationsRoot }));
+  }
+
+  function buildReplaceActionsPreview(payload = {}) {
+    const actionPlans = buildActionPlans(payload);
+    if (actionPlans.length === 0) {
+      throw new Error("请至少为一个动作选择替换视频。");
+    }
+    return storePreview("replaceActions", {
+      kind: "replaceActions",
+      id: payload.id,
+      actions: actionPlans.map((plan) => plan.action),
+      commands: actionPlans.map((plan) => plan.command),
+      targets: actionPlans.map((plan) => ({ action: plan.action, targetAction: plan.targetAction, manifest: plan.manifest })),
+      actionPlans
+    });
+  }
+
   async function runReplaceAction(previewId, hooks = {}) {
     const entry = plans.get(previewId);
     if (!entry || entry.kind !== "replaceAction") {
@@ -425,6 +453,33 @@ function createVariantWorkflow(options = {}) {
       emitHook(hooks, "onStage", { stage: "replaceAction", status: "failed", error: error.message });
       throw error;
     }
+  }
+
+  async function runActionPlans(actionPlans, hooks = {}) {
+    emitHook(hooks, "onStage", { stage: "replaceAction", status: "running" });
+    try {
+      const results = [];
+      for (const plan of actionPlans) {
+        results.push(await applyReplaceActionPlanAsync(plan, {
+          runCommand: options.runCommand,
+          onLog: (event) => emitHook(hooks, "onLog", event)
+        }));
+      }
+      emitHook(hooks, "onStage", { stage: "replaceAction", status: "done" });
+      return results;
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage: "replaceAction", status: "failed", error: error.message });
+      throw error;
+    }
+  }
+
+  async function runReplaceActions(previewId, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== "replaceActions") {
+      throw new Error(`未找到批量替换动作预览方案：${previewId}`);
+    }
+    const results = await runActionPlans(entry.plan.actionPlans, hooks);
+    return { id: entry.plan.id, actions: entry.plan.actions, replaced: results.length };
   }
 
   function buildRenameAssetsPreview(payload = {}) {
@@ -448,13 +503,42 @@ function createVariantWorkflow(options = {}) {
   }
 
   function buildMetadataEditPreview(payload = {}) {
-    return storePreview("metadataEdit", buildCliMetadataEditPreview(payload, { metadataFile, animationsRoot }));
+    const actionPlans = buildActionPlans(payload);
+    const details = getCliVariantDetails(payload.id, { metadataFile, animationsRoot });
+    const currentActions = new Set((details.profile.actionButtons || details.profile.actions || [])
+      .concat(details.profile.actionAssets || details.profile.extraAnimationAssets || []));
+    const requestedActions = payload.fields?.actions
+      ? asArray(payload.fields.actions.buttons).concat(asArray(payload.fields.actions.assets))
+      : Array.from(currentActions);
+    const newlyEnabledActions = Array.from(new Set(requestedActions)).filter((action) => !currentActions.has(action));
+    const plannedActions = actionPlans.map((plan) => plan.action);
+    const missingActionVideos = newlyEnabledActions.filter((action) => !plannedActions.includes(action));
+    const preview = buildCliMetadataEditPreview(payload, {
+      metadataFile,
+      animationsRoot,
+      plannedActions
+    });
+    return storePreview("metadataEdit", {
+      ...preview,
+      canApply: preview.canApply && missingActionVideos.length === 0,
+      reason: missingActionVideos.length > 0
+        ? `请为新增动作选择源视频：${missingActionVideos.join(", ")}`
+        : preview.reason,
+      actionPlans,
+      actionCommands: actionPlans.map((plan) => plan.command),
+      plannedActions,
+      newlyEnabledActions,
+      missingActionVideos
+    });
   }
 
   async function applyMetadataEdit(previewId, hooks = {}) {
     const entry = plans.get(previewId);
     if (!entry || entry.kind !== "metadataEdit") {
       throw new Error(`未找到元数据编辑预览方案：${previewId}`);
+    }
+    if (entry.preview.actionPlans.length > 0) {
+      await runActionPlans(entry.preview.actionPlans, hooks);
     }
     emitHook(hooks, "onStage", { stage: "writeMetadataEdit", status: "running" });
     try {
@@ -508,6 +592,8 @@ function createVariantWorkflow(options = {}) {
     runNewVariant,
     buildReplaceActionPreview,
     runReplaceAction,
+    buildReplaceActionsPreview,
+    runReplaceActions,
     buildRenameAssetsPreview,
     runRenameAssets,
     buildMetadataEditPreview,

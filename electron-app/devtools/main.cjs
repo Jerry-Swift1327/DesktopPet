@@ -191,6 +191,29 @@ ipcMain.handle("devtools:runReplaceAction", async (event, previewId) => {
   }
 });
 
+ipcMain.handle("devtools:buildReplaceActionsPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildReplaceActionsPreview(payload || {});
+});
+
+ipcMain.handle("devtools:runReplaceActions", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) {
+    throw new Error("已有 devtools 任务正在执行。");
+  }
+
+  activeRun = workflow.runReplaceActions(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
 ipcMain.handle("devtools:buildRenameAssetsPreview", (event, payload) => {
   assertDevtoolsSender(event);
   return workflow.buildRenameAssetsPreview(payload || {});

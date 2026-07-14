@@ -15,6 +15,8 @@ const invokeContracts = [
   ["openGallery", "devtools:openGallery"],
   ["buildReplaceActionPreview", "devtools:buildReplaceActionPreview"],
   ["runReplaceAction", "devtools:runReplaceAction"],
+  ["buildReplaceActionsPreview", "devtools:buildReplaceActionsPreview"],
+  ["runReplaceActions", "devtools:runReplaceActions"],
   ["buildRenameAssetsPreview", "devtools:buildRenameAssetsPreview"],
   ["runRenameAssets", "devtools:runRenameAssets"],
   ["buildMetadataEditPreview", "devtools:buildMetadataEditPreview"],

@@ -126,8 +126,8 @@ function createRendererHarness() {
     chooseActionVideo: () => Promise.resolve(null),
     buildNewVariantPreview: () => Promise.resolve({}),
     runNewVariant: () => Promise.resolve({}),
-    buildReplaceActionPreview: () => Promise.resolve({}),
-    runReplaceAction: () => Promise.resolve({}),
+    buildReplaceActionsPreview: () => Promise.resolve({ previewId: "replace-preview", commands: [], targets: [] }),
+    runReplaceActions: () => Promise.resolve({}),
     buildRenameAssetsPreview: () => Promise.resolve({}),
     runRenameAssets: () => Promise.resolve({}),
     buildMetadataEditPreview: () => Promise.resolve({}),
@@ -158,7 +158,7 @@ function createRendererHarness() {
     Promise
   };
 
-  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, loadMaintainDetails, generateCatalogGallery, buildRenamePreview, runRenameAssets, buildMetadataPreview, applyMetadataEdit, appNode, sidebarNode, workspaceNode: document.querySelector(".workspace") };`, context, {
+  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, loadMaintainDetails, generateCatalogGallery, buildReplacePreview, buildMetadataPreview, applyMetadataEdit, renderMaintainVariant, appNode, sidebarNode, workspaceNode: document.querySelector(".workspace") };`, context, {
     filename: "devtools/renderer/app.js"
   });
   return context.__rendererHarness;
@@ -281,13 +281,13 @@ test("devtools pet catalog keeps scroll when generating gallery", async () => {
   assert.match(harness.appNode.innerHTML, /\.variant-gallery\/index\.html/);
 });
 
-test("devtools maintenance previews keep scroll in metadata and batch import panels", async () => {
+test("devtools maintenance previews keep scroll for replacement and metadata panels", async () => {
   const harness = createRendererHarness();
   await flushRendererPromises();
   await harness.switchView("maintainVariant");
   await harness.loadMaintainDetails("pet2601");
 
-  harness.state.maintain.renameSourceFolder = "C:\\pet-source-videos";
+  harness.state.maintain.replacementVideos.walk = "C:\\pet-source-videos\\walk.mp4";
 
   let leftColumn = harness.appNode.querySelector(".wizard-left");
   let rightColumn = harness.appNode.querySelector(".wizard-right");
@@ -295,7 +295,7 @@ test("devtools maintenance previews keep scroll in metadata and batch import pan
   leftColumn.scrollTop = 320;
   rightColumn.scrollTop = 180;
 
-  await harness.buildRenamePreview();
+  await harness.buildReplacePreview();
 
   leftColumn = harness.appNode.querySelector(".wizard-left");
   rightColumn = harness.appNode.querySelector(".wizard-right");
@@ -314,18 +314,6 @@ test("devtools maintenance previews keep scroll in metadata and batch import pan
   assert.equal(harness.workspaceNode.scrollTop, 120);
   assert.equal(leftColumn.scrollTop, 440);
   assert.equal(rightColumn.scrollTop, 260);
-
-  harness.workspaceNode.scrollTop = 150;
-  leftColumn.scrollTop = 520;
-  rightColumn.scrollTop = 300;
-
-  await harness.runRenameAssets("rename-preview");
-
-  leftColumn = harness.appNode.querySelector(".wizard-left");
-  rightColumn = harness.appNode.querySelector(".wizard-right");
-  assert.equal(harness.workspaceNode.scrollTop, 150);
-  assert.equal(leftColumn.scrollTop, 520);
-  assert.equal(rightColumn.scrollTop, 300);
 
   harness.workspaceNode.scrollTop = 180;
   leftColumn.scrollTop = 610;
@@ -423,20 +411,36 @@ test("devtools maintenance metadata uses selectable controls and reset action", 
   assert.match(appSource, /data-maintain-list=/);
   assert.match(appSource, /data-maintain-note-preset/);
   assert.match(appSource, /data-reset-maintain-edits/);
-  assert.match(appSource, /data-build-rename-preview/);
-  assert.match(appSource, /data-run-rename-assets/);
+  assert.match(appSource, /class="form-grid maintain-metadata-basics"/);
+  assert.match(appSource, /data-maintain-field="version"/);
+  assert.doesNotMatch(appSource, /data-build-rename-preview|data-run-rename-assets|批量导入动作源视频/);
 });
 
-test("devtools maintenance can select known asset actions before metadata enables them", async () => {
+test("devtools maintenance renders newly enabled actions as source video cards", async () => {
   const harness = createRendererHarness();
   await flushRendererPromises();
   await harness.switchView("maintainVariant");
   await harness.loadMaintainDetails("pet2601");
 
   assert.deepEqual(harness.state.maintain.details.profile.actionAssets, []);
-  assert.match(appSource, /function maintainReplaceActions/);
-  assert.match(appSource, /const knownActions = Object\.keys\(state\.options\.actions \|\| \{\}\)/);
-  assert.match(harness.appNode.innerHTML, /<option value="yawn">/);
+  harness.state.maintain.metadataFields.actionButtons.push("spin");
+  const html = harness.renderMaintainVariant();
+
+  assert.match(html, /新增动作源视频/);
+  assert.match(html, /spin \/ 转圈/);
+  assert.match(html, /data-new-action-video="spin"/);
+});
+
+test("devtools maintenance replaces the action dropdown with existing action cards and paired commands", () => {
+  const renderMaintainBody = appSource.match(/function renderMaintainVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(renderMaintainBody, /renderReplacementCards\(\)/);
+  assert.match(renderMaintainBody, /data-build-replace-preview/);
+  assert.match(renderMaintainBody, /data-run-replace-actions/);
+  assert.match(renderMaintainBody, /class="maintenance-command-row"[\s\S]*data-build-replace-preview[\s\S]*data-run-replace-actions/);
+  assert.doesNotMatch(renderMaintainBody, /data-maintain-action|替换动作<\/label>/);
+  assert.match(cssBlock(".maintain-metadata-basics"), /repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(cssBlock(".maintenance-command-row"), /justify-content\s*:\s*space-between\s*;/);
 });
 
 test("devtools delete confirmation input updates without rerendering the focused input", () => {

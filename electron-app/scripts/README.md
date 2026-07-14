@@ -35,7 +35,7 @@ bootstrap 会按动作池的 `processPreset` 组装资源处理参数：`grounde
 
 变体元数据使用 V2 字段：`species`、`scope`、`tier`、`notes`、`assetPrefix`、`actions.buttons`、`actions.assets` 和 `features.enable/disable`。`notes` 由 `scope + tier` 自动生成，custom 和 test 默认版本 `1.0`，internal 版本按当前最大 internal 版本递增。正式变体 ID 使用 `pet<yy><seq>`；测试变体必须使用独立的 `pettest<seq>`，且不会影响正式 ID 序列。
 
-`variant-cli.cjs` 还导出维护中心复用的纯函数：资源检查结果、动作源视频重命名计划/应用、动作替换计划、元数据编辑 diff 预览/应用、测试变体删除预览/应用。删除函数只允许 `scope: "test"` 变体，并在应用前校验删除路径位于允许的资源根目录内。
+`variant-cli.cjs` 还导出维护中心复用的纯函数：资源检查结果、动作源视频重命名计划/应用、动作替换计划、元数据编辑 diff 预览/应用、测试变体删除预览/应用。元数据预览可由受信任的维护工作流声明本次计划生成的动作资源，从而先处理视频再写元数据；删除函数只允许 `scope: "test"` 变体，并在应用前校验删除路径位于允许的资源根目录内。
 
 ## 修改注意
 

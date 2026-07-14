@@ -75,6 +75,8 @@ test("devtools workflow exposes maintenance helpers", () => {
   assert.equal(typeof workflow.getGalleryIndexPath, "function");
   assert.equal(typeof workflow.buildReplaceActionPreview, "function");
   assert.equal(typeof workflow.runReplaceAction, "function");
+  assert.equal(typeof workflow.buildReplaceActionsPreview, "function");
+  assert.equal(typeof workflow.runReplaceActions, "function");
   assert.equal(typeof workflow.buildRenameAssetsPreview, "function");
   assert.equal(typeof workflow.runRenameAssets, "function");
   assert.equal(typeof workflow.buildMetadataEditPreview, "function");
@@ -404,14 +406,16 @@ test("devtools catalog workflow checks variants and generates local gallery", ()
   assert.equal(fs.existsSync(gallery.output), true);
 });
 
-test("devtools maintenance workflow previews and runs action replacement", async () => {
+test("devtools maintenance workflow previews and runs multiple action replacements", async () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");
-  const replacement = path.join(tempDir, "replacement.mp4");
+  const walkReplacement = path.join(tempDir, "walk-replacement.mp4");
+  const feedReplacement = path.join(tempDir, "feed-replacement.mp4");
   writeMaintenanceMetadata(metadataFile);
   writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
-  fs.writeFileSync(replacement, "video", "utf8");
+  fs.writeFileSync(walkReplacement, "walk", "utf8");
+  fs.writeFileSync(feedReplacement, "feed", "utf8");
 
   const stages = [];
   const commands = [];
@@ -423,24 +427,26 @@ test("devtools maintenance workflow previews and runs action replacement", async
       commands.push([command, args]);
     }
   });
-  const preview = workflow.buildReplaceActionPreview({
+  const preview = workflow.buildReplaceActionsPreview({
     id: "pettest01",
-    action: "walk",
-    video: replacement,
-    loopMode: { mode: "full" }
+    actionVideos: { walk: walkReplacement, feed: feedReplacement },
+    loopModes: { walk: { mode: "full" }, feed: { mode: "manual", sourceStart: 4, sourceEnd: 18 } }
   });
-  const result = await workflow.runReplaceAction(preview.previewId, {
+  const result = await workflow.runReplaceActions(preview.previewId, {
     onStage: (event) => stages.push(event)
   });
 
   assert.equal(preview.previewId, "replace-preview");
-  assert.equal(preview.command.args.includes("--use-full-range"), true);
-  assert.equal(result.replaced, true);
+  assert.deepEqual(preview.actions, ["walk", "feed"]);
+  assert.equal(preview.commands[0].args.includes("--use-full-range"), true);
+  assert.equal(preview.commands[1].args.includes("--source-start"), true);
+  assert.equal(result.replaced, 2);
   assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
     "replaceAction:running",
     "replaceAction:done"
   ]);
-  assert.equal(commands[0][1].includes("replace"), true);
+  assert.equal(commands.length, 2);
+  assert.equal(commands.every(([, args]) => args.includes("replace")), true);
 });
 
 test("devtools maintenance workflow previews and runs batch action video import", async () => {
@@ -502,6 +508,53 @@ test("devtools maintenance workflow previews and applies metadata edits", async 
   assert.equal(result.applied, true);
   assert.equal(metadata.variants.pettest01.notes, "edited in devtools");
   assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
+    "writeMetadataEdit:running",
+    "writeMetadataEdit:done"
+  ]);
+});
+
+test("devtools metadata maintenance processes newly enabled action videos before writing metadata", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const spinVideo = path.join(tempDir, "spin.mp4");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  fs.writeFileSync(spinVideo, "spin", "utf8");
+
+  const stages = [];
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    idFactory: () => "metadata-action-preview",
+    runCommand: async () => {
+      const metadataDuringProcessing = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+      assert.deepEqual(metadataDuringProcessing.variants.pettest01.actions.buttons, ["squat", "walk", "feed", "ball"]);
+    }
+  });
+  const preview = workflow.buildMetadataEditPreview({
+    id: "pettest01",
+    actionVideos: { spin: spinVideo },
+    loopModes: { spin: { mode: "auto" } },
+    fields: {
+      version: "1.1",
+      actions: { buttons: ["squat", "walk", "feed", "ball", "spin"], assets: [] }
+    }
+  });
+
+  assert.equal(preview.canApply, true, preview.reason);
+  assert.deepEqual(preview.plannedActions, ["spin"]);
+  assert.equal(preview.actionCommands[0].args.includes("--use-full-range"), false);
+  assert.equal(preview.actionCommands[0].args.includes("--source-start"), false);
+
+  await workflow.applyMetadataEdit(preview.previewId, { onStage: (event) => stages.push(event) });
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+
+  assert.equal(metadata.variants.pettest01.version, "1.1");
+  assert.deepEqual(metadata.variants.pettest01.actions.buttons, ["squat", "walk", "feed", "ball", "spin"]);
+  assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
+    "replaceAction:running",
+    "replaceAction:done",
     "writeMetadataEdit:running",
     "writeMetadataEdit:done"
   ]);

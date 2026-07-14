@@ -326,12 +326,32 @@ select:focus {
   align-items: center;
 }
 
-.replace-toolbar {
+.maintain-pet-select {
+  grid-template-columns: minmax(280px, 1fr);
+  max-width: 620px;
+}
+
+.maintain-summary,
+.maintain-metadata-basics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.maintenance-command-row {
   display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  align-items: end;
+  margin-top: 12px;
+}
+
+.maintenance-command-row button {
+  min-width: 128px;
+}
+
+.maintenance-command-row button:first-child {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #075985;
 }
 
 .summary-grid {
@@ -607,6 +627,11 @@ select:focus {
   background: #fffbeb;
 }
 
+.action-card.existing {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
 .action-card.missing {
   border-color: #fecaca;
   background: #fff5f5;
@@ -664,6 +689,10 @@ select:focus {
   background: #f59e0b;
 }
 
+.action-card.existing .status-dot {
+  background: #0284c7;
+}
+
 .action-card.missing .status-dot {
   background: #ef4444;
 }
@@ -689,6 +718,30 @@ select:focus {
 .action-card button {
   align-self: end;
   white-space: nowrap;
+}
+
+.panel > .action-grid {
+  margin-top: 12px;
+}
+
+.new-action-source {
+  margin-top: 16px;
+  border-top: 1px solid #dbeafe;
+  padding-top: 16px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.section-heading h3 {
+  margin: 0;
+  color: #0c4a6e;
+  font-size: 15px;
 }
 
 .loop-controls {
@@ -989,6 +1042,10 @@ pre {
     grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   }
 
+  .maintain-metadata-basics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .catalog-filters {
     grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   }
@@ -1053,6 +1110,20 @@ pre {
 
   .new-pet-basics {
     grid-template-columns: 1fr;
+  }
+
+  .maintain-summary,
+  .maintain-metadata-basics {
+    grid-template-columns: 1fr;
+  }
+
+  .maintenance-command-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .maintenance-command-row button {
+    width: 100%;
   }
 
   .new-pet-picker .new-pet-option-grid,

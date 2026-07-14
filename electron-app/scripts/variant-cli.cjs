@@ -850,14 +850,17 @@ function buildMetadataDiff(before, after, fields) {
   return diff;
 }
 
-function findMissingActionResources(profile, animationsRoot) {
+function findMissingActionResources(profile, animationsRoot, plannedActions = []) {
+  const planned = new Set(plannedActions);
   const actions = uniqueList((profile.actionButtons || profile.actions || []).concat(profile.actionAssets || profile.extraAnimationAssets || []));
   return actions
+    .filter((action) => !planned.has(action))
     .map((action) => getActionResourcePath(animationsRoot, profile.assetPrefix || profile.animationPrefix || profile.id, action))
     .filter((resourcePath) => !fs.existsSync(resourcePath));
 }
 
-function findFeatureMissingActionResources(profile, animationsRoot) {
+function findFeatureMissingActionResources(profile, animationsRoot, plannedActions = []) {
+  const planned = new Set(plannedActions);
   const requiredActions = [];
   if (profile.features?.idleYawn && !(profile.actionAssets || profile.extraAnimationAssets || []).includes("yawn")) {
     requiredActions.push("yawn");
@@ -870,7 +873,7 @@ function findFeatureMissingActionResources(profile, animationsRoot) {
       action,
       resourcePath: getActionResourcePath(animationsRoot, assetPrefix, action),
       hasActionAsset: actionAssets.includes(action),
-      hasResource: fs.existsSync(getActionResourcePath(animationsRoot, assetPrefix, action))
+      hasResource: planned.has(action) || fs.existsSync(getActionResourcePath(animationsRoot, assetPrefix, action))
     }))
     .filter((item) => !item.hasActionAsset || !item.hasResource);
 }
@@ -890,11 +893,12 @@ function buildMetadataEditPreview(payload = {}, options = {}) {
   const after = clonePlainObject(metadataAfterApply.variants[id]);
   const diff = buildMetadataDiff(before, after, fields);
   const profile = resolvePetVariantProfile(after);
+  const plannedActions = uniqueList(options.plannedActions || []);
   const missingResources = Object.prototype.hasOwnProperty.call(fields, "actions")
-    ? findMissingActionResources(profile, animationsRoot)
+    ? findMissingActionResources(profile, animationsRoot, plannedActions)
     : [];
   const missingFeatureResources = Object.prototype.hasOwnProperty.call(fields, "features") || Object.prototype.hasOwnProperty.call(fields, "actions")
-    ? findFeatureMissingActionResources(profile, animationsRoot)
+    ? findFeatureMissingActionResources(profile, animationsRoot, plannedActions)
     : [];
   const canApply = missingResources.length === 0 && missingFeatureResources.length === 0;
   const reason = missingResources.length > 0

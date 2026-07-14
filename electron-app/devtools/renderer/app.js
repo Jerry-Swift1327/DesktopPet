@@ -143,18 +143,16 @@ const state = {
   maintain: {
     selectedId: "",
     details: null,
-    action: "",
-    replacementVideo: "",
-    loopMode: { mode: "auto", sourceStart: "", sourceEnd: "" },
+    replacementVideos: {},
+    replacementLoopModes: {},
     replacePreview: null,
     replacePending: false,
-    renameSourceFolder: "",
-    renameForce: false,
-    renamePreview: null,
-    renamePending: false,
+    newActionVideos: {},
+    newActionLoopModes: {},
     metadataFields: {
       species: "",
       tier: "",
+      version: "",
       notes: "",
       notePreset: "",
       actionButtons: [],
@@ -273,7 +271,6 @@ function busy() {
     || state.catalog.checkPending
     || state.catalog.galleryPending
     || state.maintain.replacePending
-    || state.maintain.renamePending
     || state.maintain.metadataPending
     || state.deleteVariant.pending;
 }
@@ -406,6 +403,8 @@ function resetMaintainEdits() {
     syncMaintainFields(state.maintain.details);
   }
   state.maintain.metadataPreview = null;
+  state.maintain.newActionVideos = {};
+  state.maintain.newActionLoopModes = {};
   state.logs = [];
   state.stages = {};
   renderPreservingScroll();
@@ -937,12 +936,6 @@ function actionsFromDetails(details) {
   return Array.from(new Set((details.profile.actionButtons || details.profile.actions || []).concat(details.profile.actionAssets || details.profile.extraAnimationAssets || [])));
 }
 
-function maintainReplaceActions(details) {
-  const configured = actionsFromDetails(details);
-  const knownActions = Object.keys(state.options.actions || {});
-  return Array.from(new Set(configured.concat(knownActions)));
-}
-
 function syncMaintainFields(details) {
   if (!details || !details.profile) {
     return;
@@ -952,6 +945,7 @@ function syncMaintainFields(details) {
   state.maintain.metadataFields = {
     species: profile.species || "",
     tier: profile.tier || "",
+    version: profile.version || "1.0",
     notes: profile.notes || "",
     notePreset: findNotePreset(profile.notes || "", profile.scope, profile.tier),
     actionButtons: (profile.actionButtons || profile.actions || []).slice(),
@@ -959,10 +953,6 @@ function syncMaintainFields(details) {
     featuresEnable: enabledFeatures.slice(),
     featuresDisable: []
   };
-  const actions = maintainReplaceActions(details);
-  if (!state.maintain.action || !actions.includes(state.maintain.action)) {
-    state.maintain.action = actions[0] || "";
-  }
 }
 
 function renderMaintainSelectField(name, label, values, selected, disabled) {
@@ -1007,9 +997,12 @@ function renderMaintainMetadataControls(fields, disabled) {
   const buttonActions = actions.filter((action) => state.options.actions[action].kind === "button");
   const assetActions = actions.filter((action) => state.options.actions[action].kind === "asset");
   const features = Object.keys(state.options.features);
-  return `<div class="form-grid">
+  return `<div class="form-grid maintain-metadata-basics">
     ${renderMaintainSelectField("species", "species", Object.keys(state.options.species), fields.species, disabled)}
     ${renderMaintainSelectField("tier", "tier", Object.keys(state.options.tiers), fields.tier, disabled)}
+    <label>version
+      <input type="text" data-maintain-field="version" value="${escapeHtml(fields.version || "1.0")}"${disabled}>
+    </label>
   </div>
   ${renderMaintainNotesField(fields, disabled)}
   <div class="option-section">
@@ -1019,10 +1012,92 @@ function renderMaintainMetadataControls(fields, disabled) {
   </div>`;
 }
 
+function maintainLoopModeFor(collectionName, action) {
+  const collection = state.maintain[collectionName];
+  if (!collection[action]) {
+    collection[action] = { mode: "full", sourceStart: "", sourceEnd: "" };
+  }
+  return collection[action];
+}
+
+function renderMaintainCardLoopControls(action, collectionName, dataPrefix) {
+  const value = maintainLoopModeFor(collectionName, action);
+  const disabled = busy() ? " disabled" : "";
+  return `<div class="loop-controls">
+    <label>运行帧
+      <select data-${dataPrefix}-loop-mode="${escapeHtml(action)}"${disabled}>
+        <option value="full"${value.mode === "full" ? " selected" : ""}>完整帧</option>
+        <option value="auto"${value.mode === "auto" ? " selected" : ""}>自动选取</option>
+        <option value="manual"${value.mode === "manual" ? " selected" : ""}>手动范围</option>
+      </select>
+    </label>
+    <div class="loop-range ${value.mode === "manual" ? "" : "is-hidden"}">
+      <input type="number" min="0" step="1" placeholder="start" data-${dataPrefix}-loop-start="${escapeHtml(action)}" value="${escapeHtml(value.sourceStart ?? "")}"${disabled}>
+      <input type="number" min="0" step="1" placeholder="end" data-${dataPrefix}-loop-end="${escapeHtml(action)}" value="${escapeHtml(value.sourceEnd ?? "")}"${disabled}>
+    </div>
+  </div>`;
+}
+
+function renderMaintainActionCard(action, { kind, video, loopModes, dataPrefix }) {
+  const selected = Boolean(video);
+  const status = selected ? "manual" : (kind === "replace" ? "existing" : "missing");
+  const statusLabel = selected ? "已选择" : (kind === "replace" ? "当前资源" : "缺少视频");
+  const sourceLabel = selected ? "待处理视频" : (kind === "replace" ? "已有动作资源" : "新增动作");
+  const sourceText = video || (kind === "replace"
+    ? `${state.maintain.details.profile.assetPrefix}_${state.options.actions[action].asset}`
+    : "未选择视频");
+  return `<article class="action-card ${status}">
+    <div class="action-copy">
+      <div class="action-title-row">
+        <h3>${escapeHtml(actionLabel(action))}</h3>
+        <span class="action-status"><span class="status-dot"></span>${escapeHtml(statusLabel)}</span>
+      </div>
+      <span class="badge">${escapeHtml(sourceLabel)}</span>
+      <p>${escapeHtml(sourceText)}</p>
+      ${renderMaintainCardLoopControls(action, loopModes, dataPrefix)}
+    </div>
+    <button type="button" data-${dataPrefix}-video="${escapeHtml(action)}"${busy() ? " disabled" : ""}>${selected ? "更换视频" : (kind === "replace" ? "替换视频" : "选择视频")}</button>
+  </article>`;
+}
+
+function newlyEnabledActions() {
+  const current = new Set(actionsFromDetails(state.maintain.details));
+  return Array.from(new Set(parseList(state.maintain.metadataFields.actionButtons)
+    .concat(parseList(state.maintain.metadataFields.actionAssets))))
+    .filter((action) => !current.has(action));
+}
+
+function renderReplacementCards() {
+  return actionsFromDetails(state.maintain.details).map((action) => renderMaintainActionCard(action, {
+    kind: "replace",
+    video: state.maintain.replacementVideos[action] || "",
+    loopModes: "replacementLoopModes",
+    dataPrefix: "replace"
+  })).join("");
+}
+
+function renderNewActionCards() {
+  const actions = newlyEnabledActions();
+  if (actions.length === 0) {
+    return "";
+  }
+  return `<div class="new-action-source">
+    <div class="section-heading">
+      <h3>新增动作源视频</h3>
+      <span class="muted">${actions.length} 个待新增动作</span>
+    </div>
+    <div class="action-grid">${actions.map((action) => renderMaintainActionCard(action, {
+      kind: "new",
+      video: state.maintain.newActionVideos[action] || "",
+      loopModes: "newActionLoopModes",
+      dataPrefix: "new-action"
+    })).join("")}</div>
+  </div>`;
+}
+
 function renderMaintainVariant() {
   const details = state.maintain.details;
   const fields = state.maintain.metadataFields;
-  const actions = maintainReplaceActions(details);
   const disabled = busy() ? " disabled" : "";
   return `<div class="wizard">
     <div class="wizard-left">
@@ -1030,22 +1105,18 @@ function renderMaintainVariant() {
         <div class="panel-header">
           <div>
             <h1>维护宠物</h1>
-            <p class="muted">替换动作资源、批量导入动作源视频，或预览后写入结构化元数据</p>
+            <p class="muted">替换现有动作资源，或新增动作资源后写入结构化元数据</p>
           </div>
           <button type="button" data-refresh-variants${disabled}>刷新</button>
         </div>
-        <div class="form-grid">
+        <div class="form-grid maintain-pet-select">
           <label>选择宠物
             <select data-maintain-select${disabled}>${renderVariantOptions(state.maintain.selectedId)}</select>
           </label>
-          <label>替换动作
-            <select data-maintain-action${disabled}>${actions.map((action) => `<option value="${escapeHtml(action)}"${state.maintain.action === action ? " selected" : ""}>${escapeHtml(actionLabel(action))}</option>`).join("")}</select>
-          </label>
         </div>
-        ${details ? `<div class="summary-grid">
+        ${details ? `<div class="summary-grid maintain-summary">
           <div><span>scope</span><strong>${escapeHtml(details.profile.scope)}</strong></div>
           <div><span>assetPrefix</span><strong>${escapeHtml(details.profile.assetPrefix)}</strong></div>
-          <div><span>version</span><strong>${escapeHtml(details.profile.version)}</strong></div>
           <div><span>manifest</span><strong>${escapeHtml(details.resources.manifest)}</strong></div>
         </div>` : `<p class="muted">请选择一个宠物。</p>`}
       </section>
@@ -1053,38 +1124,16 @@ function renderMaintainVariant() {
       <section class="panel">
         <div class="panel-header">
           <h2>替换动作资源</h2>
+        </div>
+        <div class="maintenance-command-row">
           <button type="button" data-build-replace-preview${disabled}>生成替换预览</button>
+          <button type="button" class="primary" data-run-replace-actions="${escapeHtml(state.maintain.replacePreview?.previewId || "")}"${disabled || !state.maintain.replacePreview ? " disabled" : ""}>确认执行</button>
         </div>
-        <div class="source-path">${escapeHtml(state.maintain.replacementVideo || "未选择替换视频")}</div>
-        <div class="replace-toolbar">
-          <button type="button" data-choose-replacement${disabled}>选择 MP4</button>
-          ${renderMaintainLoopControls()}
-        </div>
+        <div class="action-grid">${details ? renderReplacementCards() : ""}</div>
         ${state.maintain.replacePreview ? `<div class="preview-grid">
-          <section><h3>替换命令</h3><pre>${renderJson(state.maintain.replacePreview.command)}</pre></section>
-          <section><h3>目标资源</h3><pre>${renderJson({ targetAction: state.maintain.replacePreview.targetAction, manifest: state.maintain.replacePreview.manifest })}</pre></section>
-        </div>
-        <button type="button" class="primary" data-run-replace-action="${escapeHtml(state.maintain.replacePreview.previewId)}"${disabled}>执行替换</button>` : ""}
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>批量导入动作源视频</h2>
-            <p class="muted">预览并执行 rename-assets，将源目录中的动作 MP4 复制到当前宠物资源目录。</p>
-          </div>
-          <button type="button" data-build-rename-preview${disabled || !state.maintain.renameSourceFolder ? " disabled" : ""}>生成导入预览</button>
-        </div>
-        <div class="source-path">${escapeHtml(state.maintain.renameSourceFolder || "未选择源视频文件夹")}</div>
-        <div class="check-row">
-          <button type="button" data-choose-rename-folder${disabled}>选择文件夹</button>
-          <label class="check"><input type="checkbox" data-maintain-rename-force${state.maintain.renameForce ? " checked" : ""}${disabled}>强制覆盖目标视频</label>
-        </div>
-        ${state.maintain.renamePreview ? `<div class="preview-grid">
-          <section><h3>复制计划</h3><pre>${renderJson(state.maintain.renamePreview.copied)}</pre></section>
-          <section><h3>源目录</h3><pre>${renderJson({ sourceDir: state.maintain.renamePreview.sourceDir, animationsRoot: state.maintain.renamePreview.animationsRoot })}</pre></section>
-        </div>
-        <button type="button" class="primary" data-run-rename-assets="${escapeHtml(state.maintain.renamePreview.previewId)}"${disabled}>执行导入</button>` : ""}
+          <section><h3>替换命令</h3><pre>${renderJson(state.maintain.replacePreview.commands)}</pre></section>
+          <section><h3>目标资源</h3><pre>${renderJson(state.maintain.replacePreview.targets)}</pre></section>
+        </div>` : ""}
       </section>
 
       <section class="panel">
@@ -1096,30 +1145,13 @@ function renderMaintainVariant() {
           </div>
         </div>
         ${renderMaintainMetadataControls(fields, disabled)}
+        ${renderNewActionCards()}
         ${renderMetadataDiff()}
       </section>
     </div>
     <div class="wizard-right">
       ${renderVariantDetails(details)}
       ${renderExecution()}
-    </div>
-  </div>`;
-}
-
-function renderMaintainLoopControls() {
-  const value = state.maintain.loopMode;
-  const disabled = busy() ? " disabled" : "";
-  return `<div class="loop-controls inline-loop">
-    <label>运行帧
-      <select data-maintain-loop-mode${disabled}>
-        <option value="full"${value.mode === "full" ? " selected" : ""}>完整帧</option>
-        <option value="auto"${value.mode === "auto" ? " selected" : ""}>自动选取</option>
-        <option value="manual"${value.mode === "manual" ? " selected" : ""}>手动范围</option>
-      </select>
-    </label>
-    <div class="loop-range ${value.mode === "manual" ? "" : "is-hidden"}">
-      <input type="number" min="0" step="1" placeholder="start" data-maintain-loop-start value="${escapeHtml(value.sourceStart ?? "")}"${disabled}>
-      <input type="number" min="0" step="1" placeholder="end" data-maintain-loop-end value="${escapeHtml(value.sourceEnd ?? "")}"${disabled}>
     </div>
   </div>`;
 }
@@ -1132,6 +1164,7 @@ function renderMetadataDiff() {
   return `<div class="metadata-diff">
     ${preview.reason ? `<p class="danger">${escapeHtml(preview.reason)}</p>` : ""}
     <pre>${renderJson(preview.diff || [])}</pre>
+    ${preview.actionCommands?.length ? `<h3>新增动作处理命令</h3><pre>${renderJson(preview.actionCommands)}</pre>` : ""}
     <button type="button" class="primary" data-apply-metadata-edit="${escapeHtml(preview.previewId)}"${busy() || !preview.canApply ? " disabled" : ""}>确认写入元数据</button>
   </div>`;
 }
@@ -1413,11 +1446,18 @@ async function runPreview(previewId) {
 
 function buildMetadataPayload() {
   const fields = state.maintain.metadataFields;
+  const newActions = newlyEnabledActions();
   return {
     id: state.maintain.selectedId,
+    actionVideos: Object.fromEntries(newActions
+      .filter((action) => state.maintain.newActionVideos[action])
+      .map((action) => [action, state.maintain.newActionVideos[action]])),
+    loopModes: Object.fromEntries(newActions
+      .map((action) => [action, maintainLoopModeFor("newActionLoopModes", action)])),
     fields: {
       species: fields.species,
       tier: fields.tier,
+      version: fields.version,
       notes: fields.notes,
       actions: {
         buttons: parseList(fields.actionButtons),
@@ -1432,29 +1472,28 @@ function buildMetadataPayload() {
 }
 
 async function buildReplacePreview() {
-  if (busy() || !state.maintain.selectedId || !state.maintain.action || !state.maintain.replacementVideo) {
+  if (busy() || !state.maintain.selectedId) {
     return;
   }
   state.maintain.replacePending = true;
   clearMaintainPreviews();
-  render();
+  renderPreservingScroll();
   try {
-    state.maintain.replacePreview = await api.buildReplaceActionPreview({
+    state.maintain.replacePreview = await api.buildReplaceActionsPreview({
       id: state.maintain.selectedId,
-      action: state.maintain.action,
-      video: state.maintain.replacementVideo,
-      loopMode: state.maintain.loopMode
+      actionVideos: state.maintain.replacementVideos,
+      loopModes: state.maintain.replacementLoopModes
     });
   } catch (error) {
     pushLog(error.message);
   } finally {
     state.maintain.replacePending = false;
-    render();
+    renderPreservingScroll();
   }
 }
 
 async function runReplaceAction(previewId) {
-  if (busy() || !previewId || !window.confirm("确认执行动作资源替换吗？")) {
+  if (busy() || !previewId || !window.confirm("确认执行这些动作资源替换吗？")) {
     return;
   }
   state.running = true;
@@ -1463,8 +1502,10 @@ async function runReplaceAction(previewId) {
   state.stages = {};
   render();
   try {
-    await api.runReplaceAction(previewId);
+    await api.runReplaceActions(previewId);
     state.stages.complete = "done";
+    state.maintain.replacementVideos = {};
+    state.maintain.replacementLoopModes = {};
     await loadMaintainDetails(state.maintain.selectedId);
   } catch (error) {
     state.stages.complete = "failed";
@@ -1472,50 +1513,6 @@ async function runReplaceAction(previewId) {
   } finally {
     state.running = false;
     render();
-  }
-}
-
-async function buildRenamePreview() {
-  if (busy() || !state.maintain.selectedId || !state.maintain.renameSourceFolder) {
-    return;
-  }
-  state.maintain.renamePending = true;
-  state.maintain.renamePreview = null;
-  renderPreservingScroll();
-  try {
-    state.maintain.renamePreview = await api.buildRenameAssetsPreview({
-      id: state.maintain.selectedId,
-      from: state.maintain.renameSourceFolder,
-      force: state.maintain.renameForce
-    });
-  } catch (error) {
-    pushLog(error.message);
-  } finally {
-    state.maintain.renamePending = false;
-    renderPreservingScroll();
-  }
-}
-
-async function runRenameAssets(previewId) {
-  if (busy() || !previewId || !window.confirm("确认导入这些动作源视频吗？")) {
-    return;
-  }
-  state.running = true;
-  state.activeOperation = "maintainVariant";
-  state.logs = [];
-  state.stages = {};
-  renderPreservingScroll();
-  try {
-    await api.runRenameAssets(previewId);
-    state.stages.complete = "done";
-    state.maintain.renamePreview = null;
-    await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
-  } catch (error) {
-    state.stages.complete = "failed";
-    pushLog(error.message);
-  } finally {
-    state.running = false;
-    renderPreservingScroll();
   }
 }
 
@@ -1597,6 +1594,8 @@ async function applyMetadataEdit(previewId) {
   try {
     await api.applyMetadataEdit(previewId);
     state.stages.complete = "done";
+    state.maintain.newActionVideos = {};
+    state.maintain.newActionLoopModes = {};
     await refreshVariants({ preserveScroll: true });
     await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
   } catch (error) {
@@ -1696,12 +1695,18 @@ appNode.addEventListener("input", (event) => {
     updateDeleteConfirmButton();
     return;
   }
-  if (event.target.dataset.maintainLoopStart !== undefined) {
-    state.maintain.loopMode.sourceStart = event.target.value;
+  if (event.target.dataset.replaceLoopStart !== undefined) {
+    maintainLoopModeFor("replacementLoopModes", event.target.dataset.replaceLoopStart).sourceStart = event.target.value;
     state.maintain.replacePreview = null;
-  } else if (event.target.dataset.maintainLoopEnd !== undefined) {
-    state.maintain.loopMode.sourceEnd = event.target.value;
+  } else if (event.target.dataset.replaceLoopEnd !== undefined) {
+    maintainLoopModeFor("replacementLoopModes", event.target.dataset.replaceLoopEnd).sourceEnd = event.target.value;
     state.maintain.replacePreview = null;
+  } else if (event.target.dataset.newActionLoopStart !== undefined) {
+    maintainLoopModeFor("newActionLoopModes", event.target.dataset.newActionLoopStart).sourceStart = event.target.value;
+    state.maintain.metadataPreview = null;
+  } else if (event.target.dataset.newActionLoopEnd !== undefined) {
+    maintainLoopModeFor("newActionLoopModes", event.target.dataset.newActionLoopEnd).sourceEnd = event.target.value;
+    state.maintain.metadataPreview = null;
   } else if (event.target.dataset.loopStart) {
     setLoopMode(event.target.dataset.loopStart, { sourceStart: event.target.value });
   } else if (event.target.dataset.loopEnd) {
@@ -1767,16 +1772,19 @@ appNode.addEventListener("change", async (event) => {
   } else if (event.target.dataset.maintainSelect !== undefined) {
     state.maintain.selectedId = event.target.value;
     state.maintain.replacePreview = null;
-    state.maintain.renamePreview = null;
     state.maintain.metadataPreview = null;
+    state.maintain.replacementVideos = {};
+    state.maintain.replacementLoopModes = {};
+    state.maintain.newActionVideos = {};
+    state.maintain.newActionLoopModes = {};
     await loadMaintainDetails(event.target.value);
-  } else if (event.target.dataset.maintainAction !== undefined) {
-    state.maintain.action = event.target.value;
+  } else if (event.target.dataset.replaceLoopMode !== undefined) {
+    maintainLoopModeFor("replacementLoopModes", event.target.dataset.replaceLoopMode).mode = event.target.value;
     state.maintain.replacePreview = null;
     render();
-  } else if (event.target.dataset.maintainLoopMode !== undefined) {
-    state.maintain.loopMode.mode = event.target.value;
-    state.maintain.replacePreview = null;
+  } else if (event.target.dataset.newActionLoopMode !== undefined) {
+    maintainLoopModeFor("newActionLoopModes", event.target.dataset.newActionLoopMode).mode = event.target.value;
+    state.maintain.metadataPreview = null;
     render();
   } else if (maintainField) {
     state.maintain.metadataFields[maintainField] = event.target.value;
@@ -1807,10 +1815,9 @@ appNode.addEventListener("change", async (event) => {
       state.maintain.metadataFields.featuresDisable = [];
     }
     state.maintain.metadataPreview = null;
-    renderPreservingScroll();
-  } else if (event.target.dataset.maintainRenameForce !== undefined) {
-    state.maintain.renameForce = event.target.checked;
-    state.maintain.renamePreview = null;
+    const enabled = new Set(newlyEnabledActions());
+    state.maintain.newActionVideos = Object.fromEntries(Object.entries(state.maintain.newActionVideos).filter(([action]) => enabled.has(action)));
+    state.maintain.newActionLoopModes = Object.fromEntries(Object.entries(state.maintain.newActionLoopModes).filter(([action]) => enabled.has(action)));
     renderPreservingScroll();
   } else if (event.target.dataset.deleteSelect !== undefined) {
     state.deleteVariant.selectedId = event.target.value;
@@ -1862,28 +1869,26 @@ appNode.addEventListener("click", async (event) => {
     await generateCatalogGallery();
   } else if (event.target.dataset.openGallery !== undefined) {
     await openCatalogGallery();
-  } else if (event.target.dataset.chooseReplacement !== undefined) {
-    const filePath = await api.chooseActionVideo(state.maintain.action || "replace");
+  } else if (event.target.dataset.replaceVideo !== undefined) {
+    const selectedAction = event.target.dataset.replaceVideo;
+    const filePath = await api.chooseActionVideo(selectedAction);
     if (filePath) {
-      state.maintain.replacementVideo = filePath;
+      state.maintain.replacementVideos[selectedAction] = filePath;
       state.maintain.replacePreview = null;
-      render();
+      renderPreservingScroll();
     }
-  } else if (event.target.dataset.chooseRenameFolder !== undefined) {
-    const folder = await api.chooseSourceFolder();
-    if (folder) {
-      state.maintain.renameSourceFolder = folder;
-      state.maintain.renamePreview = null;
+  } else if (event.target.dataset.newActionVideo !== undefined) {
+    const selectedAction = event.target.dataset.newActionVideo;
+    const filePath = await api.chooseActionVideo(selectedAction);
+    if (filePath) {
+      state.maintain.newActionVideos[selectedAction] = filePath;
+      state.maintain.metadataPreview = null;
       renderPreservingScroll();
     }
   } else if (event.target.dataset.buildReplacePreview !== undefined) {
     await buildReplacePreview();
-  } else if (event.target.dataset.runReplaceAction) {
-    await runReplaceAction(event.target.dataset.runReplaceAction);
-  } else if (event.target.dataset.buildRenamePreview !== undefined) {
-    await buildRenamePreview();
-  } else if (event.target.dataset.runRenameAssets) {
-    await runRenameAssets(event.target.dataset.runRenameAssets);
+  } else if (event.target.dataset.runReplaceActions) {
+    await runReplaceAction(event.target.dataset.runReplaceActions);
   } else if (event.target.dataset.resetMaintainEdits !== undefined) {
     resetMaintainEdits();
   } else if (event.target.dataset.buildMetadataPreview !== undefined) {
