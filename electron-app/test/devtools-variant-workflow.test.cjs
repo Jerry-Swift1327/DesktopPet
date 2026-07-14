@@ -81,6 +81,8 @@ test("devtools workflow exposes maintenance helpers", () => {
   assert.equal(typeof workflow.runRenameAssets, "function");
   assert.equal(typeof workflow.buildMetadataEditPreview, "function");
   assert.equal(typeof workflow.applyMetadataEdit, "function");
+  assert.equal(typeof workflow.buildDeleteActionPreview, "function");
+  assert.equal(typeof workflow.deleteAction, "function");
   assert.equal(typeof workflow.buildDeleteVariantPreview, "function");
   assert.equal(typeof workflow.deleteTestVariant, "function");
 });
@@ -568,6 +570,70 @@ test("devtools metadata maintenance processes newly enabled action videos before
     "writeMetadataEdit:running",
     "writeMetadataEdit:done"
   ]);
+});
+
+test("devtools maintenance deletes orphaned action resources and manifest metadata", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "dog", ["squat", "walk", "feed", "ball", "lick"]);
+  const manifestFile = path.join(animationsRoot, "dog_actions_manifest.json");
+  fs.writeFileSync(manifestFile, JSON.stringify([
+    { action: "dog_squat", video: "dog_squat.mp4" },
+    { action: "dog_lick", video: "dog_lick.mp4" }
+  ]), "utf8");
+
+  const stages = [];
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    idFactory: () => "delete-action-preview"
+  });
+  const details = workflow.getVariantDetails("pet2601");
+  const preview = workflow.buildDeleteActionPreview({ id: "pet2601", action: "lick" });
+  const result = await workflow.deleteAction(preview.previewId, {
+    onStage: (event) => stages.push(event)
+  });
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+
+  assert.equal(details.resources.resourceActions.some((item) => item.action === "lick" && item.registered === false), true);
+  assert.equal(preview.canDelete, true, preview.reason);
+  assert.equal(preview.orphaned, true);
+  assert.equal(preview.manifestRemovedEntries, 1);
+  assert.equal(result.deleted, true);
+  assert.equal(fs.existsSync(path.join(animationsRoot, "dog_lick")), false);
+  assert.deepEqual(manifest.map((item) => item.action), ["dog_squat"]);
+  assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
+    "deleteActionResources:running",
+    "deleteActionResources:done"
+  ]);
+});
+
+test("devtools maintenance deletes action metadata and blocks required actions", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+  metadata.variants.pet2601.actions.buttons.push("spin");
+  metadata.variants.pet2601.actionLabelOverrides = { spin: "旋转" };
+  metadata.variants.pet2601.actionStatEffects = { spin: { health: 1 } };
+  fs.writeFileSync(metadataFile, JSON.stringify(metadata, null, 2), "utf8");
+  writeAnimationFolders(animationsRoot, "dog", ["squat", "walk", "feed", "ball", "spin"]);
+
+  const workflow = createVariantWorkflow({ metadataFile, animationsRoot, idFactory: () => "delete-spin" });
+  const blocked = workflow.buildDeleteActionPreview({ id: "pet2601", action: "squat" });
+  const preview = workflow.buildDeleteActionPreview({ id: "pet2601", action: "spin" });
+  await workflow.deleteAction(preview.previewId);
+  const after = JSON.parse(fs.readFileSync(metadataFile, "utf8")).variants.pet2601;
+
+  assert.equal(blocked.canDelete, false);
+  assert.match(blocked.reason, /必需动作/);
+  assert.equal(preview.canDelete, true, preview.reason);
+  assert.equal(after.actions.buttons.includes("spin"), false);
+  assert.equal(after.actionLabelOverrides, undefined);
+  assert.equal(after.actionStatEffects, undefined);
 });
 
 test("devtools maintenance workflow previews and deletes only test variants", async () => {

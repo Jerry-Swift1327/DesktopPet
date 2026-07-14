@@ -127,6 +127,8 @@ function createRendererHarness() {
     buildNewVariantPreview: () => Promise.resolve({}),
     runNewVariant: () => Promise.resolve({}),
     buildReplaceActionsPreview: () => Promise.resolve({ previewId: "replace-preview", commands: [], targets: [] }),
+    buildDeleteActionPreview: () => Promise.resolve({ previewId: "delete-action-preview", action: "spin", canDelete: true, paths: [] }),
+    deleteAction: () => Promise.resolve({}),
     runReplaceActions: () => Promise.resolve({}),
     buildRenameAssetsPreview: () => Promise.resolve({}),
     runRenameAssets: () => Promise.resolve({}),
@@ -441,6 +443,14 @@ test("devtools maintenance replaces the action dropdown with existing action car
   assert.doesNotMatch(renderMaintainBody, /data-maintain-action|替换动作<\/label>/);
   assert.match(cssBlock(".maintain-metadata-basics"), /repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(cssBlock(".maintenance-actions"), /flex-wrap\s*:\s*nowrap\s*;/);
+});
+
+test("devtools maintenance action cards expose resource deletion previews", () => {
+  assert.match(appSource, /data-build-delete-action/);
+  assert.match(appSource, /data-confirm-delete-action/);
+  assert.match(appSource, /function renderDeleteActionPreview/);
+  assert.match(appSource, /resources\?\.resourceActions/);
+  assert.match(appSource, /孤立资源/);
 });
 
 test("devtools delete confirmation input updates without rerendering the focused input", () => {

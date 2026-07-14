@@ -21,6 +21,8 @@ const invokeContracts = [
   ["runRenameAssets", "devtools:runRenameAssets"],
   ["buildMetadataEditPreview", "devtools:buildMetadataEditPreview"],
   ["applyMetadataEdit", "devtools:applyMetadataEdit"],
+  ["buildDeleteActionPreview", "devtools:buildDeleteActionPreview"],
+  ["deleteAction", "devtools:deleteAction"],
   ["buildDeleteVariantPreview", "devtools:buildDeleteVariantPreview"],
   ["deleteTestVariant", "devtools:deleteTestVariant"]
 ];

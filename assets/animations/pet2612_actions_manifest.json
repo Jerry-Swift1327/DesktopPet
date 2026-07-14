@@ -257,13 +257,13 @@
     "alignReferenceCenterX": true,
     "alignReferenceBottom": true,
     "alignReferenceMaxShift": 32,
-    "frameCount": 168,
+    "frameCount": 143,
     "loopStart": 0,
-    "loopEnd": 167,
-    "sourceLoopStart": 0,
-    "sourceLoopEnd": 167,
+    "loopEnd": 142,
+    "sourceLoopStart": 8,
+    "sourceLoopEnd": 150,
     "score": 0.0,
-    "loopSelection": "full"
+    "loopSelection": "manual"
   },
   {
     "action": "pet2612_splits",
@@ -298,13 +298,13 @@
     "trimGroundPadding": 1,
     "stableGroundMode": "processed-subject-components",
     "stableGroundMaxShift": 32,
-    "frameCount": 168,
+    "frameCount": 163,
     "loopStart": 0,
-    "loopEnd": 167,
-    "sourceLoopStart": 0,
+    "loopEnd": 162,
+    "sourceLoopStart": 5,
     "sourceLoopEnd": 167,
     "score": 0.0,
-    "loopSelection": "full"
+    "loopSelection": "manual"
   },
   {
     "action": "pet2612_stretch",
@@ -339,13 +339,13 @@
     "trimGroundPadding": 1,
     "stableGroundMode": "processed-subject-components",
     "stableGroundMaxShift": 32,
-    "frameCount": 168,
+    "frameCount": 145,
     "loopStart": 0,
-    "loopEnd": 167,
-    "sourceLoopStart": 0,
-    "sourceLoopEnd": 167,
+    "loopEnd": 144,
+    "sourceLoopStart": 1,
+    "sourceLoopEnd": 145,
     "score": 0.0,
-    "loopSelection": "full"
+    "loopSelection": "manual"
   },
   {
     "action": "pet2612_spin",

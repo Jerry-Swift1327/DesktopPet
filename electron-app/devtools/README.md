@@ -37,11 +37,12 @@ npm.cmd run devtools
 ## 维护宠物流程
 
 1. 在“维护宠物”中选择已有宠物。
-2. “替换动作资源”直接显示当前变体已有动作。为一个或多个动作选择新的 `.mp4`，分别设置完整帧、自动选取或手动范围，生成批量替换预览后统一确认执行。底层按顺序调用 `tools/process_pet_actions.py replace` 更新动作资源和 manifest。
+2. “替换动作资源”直接显示当前变体已有动作，也会标出磁盘或 manifest 中存在但元数据未登记的孤立动作。为一个或多个动作选择新的 `.mp4`，分别设置完整帧、自动选取或手动范围，生成批量替换预览后统一确认执行。底层按顺序调用 `tools/process_pet_actions.py replace` 更新动作资源和 manifest。
 3. 修改信息/元数据时编辑同一行中的 `species`、`tier`、`version`，并通过多选和 notes 标准项/自定义输入编辑动作及功能列表。
 4. 新勾选的动作会显示在“新增动作源视频”卡片区。每个新增动作都必须选择 `.mp4` 并设置运行帧模式，元数据预览会同时列出字段 diff 和动作处理命令。新增动作使用 `process --variant <assetPrefix> --actions <action> --video <source>` 创建资源目录、帧、`loop.json` 和 manifest 条目；已有动作替换继续使用 `replace`。
 5. 确认元数据修改后，工具先处理全部新增动作视频；全部成功后才写入 `electron/pet-variant-metadata.json`。视频处理失败不会提前写入元数据。
 6. 修改信息前可点击“取消修改并清空记录”恢复当前宠物元数据草稿，并清空新增动作视频选择、diff 和执行记录。
+7. 动作卡片中的“删除资源”会先预览动作目录、manifest 条目和动作级元数据变更，确认后同步删除资源目录、manifest 条目、`actions` 声明、`actionLabelOverrides` 与 `actionStatEffects`。套餐必需动作、仍被功能依赖的动作以及被其他变体共用的动作资源禁止删除。
 
 ## 删除宠物
 

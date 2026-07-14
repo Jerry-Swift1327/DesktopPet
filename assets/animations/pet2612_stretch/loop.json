@@ -31,11 +31,11 @@
   "trimGroundPadding": 1,
   "stableGroundMode": "processed-subject-components",
   "stableGroundMaxShift": 32,
-  "frameCount": 168,
+  "frameCount": 145,
   "loopStart": 0,
-  "loopEnd": 167,
-  "sourceLoopStart": 0,
-  "sourceLoopEnd": 167,
+  "loopEnd": 144,
+  "sourceLoopStart": 1,
+  "sourceLoopEnd": 145,
   "score": 0.0,
-  "loopSelection": "full"
+  "loopSelection": "manual"
 }

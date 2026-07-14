@@ -179,6 +179,14 @@ function getVariantDetails(input, options = {}) {
     .concat(profile.actionAssets || profile.extraAnimationAssets || [])
     .map((action) => path.join(animationsRoot, `${profile.assetPrefix}_${actionPool[action].asset}`));
   const manifest = path.join(animationsRoot, `${profile.assetPrefix}_actions_manifest.json`);
+  const resourceActions = Object.entries(actionPool)
+    .filter(([, config]) => config.asset)
+    .map(([action, config]) => ({
+      action,
+      path: path.join(animationsRoot, `${profile.assetPrefix}_${config.asset}`),
+      registered: getProfileActionKeys(profile).includes(action)
+    }))
+    .filter((item) => fs.existsSync(item.path));
   return {
     ...buildVariantSummary(profile),
     profile,
@@ -186,6 +194,7 @@ function getVariantDetails(input, options = {}) {
     resources: {
       animationFolders,
       manifest,
+      resourceActions,
       existingPaths: animationFolders.concat(manifest).filter((item) => fs.existsSync(item))
     }
   };
@@ -859,6 +868,135 @@ function findMissingActionResources(profile, animationsRoot, plannedActions = []
     .filter((resourcePath) => !fs.existsSync(resourcePath));
 }
 
+function buildDeleteActionPreview(payload = {}, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const id = String(payload.id || "");
+  const action = String(payload.action || "");
+  const metadata = readMetadataFile(metadataFile);
+  const variants = getMetadataVariants(metadata);
+  if (!variants[id]) {
+    throw new Error(`Invalid pet variant: ${id}`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(actionPool, action) || !actionPool[action].asset) {
+    throw new Error(`Unknown pet action ${action}.`);
+  }
+
+  const profile = getVariantProfileFromMetadata(id, metadata);
+  const assetPrefix = getProfileAssetPrefix(profile);
+  const sharedVariants = Object.values(getVariantProfilesFromMetadata(metadata))
+    .filter((item) => item.id !== id
+      && getProfileAssetPrefix(item) === assetPrefix
+      && getProfileActionKeys(item).includes(action))
+    .map((item) => item.id);
+  const tierProfile = getTierProfiles()[profile.tier];
+  const requiredActions = uniqueList((tierProfile.actionButtons || []).concat(tierProfile.actionAssets || []));
+  const dependencies = [];
+  if (action === "yawn" && profile.features?.idleYawn) {
+    dependencies.push("idleYawn");
+  }
+
+  const actionName = `${assetPrefix}_${actionPool[action].asset}`;
+  const actionPath = path.join(animationsRoot, actionName);
+  const manifestPath = getManifestPath(animationsRoot, assetPrefix);
+  const manifestExisted = fs.existsSync(manifestPath);
+  const manifestBefore = manifestExisted
+    ? JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+    : [];
+  if (!Array.isArray(manifestBefore)) {
+    throw new Error(`Action manifest must be an array: ${manifestPath}`);
+  }
+  const manifestAfter = manifestBefore.filter((entry) => entry?.action !== actionName);
+  const rawBefore = clonePlainObject(variants[id]);
+  const rawAfter = clonePlainObject(rawBefore);
+  rawAfter.actions = rawAfter.actions || { buttons: [], assets: [] };
+  rawAfter.actions.buttons = (rawAfter.actions.buttons || []).filter((item) => item !== action);
+  rawAfter.actions.assets = (rawAfter.actions.assets || []).filter((item) => item !== action);
+  for (const field of ["actionLabelOverrides", "actionStatEffects"]) {
+    if (rawAfter[field] && Object.prototype.hasOwnProperty.call(rawAfter[field], action)) {
+      delete rawAfter[field][action];
+      if (Object.keys(rawAfter[field]).length === 0) {
+        delete rawAfter[field];
+      }
+    }
+  }
+  const metadataAfterApply = clonePlainObject(metadata);
+  metadataAfterApply.variants[id] = rawAfter;
+  const registered = getProfileActionKeys(profile).includes(action);
+  const hasDirectory = fs.existsSync(actionPath);
+  const hasManifestEntry = manifestAfter.length !== manifestBefore.length;
+  const blockers = [];
+  if (requiredActions.includes(action)) blockers.push(`动作 ${action} 是 ${profile.tier} 套餐的必需动作`);
+  if (dependencies.length > 0) blockers.push(`功能 ${dependencies.join(", ")} 仍依赖动作 ${action}`);
+  if (sharedVariants.length > 0) blockers.push(`资源前缀 ${assetPrefix} 还被变体 ${sharedVariants.join(", ")} 共用`);
+  if (!registered && !hasDirectory && !hasManifestEntry) blockers.push(`未找到动作 ${action} 的资源或元数据`);
+
+  return {
+    kind: "deleteAction",
+    id,
+    action,
+    actionName,
+    actionPath,
+    manifestPath,
+    metadataFile,
+    animationsRoot,
+    registered,
+    orphaned: !registered && (hasDirectory || hasManifestEntry),
+    hasDirectory,
+    hasManifestEntry,
+    sharedVariants,
+    dependencies,
+    canDelete: blockers.length === 0,
+    reason: blockers.join("；") || null,
+    paths: hasDirectory ? [actionPath] : [],
+    metadataDiff: buildMetadataDiff(rawBefore, rawAfter, {
+      actions: true,
+      actionLabelOverrides: true,
+      actionStatEffects: true
+    }),
+    manifestRemovedEntries: manifestBefore.length - manifestAfter.length,
+    manifestExisted,
+    manifestBefore,
+    manifestAfter,
+    metadataBefore: metadata,
+    metadataAfterApply
+  };
+}
+
+function applyDeleteAction(preview, options = {}) {
+  if (!preview || preview.kind !== "deleteAction" || !preview.canDelete) {
+    throw new Error(preview?.reason || "Cannot apply delete action preview.");
+  }
+  const metadataFile = options.metadataFile || preview.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || preview.animationsRoot || defaultAnimationsRoot;
+  if (!isInsideOrSame(animationsRoot, preview.actionPath) || !isInsideOrSame(animationsRoot, preview.manifestPath)) {
+    throw new Error("Refusing to delete action resources outside the animations root.");
+  }
+  const quarantinePath = `${preview.actionPath}.delete-${process.pid}-${Date.now()}`;
+  let moved = false;
+  try {
+    if (preview.hasDirectory && fs.existsSync(preview.actionPath)) {
+      fs.renameSync(preview.actionPath, quarantinePath);
+      moved = true;
+    }
+    if (preview.manifestExisted) {
+      writeMetadataFile(preview.manifestAfter, preview.manifestPath);
+    }
+    writeMetadataFile(preview.metadataAfterApply, metadataFile);
+    if (moved) fs.rmSync(quarantinePath, { recursive: true, force: true });
+    return { id: preview.id, action: preview.action, deleted: true, paths: preview.paths };
+  } catch (error) {
+    if (preview.manifestExisted) {
+      writeMetadataFile(preview.manifestBefore, preview.manifestPath);
+    }
+    writeMetadataFile(preview.metadataBefore, metadataFile);
+    if (moved && fs.existsSync(quarantinePath) && !fs.existsSync(preview.actionPath)) {
+      fs.renameSync(quarantinePath, preview.actionPath);
+    }
+    throw error;
+  }
+}
+
 function findFeatureMissingActionResources(profile, animationsRoot, plannedActions = []) {
   const planned = new Set(plannedActions);
   const requiredActions = [];
@@ -1352,6 +1490,8 @@ module.exports = {
   applyAddActionPlanAsync,
   buildMetadataEditPreview,
   applyMetadataEdit,
+  buildDeleteActionPreview,
+  applyDeleteAction,
   buildDeleteVariantPreview,
   applyDeleteVariant,
   bootstrapVariant,

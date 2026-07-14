@@ -260,6 +260,27 @@ ipcMain.handle("devtools:applyMetadataEdit", async (event, previewId) => {
   }
 });
 
+ipcMain.handle("devtools:buildDeleteActionPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildDeleteActionPreview(payload || {});
+});
+
+ipcMain.handle("devtools:deleteAction", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) {
+    throw new Error("已有 devtools 任务正在执行。");
+  }
+  activeRun = workflow.deleteAction(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
 ipcMain.handle("devtools:buildDeleteVariantPreview", (event, id) => {
   assertDevtoolsSender(event);
   return workflow.buildDeleteVariantPreview(id);

@@ -3,7 +3,7 @@ const appNode = document.getElementById("app");
 const sidebarNode = document.querySelector(".sidebar");
 
 const newVariantStages = ["prepareStaging", "writeMetadata", "copyVideos", "processVideos", "runPreflight", "generateGallery", "complete"];
-const maintenanceStages = ["replaceAction", "addAction", "renameAssets", "writeMetadataEdit", "deleteVariantResources", "complete"];
+const maintenanceStages = ["replaceAction", "addAction", "renameAssets", "writeMetadataEdit", "deleteActionResources", "deleteVariantResources", "complete"];
 const allStageNames = Array.from(new Set(newVariantStages.concat(maintenanceStages)));
 
 const stageLabels = {
@@ -17,6 +17,7 @@ const stageLabels = {
   replaceAction: "替换动作",
   addAction: "新增动作",
   writeMetadataEdit: "写入维护元数据",
+  deleteActionResources: "删除动作资源",
   deleteVariantResources: "删除测试资源",
   complete: "完成",
   task: "任务",
@@ -49,6 +50,7 @@ const stageWeights = {
   replaceAction: 72,
   addAction: 72,
   writeMetadataEdit: 84,
+  deleteActionResources: 90,
   deleteVariantResources: 90,
   complete: 100
 };
@@ -163,7 +165,9 @@ const state = {
       featuresDisable: []
     },
     metadataPreview: null,
-    metadataPending: false
+    metadataPending: false,
+    deleteActionPreview: null,
+    deleteActionPending: false
   },
   deleteVariant: {
     selectedId: "",
@@ -274,6 +278,7 @@ function busy() {
     || state.catalog.galleryPending
     || state.maintain.replacePending
     || state.maintain.metadataPending
+    || state.maintain.deleteActionPending
     || state.deleteVariant.pending;
 }
 
@@ -379,6 +384,7 @@ function clearNewPreview() {
 function clearMaintainPreviews() {
   state.maintain.replacePreview = null;
   state.maintain.metadataPreview = null;
+  state.maintain.deleteActionPreview = null;
 }
 
 function markMetadataPreviewDirty() {
@@ -957,6 +963,12 @@ function syncMaintainFields(details) {
   };
 }
 
+function maintainResourceActions(details) {
+  const registered = actionsFromDetails(details);
+  const resources = (details?.resources?.resourceActions || []).map((item) => item.action);
+  return Array.from(new Set(registered.concat(resources)));
+}
+
 function renderMaintainSelectField(name, label, values, selected, disabled) {
   return `<label>${escapeHtml(label)}
     <select data-maintain-field="${escapeHtml(name)}"${disabled}>
@@ -1042,9 +1054,11 @@ function renderMaintainCardLoopControls(action, collectionName, dataPrefix) {
 
 function renderMaintainActionCard(action, { kind, video, loopModes, dataPrefix }) {
   const selected = Boolean(video);
-  const status = selected ? "manual" : (kind === "replace" ? "existing" : "missing");
-  const statusLabel = selected ? "已选择" : (kind === "replace" ? "当前资源" : "缺少视频");
-  const sourceLabel = selected ? "待处理视频" : (kind === "replace" ? "已有动作资源" : "新增动作");
+  const registered = actionsFromDetails(state.maintain.details).includes(action);
+  const orphaned = kind === "replace" && !registered;
+  const status = orphaned ? "pending" : (selected ? "manual" : (kind === "replace" ? "existing" : "missing"));
+  const statusLabel = orphaned ? "孤立资源" : (selected ? "已选择" : (kind === "replace" ? "当前资源" : "缺少视频"));
+  const sourceLabel = orphaned ? "元数据未登记" : (selected ? "待处理视频" : (kind === "replace" ? "已有动作资源" : "新增动作"));
   const sourceText = video || (kind === "replace"
     ? `${state.maintain.details.profile.assetPrefix}_${state.options.actions[action].asset}`
     : "未选择视频");
@@ -1058,7 +1072,10 @@ function renderMaintainActionCard(action, { kind, video, loopModes, dataPrefix }
       <p>${escapeHtml(sourceText)}</p>
       ${renderMaintainCardLoopControls(action, loopModes, dataPrefix)}
     </div>
-    <button type="button" data-${dataPrefix}-video="${escapeHtml(action)}"${busy() ? " disabled" : ""}>${selected ? "更换视频" : (kind === "replace" ? "替换视频" : "选择视频")}</button>
+    <div class="action-controls">
+      <button type="button" data-${dataPrefix}-video="${escapeHtml(action)}"${busy() ? " disabled" : ""}>${selected ? "更换视频" : (kind === "replace" ? "替换视频" : "选择视频")}</button>
+      ${kind === "replace" ? `<button type="button" class="danger-button" data-build-delete-action="${escapeHtml(action)}"${busy() ? " disabled" : ""}>删除资源</button>` : ""}
+    </div>
   </article>`;
 }
 
@@ -1070,7 +1087,7 @@ function newlyEnabledActions() {
 }
 
 function renderReplacementCards() {
-  return actionsFromDetails(state.maintain.details).map((action) => renderMaintainActionCard(action, {
+  return maintainResourceActions(state.maintain.details).map((action) => renderMaintainActionCard(action, {
     kind: "replace",
     video: state.maintain.replacementVideos[action] || "",
     loopModes: "replacementLoopModes",
@@ -1136,6 +1153,7 @@ function renderMaintainVariant() {
           <section><h3>替换命令</h3><pre>${renderJson(state.maintain.replacePreview.commands)}</pre></section>
           <section><h3>目标资源</h3><pre>${renderJson(state.maintain.replacePreview.targets)}</pre></section>
         </div>` : ""}
+        ${renderDeleteActionPreview()}
       </section>
 
       <section class="panel">
@@ -1155,6 +1173,21 @@ function renderMaintainVariant() {
       ${renderVariantDetails(details)}
       ${renderExecution()}
     </div>
+  </div>`;
+}
+
+function renderDeleteActionPreview() {
+  const preview = state.maintain.deleteActionPreview;
+  if (!preview) return "";
+  return `<div class="metadata-diff delete-action-preview">
+    <h3>删除动作资源预览：${escapeHtml(preview.action)}</h3>
+    ${preview.orphaned ? `<p class="muted">这是磁盘或 manifest 中存在、但元数据未登记的孤立动作资源。</p>` : ""}
+    ${preview.reason ? `<p class="danger">${escapeHtml(preview.reason)}</p>` : ""}
+    <div class="preview-grid">
+      <section><h3>删除路径</h3><pre>${renderJson(preview.paths || [])}</pre></section>
+      <section><h3>同步清理</h3><pre>${renderJson({ manifestEntries: preview.manifestRemovedEntries, metadataDiff: preview.metadataDiff || [] })}</pre></section>
+    </div>
+    <button type="button" class="danger-button" data-confirm-delete-action="${escapeHtml(preview.previewId)}"${busy() || !preview.canDelete ? " disabled" : ""}>确认删除动作资源</button>
   </div>`;
 }
 
@@ -1609,6 +1642,50 @@ async function applyMetadataEdit(previewId) {
   }
 }
 
+async function buildDeleteActionPreview(action) {
+  if (busy() || !state.maintain.selectedId || !action) {
+    return;
+  }
+  state.maintain.deleteActionPending = true;
+  state.maintain.deleteActionPreview = null;
+  renderPreservingScroll();
+  try {
+    state.maintain.deleteActionPreview = await api.buildDeleteActionPreview({
+      id: state.maintain.selectedId,
+      action
+    });
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.maintain.deleteActionPending = false;
+    renderPreservingScroll();
+  }
+}
+
+async function deleteAction(previewId) {
+  if (busy() || !previewId || !window.confirm("确认删除这个动作的资源、manifest 条目和对应元数据吗？")) {
+    return;
+  }
+  state.running = true;
+  state.activeOperation = "maintainVariant";
+  state.logs = [];
+  state.stages = {};
+  renderPreservingScroll();
+  try {
+    await api.deleteAction(previewId);
+    state.stages.complete = "done";
+    state.maintain.deleteActionPreview = null;
+    await refreshVariants({ preserveScroll: true });
+    await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    renderPreservingScroll();
+  }
+}
+
 async function buildDeletePreview() {
   if (busy() || !state.deleteVariant.selectedId) {
     return;
@@ -1779,6 +1856,7 @@ appNode.addEventListener("change", async (event) => {
     state.maintain.replacementLoopModes = {};
     state.maintain.newActionVideos = {};
     state.maintain.newActionLoopModes = {};
+    state.maintain.deleteActionPreview = null;
     await loadMaintainDetails(event.target.value);
   } else if (event.target.dataset.replaceLoopMode !== undefined) {
     maintainLoopModeFor("replacementLoopModes", event.target.dataset.replaceLoopMode).mode = event.target.value;
@@ -1897,6 +1975,10 @@ appNode.addEventListener("click", async (event) => {
     await buildMetadataPreview();
   } else if (event.target.dataset.applyMetadataEdit) {
     await applyMetadataEdit(event.target.dataset.applyMetadataEdit);
+  } else if (event.target.dataset.buildDeleteAction) {
+    await buildDeleteActionPreview(event.target.dataset.buildDeleteAction);
+  } else if (event.target.dataset.confirmDeleteAction) {
+    await deleteAction(event.target.dataset.confirmDeleteAction);
   } else if (event.target.dataset.buildDeletePreview !== undefined) {
     await buildDeletePreview();
   } else if (event.target.dataset.deleteConfirm) {

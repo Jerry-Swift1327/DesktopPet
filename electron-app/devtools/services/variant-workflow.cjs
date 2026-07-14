@@ -13,6 +13,8 @@ const {
   applyAddActionPlanAsync,
   buildMetadataEditPreview: buildCliMetadataEditPreview,
   applyMetadataEdit: applyCliMetadataEdit,
+  buildDeleteActionPreview: buildCliDeleteActionPreview,
+  applyDeleteAction: applyCliDeleteAction,
   buildDeleteVariantPreview: buildCliDeleteVariantPreview,
   applyDeleteVariant: applyCliDeleteVariant,
   generateVariantGallery,
@@ -562,6 +564,26 @@ function createVariantWorkflow(options = {}) {
     }
   }
 
+  function buildDeleteActionPreview(payload = {}) {
+    return storePreview("deleteAction", buildCliDeleteActionPreview(payload, { metadataFile, animationsRoot }));
+  }
+
+  async function deleteAction(previewId, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== "deleteAction") {
+      throw new Error(`未找到删除动作预览方案：${previewId}`);
+    }
+    emitHook(hooks, "onStage", { stage: "deleteActionResources", status: "running" });
+    try {
+      const result = applyCliDeleteAction(entry.preview, { metadataFile, animationsRoot });
+      emitHook(hooks, "onStage", { stage: "deleteActionResources", status: "done" });
+      return result;
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage: "deleteActionResources", status: "failed", error: error.message });
+      throw error;
+    }
+  }
+
   function buildDeleteVariantPreview(id) {
     return storePreview("deleteVariant", buildCliDeleteVariantPreview(id, {
       metadataFile,
@@ -609,6 +631,8 @@ function createVariantWorkflow(options = {}) {
     runRenameAssets,
     buildMetadataEditPreview,
     applyMetadataEdit,
+    buildDeleteActionPreview,
+    deleteAction,
     buildDeleteVariantPreview,
     deleteTestVariant
   };

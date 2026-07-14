@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("variantDevtools", {
   runRenameAssets: (previewId) => ipcRenderer.invoke("devtools:runRenameAssets", previewId),
   buildMetadataEditPreview: (payload) => ipcRenderer.invoke("devtools:buildMetadataEditPreview", payload),
   applyMetadataEdit: (previewId) => ipcRenderer.invoke("devtools:applyMetadataEdit", previewId),
+  buildDeleteActionPreview: (payload) => ipcRenderer.invoke("devtools:buildDeleteActionPreview", payload),
+  deleteAction: (previewId) => ipcRenderer.invoke("devtools:deleteAction", previewId),
   buildDeleteVariantPreview: (id) => ipcRenderer.invoke("devtools:buildDeleteVariantPreview", id),
   deleteTestVariant: (previewId) => ipcRenderer.invoke("devtools:deleteTestVariant", previewId),
   onTaskLog: (callback) => subscribe("devtools:taskLog", callback),
