@@ -388,6 +388,38 @@
         ],
         "disable": []
       }
+    },
+    "pet2612": {
+      "id": "pet2612",
+      "date": "2026-07-13",
+      "scope": "custom",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "客户定制-基础",
+      "version": "1.0",
+      "scale": 1.1,
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "pet2612",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": [
+          "yawn"
+        ]
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "idleYawn"
+        ],
+        "disable": []
+      }
     }
   }
 }

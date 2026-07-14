@@ -141,6 +141,7 @@ def process_action_core(
     clean_raw: bool = False,
     is_replace: bool = False,
     direction_count: int | None = None,
+    freeze_last_frame: bool = False,
 ) -> dict[str, object]:
     """Core processing logic shared by process and replace subcommands."""
     action_dir = ANIMATIONS_ROOT / action
@@ -213,6 +214,8 @@ def process_action_core(
         "sourceFrameCount": processed_frame_count,
     }
     metadata.update(processing_info)
+    if freeze_last_frame:
+        metadata["freezeLastFrame"] = True
     if trim_ground_alpha_auto:
         metadata["trimGroundAlphaMode"] = "processed-auto"
         metadata["trimGroundAlpha"] = processed_trim_ground_alpha
@@ -420,7 +423,7 @@ def preserve_existing_metadata(action_dir: Path, metadata: dict[str, object]) ->
         existing = json.loads(metadata_path.read_text(encoding="utf-8"))
     except Exception:
         return
-    for key in ("tailLoopStart",):
+    for key in ("tailLoopStart", "freezeLastFrame"):
         if key in existing and key not in metadata:
             metadata[key] = existing[key]
 
@@ -545,6 +548,7 @@ def cmd_process(args: argparse.Namespace) -> None:
             keep_raw=args.keep_raw,
             clean_raw=args.clean_raw,
             direction_count=args.direction_count,
+            freeze_last_frame=args.freeze_last_frame,
         )
         results.append(metadata)
 
@@ -614,6 +618,7 @@ def cmd_replace(args: argparse.Namespace) -> None:
         clean_raw=args.clean_raw,
         is_replace=True,
         direction_count=args.direction_count,
+        freeze_last_frame=args.freeze_last_frame,
     )
 
     print(f"\nReplaced action '{args.action}'")
@@ -669,6 +674,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     raw_group.add_argument("--keep-raw", action="store_true", help="Keep raw_frames after processing. This is the default.")
     raw_group.add_argument("--clean-raw", action="store_true", help="Remove raw_frames after processing.")
     parser.add_argument("--direction-count", type=int, default=None, help="Sample N direction frames (for eye-tracking actions like tabby_look).")
+    parser.add_argument("--freeze-last-frame", action="store_true", help="Freeze the final runtime frame instead of looping the selected frame range.")
 
 
 def cmd_audit(args: argparse.Namespace) -> None:

@@ -102,6 +102,7 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
   const ragdollConfig = buildPetRuntimeConfig({ variant: "pet2609" });
   const pet2610Config = buildPetRuntimeConfig({ variant: "pet2610" });
   const pet2611Config = buildPetRuntimeConfig({ variant: "pet2611" });
+  const pet2612Config = buildPetRuntimeConfig({ variant: "pet2612" });
 
   assert.equal(dogConfig.features.autoStart, true);
   assert.equal(dogConfig.features.windowDocking, true);
@@ -154,8 +155,16 @@ test("pet runtime config keeps variant features separate under pet ids", () => {
     "petBall"
   ]);
   assert.equal(pet2611Config.features.autoStart, true);
-  assert.equal(pet2611Config.features.windowDocking, true);
+  assert.equal(Boolean(pet2611Config.features.windowDocking), false);
   assert.equal(pet2611Config.features.idleYawn, true);
+  assert.equal(pet2612Config.features.autoStart, true);
+  assert.equal(pet2612Config.features.idleYawn, true);
+  assert.deepEqual(pet2612Config.actionOrder, [
+    "petSquat",
+    "petWalk",
+    "petFeed",
+    "petBall"
+  ]);
 });
 
 test("installer channel hides debug timers and uses compact panel height", () => {
@@ -182,6 +191,7 @@ test("variant metadata resolves pet ids species tiers and delivery fields", () =
   assert.deepEqual(getPetVariantProfile("pet2609").extraAnimationAssets, ["yawn", "hiss"]);
   assert.deepEqual(getPetVariantProfile("pet2610").extraAnimationAssets, ["shake", "yawn"]);
   assert.deepEqual(getPetVariantProfile("pet2611").extraAnimationAssets, ["yawn"]);
+  assert.deepEqual(getPetVariantProfile("pet2612").extraAnimationAssets, ["yawn"]);
   assert.deepEqual(getPetVariantProfile("pet2604").platforms, ["darwin"]);
 });
 
@@ -197,7 +207,8 @@ test("variant lists are sorted by date ascending", () => {
     "pet2608",
     "pet2609",
     "pet2610",
-    "pet2611"
+    "pet2611",
+    "pet2612"
   ]);
   assert.deepEqual(getPetVariantMetadataList().map((profile) => profile.id), PET_VARIANT_IDS);
 });
@@ -221,17 +232,17 @@ test("new variant drafts derive V2 fields version notes and delivery defaults", 
   const customDraft = createPetVariantMetadataDraft({
     species: "cat",
     tier: "advanced",
-    date: "2026-07-08"
+    date: "2026-07-14"
   });
   const internalDraft = createPetVariantMetadataDraft({
     species: "dog",
     scope: "internal",
     tier: "basic",
-    date: "2026-07-08"
+    date: "2026-07-14"
   });
   const profile = resolvePetVariantProfile(customDraft);
 
-  assert.equal(customDraft.id, "pet2612");
+  assert.equal(customDraft.id, "pet2613");
   assert.equal(customDraft.notes, "客户定制-高级");
   assert.equal(customDraft.version, "1.0");
   assert.equal(internalDraft.version, "1.4");
@@ -240,17 +251,17 @@ test("new variant drafts derive V2 fields version notes and delivery defaults", 
   assert.equal(profile.species, "cat");
   assert.equal(profile.tier, "advanced");
   assert.deepEqual(profile.platforms, ["win32"]);
-  assert.deepEqual(profile.deliveryPathSegments, ["custom", "pet2612"]);
-  assert.equal(profile.animationPrefix, "pet2612");
+  assert.deepEqual(profile.deliveryPathSegments, ["custom", "pet2613"]);
+  assert.equal(profile.animationPrefix, "pet2613");
   assert.match(profile.installerGuid, /^[0-9a-f-]{36}$/);
-  assert.equal(createVariantInstallerGuid("pet2612"), createVariantInstallerGuid("pet2612"));
+  assert.equal(createVariantInstallerGuid("pet2613"), createVariantInstallerGuid("pet2613"));
 });
 
 test("explicit feature draft overrides do not inherit tier feature defaults", () => {
   const draft = createPetVariantMetadataDraft({
     species: "cat",
     tier: "advanced",
-    date: "2026-07-08",
+    date: "2026-07-14",
     features: {
       enable: ["autoStart", "windowRoam"],
       disable: []
@@ -269,7 +280,7 @@ test("new variant drafts enable drag window docking by default without forcing i
   const draft = createPetVariantMetadataDraft({
     species: "cat",
     tier: "basic",
-    date: "2026-07-08"
+    date: "2026-07-14"
   });
   const profile = resolvePetVariantProfile(draft);
 
@@ -320,10 +331,10 @@ test("variant namespace rejects duplicate ids and V2 validation rejects unknown 
 });
 
 test("custom variant ids use pet-year sequence across dated variants", () => {
-  assert.equal(createNextPetVariantId({ date: "2026-07-07" }), "pet2612");
-  assert.equal(createNextPetVariantId({ date: "2026-07-08" }), "pet2612");
+  assert.equal(createNextPetVariantId({ date: "2026-07-13" }), "pet2613");
+  assert.equal(createNextPetVariantId({ date: "2026-07-14" }), "pet2613");
   assert.equal(createNextPetVariantId({ date: "2027-01-01" }), "pet2701");
-  assert.throws(() => createNextPetVariantId({ date: "2026-07-06" }), /would require resequencing/);
+  assert.throws(() => createNextPetVariantId({ date: "2026-07-12" }), /would require resequencing/);
 });
 
 test("test scope variants use independent pettest ids and do not affect official sequences", () => {
@@ -455,9 +466,17 @@ test("existing variants keep the current animation folder convention", () => {
     "pet2611_ball",
     "pet2611_yawn"
   ]);
+  assert.deepEqual(getVariantAnimationFolders("pet2612"), [
+    "pet2612_squat",
+    "pet2612_walk",
+    "pet2612_feed",
+    "pet2612_ball",
+    "pet2612_yawn"
+  ]);
   assert.equal(getVariantManifestName("pet2602"), "cat_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2605"), "tabby_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2609"), "ragdoll_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2610"), "pet2610_actions_manifest.json");
   assert.equal(getVariantManifestName("pet2611"), "pet2611_actions_manifest.json");
+  assert.equal(getVariantManifestName("pet2612"), "pet2612_actions_manifest.json");
 });

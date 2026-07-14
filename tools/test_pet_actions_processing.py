@@ -37,7 +37,13 @@ def make_green_frame(path: Path, box: tuple[int, int, int, int], size: tuple[int
 
 
 class PetActionProcessingTests(unittest.TestCase):
-    def run_fake_action_processing(self, *, clean_raw: bool = False, keep_raw: bool = False) -> bool:
+    def run_fake_action_processing(
+        self,
+        *,
+        clean_raw: bool = False,
+        keep_raw: bool = False,
+        freeze_last_frame: bool = False,
+    ) -> tuple[bool, dict[str, object]]:
         import process_pet_actions as cli
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -65,7 +71,7 @@ class PetActionProcessingTests(unittest.TestCase):
 
                 cli.extract_frames = fake_extract_frames
                 cli.process_frames_to_processed = fake_process_frames_to_processed
-                cli.process_action_core(
+                metadata = cli.process_action_core(
                     action="test_squat",
                     ffmpeg="ffmpeg",
                     fps="1",
@@ -73,20 +79,21 @@ class PetActionProcessingTests(unittest.TestCase):
                     no_loop=True,
                     keep_raw=keep_raw,
                     clean_raw=clean_raw,
+                    freeze_last_frame=freeze_last_frame,
                 )
-                return (action_dir / "raw_frames" / "frame_000.png").exists()
+                return (action_dir / "raw_frames" / "frame_000.png").exists(), metadata
             finally:
                 cli.ANIMATIONS_ROOT = original_root
                 cli.extract_frames = original_extract
                 cli.process_frames_to_processed = original_process
 
     def test_process_action_core_keeps_raw_frames_by_default(self) -> None:
-        raw_frame_exists = self.run_fake_action_processing()
+        raw_frame_exists, _metadata = self.run_fake_action_processing()
 
         self.assertTrue(raw_frame_exists)
 
     def test_process_action_core_clean_raw_removes_raw_frames(self) -> None:
-        raw_frame_exists = self.run_fake_action_processing(clean_raw=True)
+        raw_frame_exists, _metadata = self.run_fake_action_processing(clean_raw=True)
 
         self.assertFalse(raw_frame_exists)
 
@@ -106,6 +113,27 @@ class PetActionProcessingTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             with contextlib.redirect_stderr(io.StringIO()):
                 parser.parse_args(["--keep-raw", "--clean-raw"])
+
+    def test_freeze_last_frame_cli_flag_and_existing_metadata_are_preserved(self) -> None:
+        from process_pet_actions import add_common_args, preserve_existing_metadata
+
+        parser = argparse.ArgumentParser()
+        add_common_args(parser)
+        self.assertTrue(parser.parse_args(["--freeze-last-frame"]).freeze_last_frame)
+        _raw_frame_exists, generated_metadata = self.run_fake_action_processing(freeze_last_frame=True)
+        self.assertTrue(generated_metadata["freezeLastFrame"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            action_dir = Path(tmp)
+            (action_dir / "loop.json").write_text(
+                '{"tailLoopStart": 12, "freezeLastFrame": true}',
+                encoding="utf-8",
+            )
+            metadata: dict[str, object] = {}
+            preserve_existing_metadata(action_dir, metadata)
+
+            self.assertEqual(metadata["tailLoopStart"], 12)
+            self.assertTrue(metadata["freezeLastFrame"])
 
     def test_trim_ground_alpha_remnants_auto_clears_only_low_alpha_tail(self) -> None:
         from pet_actions.chroma import trim_ground_alpha_remnants_auto

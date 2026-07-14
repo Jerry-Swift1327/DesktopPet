@@ -476,6 +476,9 @@ function appendActionProcessingArgs(processArgs, action, options = {}) {
   } else if (preset === "direction64") {
     processArgs.push("--direction-count", "64");
   }
+  if (options.freezeLastFrame) {
+    processArgs.push("--freeze-last-frame");
+  }
 
   const loopMode = normalizeLoopMode(options.loopMode, options);
   if (preset !== "direction64") {
@@ -555,7 +558,8 @@ function buildBootstrapPlan(args, options = {}) {
     command: "python",
     args: getProcessArgs(draft.assetPrefix, action, {
       useFullRange: Boolean(args["use-full-range"]),
-      loopMode: loopModes[action]
+      loopMode: loopModes[action],
+      freezeLastFrame: action === "yawn" && draft.features.enable.includes("idleYawn")
     })
   }));
   const preflightCommands = ["release", "installer"].map((channel) => ({

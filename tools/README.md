@@ -90,6 +90,7 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--source-frames-dedupe-threshold` | 配合 `--source-frames` 记录这些显式帧来自相邻去重选择，并写入去重阈值 |
 | `--search-start` / `--search-end` | 限制自动寻找循环段的源范围 |
 | `--use-full-range` | 使用完整抽帧范围 |
+| `--freeze-last-frame` | 将最终运行帧定格，不再循环所选帧段；新建且启用 `idleYawn` 的变体会对 yawn 自动添加此参数 |
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
 | `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
 | `--clean-detached-artifacts` | 在素材池阶段清理主体外的小型离散 alpha 组件，例如抠像后残留的水印碎片 |
@@ -201,6 +202,7 @@ python tools\process_pet_actions.py audit --variants tabby van bshmitted
 ### 新资源几何建议
 - 对新加入的变体和动作，优先使用默认 `source-canvas` 保留源视频构图；如果源视频本身主体整体偏左或偏右，再用 `--center-visible-action-x` 修正动作级画布 X 偏心。该参数只计算一次中位可见中心并对所有帧应用同一个平移，不会逐帧抵消动作本身的运动。
 - `variant:bootstrap` 会对 `grounded` 和 `nearSquat` 预设自动启用 `--stable-ground`，日常从 Devtools 新增变体时无需手动处理底部小型残点；生成后仍建议用 `audit` 抽查 `groundArtifacts` 和 `stableGround.warnings`。
+- `variant:bootstrap` 为新建且启用 `idleYawn` 的变体处理 yawn 时，会自动写入 `freezeLastFrame: true`；已有变体重新生成动作时保留原 `loop.json` 的 `tailLoopStart` 或 `freezeLastFrame` 语义。
 - 对 `squat/lick/shake/yawn/hiss/look` 等近蹲坐动作，可在 squat 自身构图正确后，再叠加 `--align-reference-center-x --align-reference-bottom` 约束首帧和底线。
 - 对 `walk/ball/feed/sleep/lie/stretch` 等动作，不要默认强行匹配 squat 宽高；优先保证动作级构图、底线稳定和帧内漂移合理。
 

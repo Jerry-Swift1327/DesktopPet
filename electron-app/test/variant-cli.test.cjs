@@ -232,6 +232,33 @@ test("bootstrap dry-run builds a plan without writing metadata", () => {
   assert.deepEqual(metadata.variants, {});
 });
 
+test("bootstrap freezes yawn for new idleYawn variants only", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const sourceDir = path.join(tempDir, "downloads");
+  fs.mkdirSync(animationsRoot, { recursive: true });
+  writeMetadata(metadataFile);
+  writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball", "yawn"]);
+
+  const plan = buildBootstrapPlan(
+    {
+      species: "cat",
+      scope: "custom",
+      tier: "basic",
+      date: "2026-06-30",
+      source: sourceDir,
+      "action-assets": "yawn",
+      features: "autoStart,idleYawn"
+    },
+    { metadataFile, animationsRoot }
+  );
+  const byAction = Object.fromEntries(plan.processCommands.map((command) => [command.action, command.args]));
+
+  assert.equal(byAction.yawn.includes("--freeze-last-frame"), true);
+  assert.equal(["squat", "walk", "feed", "ball"].every((action) => !byAction[action].includes("--freeze-last-frame")), true);
+});
+
 test("bootstrap can use the full processed frame range for runtime frames", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
@@ -651,6 +678,7 @@ test("replace action plan builds process_pet_actions replace command with frame 
     "21"
   ]);
   assert.equal(plan.command.args.includes("--use-full-range"), false);
+  assert.equal(plan.command.args.includes("--freeze-last-frame"), false);
 });
 
 test("delete variant preview and apply only remove test-scope variant resources", () => {

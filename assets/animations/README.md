@@ -17,6 +17,7 @@
 | `pomeranian` | `pomeranian_squat`、`pomeranian_walk`、`pomeranian_feed`、`pomeranian_ball` |
 | `pet2610` | `pet2610_squat`、`pet2610_walk`、`pet2610_feed`、`pet2610_ball`、`pet2610_shake`、`pet2610_yawn` |
 | `pet2611` | `pet2611_squat`、`pet2611_walk`、`pet2611_feed`、`pet2611_ball`、`pet2611_yawn` |
+| `pet2612` | `pet2612_squat`、`pet2612_walk`、`pet2612_feed`、`pet2612_ball`、`pet2612_yawn` |
 
 ## 单个动作目录
 
@@ -63,8 +64,11 @@
 - `pomeranian_actions_manifest.json`
 - `pet2610_actions_manifest.json`
 - `pet2611_actions_manifest.json`
+- `pet2612_actions_manifest.json`
 
 manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新；生成阶段启用稳定贴地或主体外离散组件清理时，也会记录 `stableGround`、`detachedArtifacts` 等审计信息。
+
+新建且启用 `idleYawn` 的变体会在 bootstrap 处理 yawn 时自动写入 `freezeLastFrame: true`，运行时播放完整个所选帧段后定格最后一帧作为睡眠阶段。已有变体重新生成动作时保留原有的尾段循环或末帧冻结语义。
 
 ## 常用命令
 
