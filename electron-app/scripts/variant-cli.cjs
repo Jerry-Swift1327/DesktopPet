@@ -978,6 +978,38 @@ function buildReplaceActionPlan(payload = {}, options = {}) {
   };
 }
 
+function buildAddActionPlan(payload = {}, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const metadata = readMetadataFile(metadataFile);
+  const profile = getVariantProfileFromMetadata(payload.id, metadata);
+  const action = String(payload.action || "");
+  if (!Object.prototype.hasOwnProperty.call(actionPool, action)) {
+    throw new Error(`Unknown pet action ${action}. Register it in ACTION_POOL first.`);
+  }
+  const video = path.resolve(String(payload.video || payload.source || ""));
+  if (!video || !/\.mp4$/i.test(video) || !fs.existsSync(video) || !fs.statSync(video).isFile()) {
+    throw new Error(`New action video must be an existing .mp4 file: ${video}`);
+  }
+  const actionName = `${profile.assetPrefix}_${actionPool[action].asset}`;
+  const args = getProcessArgs(profile.assetPrefix, action, { loopMode: payload.loopMode });
+  args.splice(6, 0, "--video", video);
+  return {
+    kind: "addAction",
+    id: profile.id,
+    action,
+    video,
+    targetAction: path.join(animationsRoot, actionName),
+    manifest: path.join(animationsRoot, `${profile.assetPrefix}_actions_manifest.json`),
+    command: {
+      action,
+      cwd: projectRoot,
+      command: "python",
+      args
+    }
+  };
+}
+
 function applyReplaceActionPlan(plan, options = {}) {
   const runner = options.runCommand || runCommand;
   runner(plan.command.command, plan.command.args, { cwd: plan.command.cwd, stage: "replaceAction", onLog: options.onLog });
@@ -988,6 +1020,12 @@ async function applyReplaceActionPlanAsync(plan, options = {}) {
   const runner = options.runCommand || runCommandAsync;
   await runner(plan.command.command, plan.command.args, { cwd: plan.command.cwd, stage: "replaceAction", onLog: options.onLog });
   return { id: plan.id, action: plan.action, replaced: true };
+}
+
+async function applyAddActionPlanAsync(plan, options = {}) {
+  const runner = options.runCommand || runCommandAsync;
+  await runner(plan.command.command, plan.command.args, { cwd: plan.command.cwd, stage: "addAction", onLog: options.onLog });
+  return { id: plan.id, action: plan.action, added: true };
 }
 
 function getCurrentRuntimeVariant(runtimeAssetsRoot) {
@@ -1310,6 +1348,8 @@ module.exports = {
   buildReplaceActionPlan,
   applyReplaceActionPlan,
   applyReplaceActionPlanAsync,
+  buildAddActionPlan,
+  applyAddActionPlanAsync,
   buildMetadataEditPreview,
   applyMetadataEdit,
   buildDeleteVariantPreview,

@@ -31,9 +31,7 @@
           "windowRoam",
           "customization"
         ],
-        "disable": [
-          "switchPet"
-        ]
+        "disable": []
       }
     },
     "pet2602": {
@@ -407,7 +405,11 @@
           "squat",
           "walk",
           "feed",
-          "ball"
+          "ball",
+          "lick",
+          "splits",
+          "stretch",
+          "spin"
         ],
         "assets": [
           "yawn"

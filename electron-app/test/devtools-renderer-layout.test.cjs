@@ -437,10 +437,10 @@ test("devtools maintenance replaces the action dropdown with existing action car
   assert.match(renderMaintainBody, /renderReplacementCards\(\)/);
   assert.match(renderMaintainBody, /data-build-replace-preview/);
   assert.match(renderMaintainBody, /data-run-replace-actions/);
-  assert.match(renderMaintainBody, /class="maintenance-command-row"[\s\S]*data-build-replace-preview[\s\S]*data-run-replace-actions/);
+  assert.match(renderMaintainBody, /class="button-row source-actions maintenance-actions"[\s\S]*data-build-replace-preview[\s\S]*data-run-replace-actions/);
   assert.doesNotMatch(renderMaintainBody, /data-maintain-action|替换动作<\/label>/);
   assert.match(cssBlock(".maintain-metadata-basics"), /repeat\(3, minmax\(0, 1fr\)\)/);
-  assert.match(cssBlock(".maintenance-command-row"), /justify-content\s*:\s*space-between\s*;/);
+  assert.match(cssBlock(".maintenance-actions"), /flex-wrap\s*:\s*nowrap\s*;/);
 });
 
 test("devtools delete confirmation input updates without rerendering the focused input", () => {

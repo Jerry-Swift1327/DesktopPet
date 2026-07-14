@@ -21,7 +21,7 @@ node --test "test/**/*.test.cjs"
 | --- | --- | --- |
 | `walk-controller-window-frame.test.cjs` | 固定透明跑道回归：窗口表面逐步只推进 `spriteOffsetX`、方向镜像受边界约束、速度不依赖 frameStep，并从普通窗口 bounds 的可见中心初始化缺失的 `walkTrackX` | `../electron/behavior/walk-controller.cjs` |
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名、`windowDocking` 功能池与平台 gating、test scope 与 `pettest<seq>` 独立序列 | `../electron/pet-variants.cjs` |
-| `variant-cli.test.cjs` | 变体 CLI 的新建、校验、资源检查、动作源视频复制重命名、每动作帧段参数、维护预览/应用纯函数和图鉴生成 | `../scripts/variant-cli.cjs` |
+| `variant-cli.test.cjs` | 变体 CLI 的新建、校验、资源检查、动作源视频复制重命名、新增动作 `process` 与已有动作 `replace` 计划、每动作帧段参数、维护预览/应用纯函数和图鉴生成 | `../scripts/variant-cli.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |
 | `walk-controller-accessor.test.cjs` | walk-controller 访问器与 main.cjs 接线结构断言 | `../electron/behavior/walk-controller.cjs`、`../electron/main.cjs` |
 | `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除、`windowDocking` 关闭时不启动窗口表面轮询与 main.cjs 薄包装接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |

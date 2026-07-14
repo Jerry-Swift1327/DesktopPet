@@ -3,7 +3,7 @@ const appNode = document.getElementById("app");
 const sidebarNode = document.querySelector(".sidebar");
 
 const newVariantStages = ["prepareStaging", "writeMetadata", "copyVideos", "processVideos", "runPreflight", "generateGallery", "complete"];
-const maintenanceStages = ["replaceAction", "renameAssets", "writeMetadataEdit", "deleteVariantResources", "complete"];
+const maintenanceStages = ["replaceAction", "addAction", "renameAssets", "writeMetadataEdit", "deleteVariantResources", "complete"];
 const allStageNames = Array.from(new Set(newVariantStages.concat(maintenanceStages)));
 
 const stageLabels = {
@@ -15,6 +15,7 @@ const stageLabels = {
   generateGallery: "生成图鉴",
   renameAssets: "导入资源",
   replaceAction: "替换动作",
+  addAction: "新增动作",
   writeMetadataEdit: "写入维护元数据",
   deleteVariantResources: "删除测试资源",
   complete: "完成",
@@ -46,6 +47,7 @@ const stageWeights = {
   generateGallery: 10,
   renameAssets: 72,
   replaceAction: 72,
+  addAction: 72,
   writeMetadataEdit: 84,
   deleteVariantResources: 90,
   complete: 100
@@ -1124,10 +1126,10 @@ function renderMaintainVariant() {
       <section class="panel">
         <div class="panel-header">
           <h2>替换动作资源</h2>
-        </div>
-        <div class="maintenance-command-row">
-          <button type="button" data-build-replace-preview${disabled}>生成替换预览</button>
-          <button type="button" class="primary" data-run-replace-actions="${escapeHtml(state.maintain.replacePreview?.previewId || "")}"${disabled || !state.maintain.replacePreview ? " disabled" : ""}>确认执行</button>
+          <div class="button-row source-actions maintenance-actions">
+            <button type="button" data-build-replace-preview${disabled}>生成替换预览</button>
+            <button type="button" class="primary" data-run-replace-actions="${escapeHtml(state.maintain.replacePreview?.previewId || "")}"${disabled || !state.maintain.replacePreview ? " disabled" : ""}>确认执行</button>
+          </div>
         </div>
         <div class="action-grid">${details ? renderReplacementCards() : ""}</div>
         ${state.maintain.replacePreview ? `<div class="preview-grid">

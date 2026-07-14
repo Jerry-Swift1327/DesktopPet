@@ -544,6 +544,16 @@ test("devtools metadata maintenance processes newly enabled action videos before
 
   assert.equal(preview.canApply, true, preview.reason);
   assert.deepEqual(preview.plannedActions, ["spin"]);
+  assert.deepEqual(preview.actionCommands[0].args.slice(0, 8), [
+    "tools\\process_pet_actions.py",
+    "process",
+    "--variant",
+    "pettest01",
+    "--actions",
+    "spin",
+    "--video",
+    spinVideo
+  ]);
   assert.equal(preview.actionCommands[0].args.includes("--use-full-range"), false);
   assert.equal(preview.actionCommands[0].args.includes("--source-start"), false);
 
@@ -553,8 +563,8 @@ test("devtools metadata maintenance processes newly enabled action videos before
   assert.equal(metadata.variants.pettest01.version, "1.1");
   assert.deepEqual(metadata.variants.pettest01.actions.buttons, ["squat", "walk", "feed", "ball", "spin"]);
   assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
-    "replaceAction:running",
-    "replaceAction:done",
+    "addAction:running",
+    "addAction:done",
     "writeMetadataEdit:running",
     "writeMetadataEdit:done"
   ]);

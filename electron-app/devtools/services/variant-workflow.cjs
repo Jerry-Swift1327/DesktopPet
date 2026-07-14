@@ -9,6 +9,8 @@ const {
   applyRenameAssetsPlan,
   buildReplaceActionPlan,
   applyReplaceActionPlanAsync,
+  buildAddActionPlan,
+  applyAddActionPlanAsync,
   buildMetadataEditPreview: buildCliMetadataEditPreview,
   applyMetadataEdit: applyCliMetadataEdit,
   buildDeleteVariantPreview: buildCliDeleteVariantPreview,
@@ -408,7 +410,7 @@ function createVariantWorkflow(options = {}) {
     return storePreview("replaceAction", buildReplaceActionPlan(payload, { metadataFile, animationsRoot }));
   }
 
-  function buildActionPlans(payload = {}) {
+  function buildReplaceActionPlans(payload = {}) {
     const actionVideos = payload.actionVideos || payload.replacements || {};
     const loopModes = payload.loopModes || {};
     return Object.entries(actionVideos)
@@ -422,7 +424,7 @@ function createVariantWorkflow(options = {}) {
   }
 
   function buildReplaceActionsPreview(payload = {}) {
-    const actionPlans = buildActionPlans(payload);
+    const actionPlans = buildReplaceActionPlans(payload);
     if (actionPlans.length === 0) {
       throw new Error("请至少为一个动作选择替换视频。");
     }
@@ -455,20 +457,20 @@ function createVariantWorkflow(options = {}) {
     }
   }
 
-  async function runActionPlans(actionPlans, hooks = {}) {
-    emitHook(hooks, "onStage", { stage: "replaceAction", status: "running" });
+  async function runActionPlans(actionPlans, stage, applyPlan, hooks = {}) {
+    emitHook(hooks, "onStage", { stage, status: "running" });
     try {
       const results = [];
       for (const plan of actionPlans) {
-        results.push(await applyReplaceActionPlanAsync(plan, {
+        results.push(await applyPlan(plan, {
           runCommand: options.runCommand,
           onLog: (event) => emitHook(hooks, "onLog", event)
         }));
       }
-      emitHook(hooks, "onStage", { stage: "replaceAction", status: "done" });
+      emitHook(hooks, "onStage", { stage, status: "done" });
       return results;
     } catch (error) {
-      emitHook(hooks, "onStage", { stage: "replaceAction", status: "failed", error: error.message });
+      emitHook(hooks, "onStage", { stage, status: "failed", error: error.message });
       throw error;
     }
   }
@@ -478,7 +480,7 @@ function createVariantWorkflow(options = {}) {
     if (!entry || entry.kind !== "replaceActions") {
       throw new Error(`未找到批量替换动作预览方案：${previewId}`);
     }
-    const results = await runActionPlans(entry.plan.actionPlans, hooks);
+    const results = await runActionPlans(entry.plan.actionPlans, "replaceAction", applyReplaceActionPlanAsync, hooks);
     return { id: entry.plan.id, actions: entry.plan.actions, replaced: results.length };
   }
 
@@ -503,7 +505,6 @@ function createVariantWorkflow(options = {}) {
   }
 
   function buildMetadataEditPreview(payload = {}) {
-    const actionPlans = buildActionPlans(payload);
     const details = getCliVariantDetails(payload.id, { metadataFile, animationsRoot });
     const currentActions = new Set((details.profile.actionButtons || details.profile.actions || [])
       .concat(details.profile.actionAssets || details.profile.extraAnimationAssets || []));
@@ -511,6 +512,16 @@ function createVariantWorkflow(options = {}) {
       ? asArray(payload.fields.actions.buttons).concat(asArray(payload.fields.actions.assets))
       : Array.from(currentActions);
     const newlyEnabledActions = Array.from(new Set(requestedActions)).filter((action) => !currentActions.has(action));
+    const actionVideos = payload.actionVideos || {};
+    const loopModes = payload.loopModes || {};
+    const actionPlans = newlyEnabledActions
+      .filter((action) => Boolean(actionVideos[action]))
+      .map((action) => buildAddActionPlan({
+        id: payload.id,
+        action,
+        video: typeof actionVideos[action] === "string" ? actionVideos[action] : actionVideos[action].path,
+        loopMode: loopModes[action] || actionVideos[action].loopMode || { mode: "full" }
+      }, { metadataFile, animationsRoot }));
     const plannedActions = actionPlans.map((plan) => plan.action);
     const missingActionVideos = newlyEnabledActions.filter((action) => !plannedActions.includes(action));
     const preview = buildCliMetadataEditPreview(payload, {
@@ -538,7 +549,7 @@ function createVariantWorkflow(options = {}) {
       throw new Error(`未找到元数据编辑预览方案：${previewId}`);
     }
     if (entry.preview.actionPlans.length > 0) {
-      await runActionPlans(entry.preview.actionPlans, hooks);
+      await runActionPlans(entry.preview.actionPlans, "addAction", applyAddActionPlanAsync, hooks);
     }
     emitHook(hooks, "onStage", { stage: "writeMetadataEdit", status: "running" });
     try {

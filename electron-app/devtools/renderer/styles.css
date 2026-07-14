@@ -336,19 +336,16 @@ select:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.maintenance-command-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
+.maintenance-actions {
+  flex-wrap: nowrap;
+  gap: 14px;
 }
 
-.maintenance-command-row button {
+.maintenance-actions button {
   min-width: 128px;
 }
 
-.maintenance-command-row button:first-child {
+.maintenance-actions button:first-child {
   border-color: #bae6fd;
   background: #f0f9ff;
   color: #075985;
@@ -1117,13 +1114,9 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  .maintenance-command-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .maintenance-command-row button {
-    width: 100%;
+  .maintenance-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .new-pet-picker .new-pet-option-grid,

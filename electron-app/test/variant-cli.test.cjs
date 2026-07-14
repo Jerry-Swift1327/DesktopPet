@@ -14,6 +14,8 @@ const {
   applyBootstrapPlan,
   applyBootstrapPlanAsync,
   buildReplaceActionPlan,
+  buildAddActionPlan,
+  applyAddActionPlanAsync,
   buildMetadataEditPreview,
   applyMetadataEdit,
   buildDeleteVariantPreview,
@@ -679,6 +681,44 @@ test("replace action plan builds process_pet_actions replace command with frame 
   ]);
   assert.equal(plan.command.args.includes("--use-full-range"), false);
   assert.equal(plan.command.args.includes("--freeze-last-frame"), false);
+});
+
+test("add action plan uses process semantics without requiring an existing action directory", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const video = path.join(tempDir, "spin.mp4");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  fs.writeFileSync(video, "video", "utf8");
+
+  const plan = buildAddActionPlan({
+    id: "pettest01",
+    action: "spin",
+    video,
+    loopMode: { mode: "full" }
+  }, { metadataFile, animationsRoot });
+  const commands = [];
+
+  assert.equal(fs.existsSync(plan.targetAction), false);
+  assert.deepEqual(plan.command.args.slice(0, 8), [
+    "tools\\process_pet_actions.py",
+    "process",
+    "--variant",
+    "pettest01",
+    "--actions",
+    "spin",
+    "--video",
+    video
+  ]);
+  assert.equal(plan.command.args.includes("--use-full-range"), true);
+
+  const result = await applyAddActionPlanAsync(plan, {
+    runCommand: async (command, args, runOptions) => commands.push({ command, args, runOptions })
+  });
+
+  assert.equal(result.added, true);
+  assert.equal(commands[0].runOptions.stage, "addAction");
 });
 
 test("delete variant preview and apply only remove test-scope variant resources", () => {
