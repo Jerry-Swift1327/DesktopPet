@@ -38,9 +38,9 @@
 | `windows/menu-controller.cjs` | 菜单窗口控制器（创建、显示、隐藏、定位、可见性） |
 | `windows/hover-controller.cjs` | 悬停面板控制器（创建、显示、隐藏、轮询、可见性） |
 | `windows/customization-controller.cjs` | 自定义面板控制器（创建、显示、隐藏、定位） |
-| `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏与窗口表面共用的固定透明跑道） |
+| `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏与窗口表面共用的固定透明跑道；`walkTrackX` 在 walk 状态统一表示可见中心 X） |
 | `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
-| `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
+| `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），walk 普通落点在解除拖拽暂停前按最终可见中心恢复固定跑道，工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
 | `behavior/state-controller.cjs` | 状态控制器（状态切换、one-shot 动作结算、起点复位、静默归位），工厂形式注入依赖，持有 pendingActionStatsState，不直接接触窗口/IPC/bubble |
 | `behavior/window-roam-controller.cjs` | 窗口漫游控制器（最近/锁定目标选取、附着、轮询） |
 | `behavior/eye-tracking-controller.cjs` | 眼球追踪控制器（光标追踪、轮询） |

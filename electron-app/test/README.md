@@ -19,7 +19,7 @@ node --test "test/**/*.test.cjs"
 
 | 文件 | 覆盖内容 | 相关源码 |
 | --- | --- | --- |
-| `walk-controller-window-frame.test.cjs` | Window surface walk regression: window surfaces reuse the fixed transparent runway, each step advances `spriteOffsetX` without moving native window bounds, direction mirrors remain bounded, and frameStep does not change walk speed. | `../electron/behavior/walk-controller.cjs` |
+| `walk-controller-window-frame.test.cjs` | 固定透明跑道回归：窗口表面逐步只推进 `spriteOffsetX`、方向镜像受边界约束、速度不依赖 frameStep，并从普通窗口 bounds 的可见中心初始化缺失的 `walkTrackX` | `../electron/behavior/walk-controller.cjs` |
 | `pet-variants.test.cjs` | 默认变体、渠道配置、动作 ID、资源目录命名、`windowDocking` 功能池与平台 gating、test scope 与 `pettest<seq>` 独立序列 | `../electron/pet-variants.cjs` |
 | `variant-cli.test.cjs` | 变体 CLI 的新建、校验、资源检查、动作源视频复制重命名、每动作帧段参数、维护预览/应用纯函数和图鉴生成 | `../scripts/variant-cli.cjs` |
 | `walk-clock.test.cjs` | 行走循环暂停、恢复、剩余时间计算 | `../electron/walk-clock.cjs` |

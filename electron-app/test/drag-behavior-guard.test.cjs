@@ -366,10 +366,20 @@ test("main.cjs settlePetInPlaceAfterDrag keeps the drag release position", () =>
   assert.match(body, /createFloatingSurfaceForBounds\(/);
   assert.match(body, /setCurrentSurface\(/);
   assert.match(body, /setPetWindowPosition\(next\.x,\s*next\.y\)/);
-  assert.match(body, /syncWalkTrackX\(next\.x\)/);
+  assert.match(body, /getWalkVisibleCenterFromWindowX\(next\.x,\s*next\.y/);
+  assert.match(body, /ensureTaskbarWalkRunwayForCenter\(centerX,\s*next\.y/);
+  assert.match(body, /reason:\s*"drag-settle"/);
   assert.doesNotMatch(body, /groundPetToSurface\(/);
   assert.doesNotMatch(body, /restoreTaskbarRunwayFromPoint\(/);
   assert.doesNotMatch(body, /resetToTaskbarSurface\(/);
+});
+
+test("main.cjs syncWalkTrackX stores a visible center while walking", () => {
+  const body = extractFunctionBody(mainSource, "syncWalkTrackX");
+  assert.ok(body, "syncWalkTrackX function body should be extractable");
+  assert.match(body, /if \(isWalkingState\(\)\)/);
+  assert.match(body, /getWalkVisibleCenterFromWindowX\(sourceWindowX,\s*bounds\.y/);
+  assert.match(body, /walkTrackX = clamp\(centerX,/);
 });
 
 test("dock-controller settles in place when drag release misses window surfaces", () => {

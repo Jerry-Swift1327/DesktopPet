@@ -47,8 +47,10 @@ function createWindowWalkHarness({
     groundPetToSurface: () => {},
     sendPetState: () => {},
     showStatMessages: () => {},
-    syncWalkTrackX: () => {},
-    getWalkVisibleCenterFromWindowX: () => walkTrackX,
+    syncWalkTrackX: (windowX) => {
+      walkTrackX = Math.round(windowX + 60);
+    },
+    getWalkVisibleCenterFromWindowX: (windowX) => Math.round(windowX + 60),
     getWalkRunwayCenterLimits: () => centerLimits,
     clamp: (value, min, max) => Math.min(Math.max(value, min), max),
     setWalkDirection: (direction) => {
@@ -133,6 +135,19 @@ test("window-surface walk advances only the internal runway sprite", () => {
   assert.deepEqual(harness.bounds, beforeBounds);
   assert.equal(results.every((result) => result.moved), true);
   assert.equal(results.every((result) => result.y === 90), true);
+});
+
+test("walk initializes a missing track from the visible center before its first step", () => {
+  const harness = createWindowWalkHarness({
+    initialCenterX: null,
+    initialDirection: 1,
+    centerLimits: { left: 0, right: 300 }
+  });
+
+  harness.controller.advanceWalkStep(0, 80);
+
+  assert.equal(harness.runwayCalls[0].centerX, 130);
+  assert.equal(harness.getTrackX(), 130);
 });
 
 test("window-surface walk mirrors inside the runway without moving the BrowserWindow", () => {

@@ -3607,31 +3607,28 @@ function syncWalkTrackX(x = null) {
 
   const bounds = getPetWindow().getBounds();
   const surface = getCurrentSurface();
-  const sourceX = Number.isFinite(x)
-    ? x
-    : surface?.type === "window" && isWalkingState() && Number.isFinite(walkTrackX)
-      ? walkTrackX
-      : bounds.x;
-  if (isWalkRunwayActive(surface)) {
-    const groundedY = getGroundedWindowYForSurface(surface, activeState, walkDirection);
+  const sourceWindowX = Number.isFinite(x) ? Math.round(x) : bounds.x;
+  if (isWalkingState()) {
     const centerLimits = getWalkRunwayCenterLimits(surface, activeState);
-    const centerX = Number.isFinite(x)
-      ? getWalkVisibleCenterFromWindowX(sourceX, groundedY, activeState, walkDirection)
-      : taskbarWalkRunway
+    const centerX = !Number.isFinite(x) && isWalkRunwayActive(surface)
       ? taskbarWalkRunway.centerX
-      : getWalkVisibleCenterFromWindowX(sourceX, groundedY, activeState, walkDirection);
+      : getWalkVisibleCenterFromWindowX(sourceWindowX, bounds.y, activeState, walkDirection);
     walkTrackX = clamp(centerX, centerLimits.left, centerLimits.right);
+    if (!isWalkRunwayActive(surface)) {
+      taskbarWalkRunway = null;
+      clearPetWindowHitRegion();
+    }
     return;
   }
   if (surface?.type === "window") {
-    walkTrackX = getSafeWindowXForDirection(sourceX, surface, activeState, walkDirection);
+    walkTrackX = getSafeWindowXForDirection(sourceWindowX, surface, activeState, walkDirection);
     taskbarWalkRunway = null;
     clearPetWindowHitRegion();
     return;
   }
   taskbarWalkRunway = null;
   clearPetWindowHitRegion();
-  walkTrackX = getSafeWindowXForDirection(sourceX, surface, activeState, walkDirection);
+  walkTrackX = getSafeWindowXForDirection(sourceWindowX, surface, activeState, walkDirection);
 }
 
 function setWalkWindowPosition(x, y, surface = getCurrentSurface(), direction = walkDirection, options = {}) {
@@ -3730,7 +3727,15 @@ function settlePetInPlaceAfterDrag(bounds, reason = "fallback") {
   };
   const surface = setCurrentSurface(createFloatingSurfaceForBounds(nextBounds));
   setPetWindowPosition(next.x, next.y);
-  syncWalkTrackX(next.x);
+  if (isWalkingState()) {
+    const centerX = getWalkVisibleCenterFromWindowX(next.x, next.y, activeState, walkDirection);
+    ensureTaskbarWalkRunwayForCenter(centerX, next.y, walkDirection, surface, {
+      force: true,
+      reason: "drag-settle"
+    });
+  } else {
+    syncWalkTrackX(next.x);
+  }
   if (WINDOW_DOCK_DEBUG) {
     log(`dock-after-drag settle-in-place reason=${reason} surface=${surface.type}`);
   }

@@ -184,14 +184,14 @@ test("main.cjs window surface walk alignment materializes a fixed runway", () =>
   assert.match(mainSource, /surfaceSignature:\s*getWalkRunwaySurfaceSignature\(surface\)/);
 });
 
-test("main.cjs window runway sync keeps its center instead of reading stale bounds", () => {
+test("main.cjs walk track sync derives a visible center from window bounds", () => {
   assert.match(
     mainSource,
-    /surface\?\.type === "window" && isWalkingState\(\) && Number\.isFinite\(walkTrackX\)/
+    /if \(isWalkingState\(\)\)[\s\S]*?getWalkVisibleCenterFromWindowX\(sourceWindowX,\s*bounds\.y/
   );
   assert.match(
     mainSource,
-    /\? walkTrackX\s*:\s*bounds\.x;/
+    /walkTrackX = clamp\(centerX,\s*centerLimits\.left,\s*centerLimits\.right\)/
   );
 });
 
