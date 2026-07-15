@@ -135,6 +135,56 @@ class PetActionProcessingTests(unittest.TestCase):
             self.assertEqual(metadata["tailLoopStart"], 12)
             self.assertTrue(metadata["freezeLastFrame"])
 
+    def test_bright_color_foreground_protection_is_opt_in(self) -> None:
+        from pet_actions.chroma import chroma_key_green_image
+
+        with tempfile.TemporaryDirectory() as tmp:
+            frame_path = Path(tmp) / "frame.png"
+            image = Image.new("RGB", (64, 64), (46, 212, 43))
+            pixels = image.load()
+            for y in range(20, 48):
+                for x in range(18, 46):
+                    pixels[x, y] = (210, 80, 100)
+            for y in range(30, 42):
+                for x in range(30, 42):
+                    pixels[x, y] = (100, 210, 60)
+            image.save(frame_path)
+
+            default_alpha = chroma_key_green_image(frame_path).getchannel("A")
+            protected = chroma_key_green_image(
+                frame_path,
+                preserve_bright_color_foreground=True,
+            )
+            protected_alpha = protected.getchannel("A")
+
+            self.assertEqual(default_alpha.getpixel((35, 35)), 0)
+            self.assertEqual(protected_alpha.getpixel((35, 35)), 255)
+            self.assertEqual(protected_alpha.getpixel((4, 4)), 0)
+            self.assertGreater(protected.getpixel((35, 35))[1], protected.getpixel((35, 35))[0] * 1.5)
+
+    def test_protected_opaque_green_survives_enhancement_while_translucent_spill_is_cleaned(self) -> None:
+        from pet_actions.chroma import enhance_rgba
+
+        image = Image.new("RGBA", (24, 24), (0, 0, 0, 0))
+        pixels = image.load()
+        for y in range(7, 17):
+            for x in range(7, 17):
+                pixels[x, y] = (100, 210, 60, 255)
+        pixels[6, 10] = (100, 210, 60, 160)
+
+        enhanced = enhance_rgba(image, preserve_opaque_green=True)
+
+        self.assertGreater(enhanced.getpixel((12, 12))[1], enhanced.getpixel((12, 12))[0] * 1.5)
+        self.assertLess(enhanced.getpixel((6, 10))[1], 170)
+
+    def test_bright_color_foreground_cli_flag_is_available(self) -> None:
+        from process_pet_actions import add_common_args
+
+        parser = argparse.ArgumentParser()
+        add_common_args(parser)
+
+        self.assertTrue(parser.parse_args(["--preserve-bright-color-foreground"]).preserve_bright_color_foreground)
+
     def test_trim_ground_alpha_remnants_auto_clears_only_low_alpha_tail(self) -> None:
         from pet_actions.chroma import trim_ground_alpha_remnants_auto
 

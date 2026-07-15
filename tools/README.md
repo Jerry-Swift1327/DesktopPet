@@ -97,6 +97,7 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--detached-artifact-max-area` | 限制 `--clean-detached-artifacts` 可清理组件的最大像素面积，默认 256px |
 | `--detached-artifact-max-span` | 限制 `--clean-detached-artifacts` 可清理组件的最大宽高，默认 64px |
 | `--detached-artifact-min-gap` | 限制 `--clean-detached-artifacts` 只清理与主体至少相隔的像素距离，默认 2px |
+| `--preserve-bright-color-foreground` | 按边缘采样到的绿幕颜色和局部前景密度，保护彩色道具中被误判为绿幕的高亮区域；variant 工具处理 `ball` 时自动启用 |
 | `--stable-ground` | 使用主体组件分析清理底部小型离散残点，并按稳定主体底线做垂直对齐 |
 | `--stable-ground-max-shift` | 限制 `--stable-ground` 的最大垂直平移，默认 32px |
 | `--normalization-mode` | 帧归一化模式，默认 `source-canvas` 保留源视频完整画布构图；`crop` 使用旧版裁剪贴地归一化 |
@@ -140,6 +141,8 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 ### alpha 稳定化
 
 抠像后的归一化帧会自动执行亮色毛发安全处理：对高亮、低饱和的近白前景采用更保守的绿幕判定，并在 256px/128px 帧内修复局部前景密度较高区域中的透明针孔和低透明裂纹。该步骤用于避免 ragdoll、van、pomeranian 等浅色毛发在播放时因 alpha 破洞产生闪烁，同时不会整体外扩外轮廓。
+
+`--preserve-bright-color-foreground` 是默认关闭的彩色道具保护模式。它从帧边缘估计实际绿幕颜色，仅恢复与绿幕色差明显、亮度更高且位于已有前景密集区域中的像素，并跳过这些像素的去绿溢色处理。variant bootstrap/replace 会对 `ball` 自动启用该模式，其他动作不受影响。
 
 ### 主体外离散组件清理
 

@@ -316,7 +316,48 @@ def repair_interior_alpha_holes(image: Image.Image) -> Image.Image:
     return Image.fromarray(np.clip(pixels, 0.0, 255.0).astype(np.uint8), "RGBA")
 
 
-def chroma_key_green_image(input_path: Path) -> Image.Image:
+def _estimate_border_chroma_color(rgb: np.ndarray) -> np.ndarray:
+    height, width, _channels = rgb.shape
+    border_size = max(2, min(height, width) // 40)
+    border = np.concatenate(
+        (
+            rgb[:border_size].reshape(-1, 3),
+            rgb[-border_size:].reshape(-1, 3),
+            rgb[border_size:-border_size, :border_size].reshape(-1, 3),
+            rgb[border_size:-border_size, -border_size:].reshape(-1, 3),
+        )
+    )
+    red = border[:, 0]
+    green = border[:, 1]
+    blue = border[:, 2]
+    chroma_candidates = border[(green > 45.0) & (green > red * 1.02) & (green > blue * 1.02)]
+    return np.median(chroma_candidates if len(chroma_candidates) else border, axis=0)
+
+
+def _protect_bright_color_foreground(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    chroma_color = _estimate_border_chroma_color(rgb)
+    color_distance = np.linalg.norm(rgb - chroma_color, axis=2)
+    brightness_delta = rgb.sum(axis=2) - float(chroma_color.sum())
+    radius = max(2, round(min(alpha.shape) * 0.02))
+    solid_alpha = np.where(alpha >= 192.0, 255, 0).astype(np.uint8)
+    foreground_density = np.array(
+        Image.fromarray(solid_alpha, "L").filter(ImageFilter.BoxBlur(radius)),
+        dtype=np.float32,
+    ) / 255.0
+    candidates = (alpha < 192.0) & (color_distance >= 42.0) & (brightness_delta >= 18.0) & (foreground_density >= 0.16)
+    protected = np.zeros(alpha.shape, dtype=bool)
+    min_area = max(12, round(alpha.shape[0] * alpha.shape[1] * 0.001))
+    max_span = max(16, round(min(alpha.shape) * 0.12))
+    for ys, xs in _iter_components(candidates):
+        if len(ys) < min_area:
+            continue
+        if int(ys.max() - ys.min() + 1) > max_span or int(xs.max() - xs.min() + 1) > max_span:
+            continue
+        protected[ys, xs] = True
+    return protected
+
+
+def chroma_key_green_image(input_path: Path, *, preserve_bright_color_foreground: bool = False) -> Image.Image:
     """对绿幕帧进行抠像，生成 RGBA 图像。"""
     image = Image.open(input_path).convert("RGBA")
     pixels = np.array(image).astype(np.float32)
@@ -344,7 +385,16 @@ def chroma_key_green_image(input_path: Path) -> Image.Image:
     alpha = np.where(confidence > 0.68, 0.0, alpha)
     alpha = np.where(confidence < 0.07, 255.0, alpha)
 
-    spill = (g > 45.0) & (green_strength > 3.0) & (green_ratio > 0.32)
+    protected_foreground = np.zeros(alpha.shape, dtype=bool)
+    if preserve_bright_color_foreground:
+        for _iteration in range(4):
+            recovered = _protect_bright_color_foreground(rgb, alpha)
+            if not np.any(recovered):
+                break
+            protected_foreground |= recovered
+            alpha = np.where(recovered, 255.0, alpha)
+
+    spill = (g > 45.0) & (green_strength > 3.0) & (green_ratio > 0.32) & ~protected_foreground
     rgb[:, :, 1] = np.where(spill, np.minimum(g, max_rb * 0.96 + 4.0), g)
 
     pixels[:, :, :3] = np.clip(rgb, 0.0, 255.0)
@@ -852,7 +902,7 @@ def despill_normalized_frame(image: Image.Image) -> Image.Image:
     return Image.fromarray(np.clip(pixels, 0.0, 255.0).astype(np.uint8), "RGBA")
 
 
-def hard_clean_alpha(image: Image.Image) -> Image.Image:
+def hard_clean_alpha(image: Image.Image, *, preserve_opaque_green: bool = False) -> Image.Image:
     """硬性清理 alpha 通道和绿色边缘。"""
     pixels = np.array(image.convert("RGBA")).astype(np.float32)
     r = pixels[:, :, 0]
@@ -862,6 +912,13 @@ def hard_clean_alpha(image: Image.Image) -> Image.Image:
     max_rb = np.maximum(r, b)
 
     green_edge = (a > 0.0) & (g > 42.0) & (g > r * 1.02) & (g > b * 1.02) & ((g - max_rb) > 2.0)
+    if preserve_opaque_green:
+        transparent = np.where(a < 16.0, 255, 0).astype(np.uint8)
+        near_transparent = np.array(
+            Image.fromarray(transparent, "L").filter(ImageFilter.MaxFilter(5)),
+            dtype=np.uint8,
+        ) > 0
+        green_edge &= (a < 248.0) | near_transparent
     pixels[:, :, 1] = np.where(green_edge, np.minimum(g, max_rb * 0.86 + 6.0), g)
 
     alpha = np.where(a < 10.0, 0.0, a)
@@ -871,9 +928,9 @@ def hard_clean_alpha(image: Image.Image) -> Image.Image:
     return Image.fromarray(np.clip(pixels, 0.0, 255.0).astype(np.uint8), "RGBA")
 
 
-def enhance_rgba(image: Image.Image) -> Image.Image:
+def enhance_rgba(image: Image.Image, *, preserve_opaque_green: bool = False) -> Image.Image:
     """增强 RGBA 图像：对比度、锐度和硬性 alpha 清理。"""
-    image = hard_clean_alpha(image)
+    image = hard_clean_alpha(image, preserve_opaque_green=preserve_opaque_green)
     alpha = image.getchannel("A")
     rgb = image.convert("RGB")
     rgb = ImageEnhance.Contrast(rgb).enhance(1.035)
@@ -881,7 +938,7 @@ def enhance_rgba(image: Image.Image) -> Image.Image:
     rgb = rgb.filter(ImageFilter.UnsharpMask(radius=0.65, percent=70, threshold=4))
     output = rgb.convert("RGBA")
     output.putalpha(alpha)
-    return hard_clean_alpha(output)
+    return hard_clean_alpha(output, preserve_opaque_green=preserve_opaque_green)
 
 
 def normalize_candidate_frame(
@@ -889,6 +946,7 @@ def normalize_candidate_frame(
     bounds: tuple[int, int, int, int],
     visible_height: int = CANDIDATE_VISIBLE_HEIGHT,
     visible_max_width: int = CANDIDATE_VISIBLE_MAX_WIDTH,
+    preserve_opaque_green: bool = False,
 ) -> Image.Image:
     """将帧裁剪、缩放到 256px 增强画布（用于 processed_frames 素材池）。"""
     left, top, right, bottom = bounds
@@ -898,17 +956,17 @@ def normalize_candidate_frame(
     target_width = max(1, round(width * scale))
     target_height = max(1, round(height * scale))
     resized = cropped.resize((target_width, target_height), Image.Resampling.LANCZOS)
-    resized = enhance_rgba(resized)
+    resized = enhance_rgba(resized, preserve_opaque_green=preserve_opaque_green)
     resized = repair_interior_alpha_holes(resized)
 
     output = Image.new("RGBA", (ENHANCED_FRAME_SIZE, ENHANCED_FRAME_SIZE), (0, 0, 0, 0))
     x = (ENHANCED_FRAME_SIZE - target_width) // 2
     y = ENHANCED_FRAME_SIZE - CANDIDATE_GROUND_PADDING - target_height
     output.alpha_composite(resized, (x, y))
-    return repair_interior_alpha_holes(hard_clean_alpha(output))
+    return repair_interior_alpha_holes(hard_clean_alpha(output, preserve_opaque_green=preserve_opaque_green))
 
 
-def normalize_source_canvas_frame(image: Image.Image) -> Image.Image:
+def normalize_source_canvas_frame(image: Image.Image, *, preserve_opaque_green: bool = False) -> Image.Image:
     """Scale the full source canvas into the enhanced runtime canvas."""
     source = image.convert("RGBA")
     width, height = source.size
@@ -919,14 +977,14 @@ def normalize_source_canvas_frame(image: Image.Image) -> Image.Image:
     target_width = max(1, round(width * scale))
     target_height = max(1, round(height * scale))
     resized = source.resize((target_width, target_height), Image.Resampling.LANCZOS)
-    resized = enhance_rgba(resized)
+    resized = enhance_rgba(resized, preserve_opaque_green=preserve_opaque_green)
     resized = repair_interior_alpha_holes(resized)
 
     output = Image.new("RGBA", (ENHANCED_FRAME_SIZE, ENHANCED_FRAME_SIZE), (0, 0, 0, 0))
     x = (ENHANCED_FRAME_SIZE - target_width) // 2
     y = (ENHANCED_FRAME_SIZE - target_height) // 2
     output.alpha_composite(resized, (x, y))
-    return repair_interior_alpha_holes(hard_clean_alpha(output))
+    return repair_interior_alpha_holes(hard_clean_alpha(output, preserve_opaque_green=preserve_opaque_green))
 
 
 def validate_normalization_options(
@@ -955,6 +1013,7 @@ def process_frames_to_processed(
     detached_artifact_max_area: int = 256,
     detached_artifact_max_span: int = 64,
     detached_artifact_min_gap: int = 2,
+    preserve_bright_color_foreground: bool = False,
     stable_ground: bool = False,
     stable_ground_max_shift: int = 32,
     center_visible_action_x: bool = False,
@@ -987,18 +1046,29 @@ def process_frames_to_processed(
         "warnings": [],
     }
     for raw_frame in raw_frames:
-        keyed = chroma_key_green_image(raw_frame)
+        keyed = chroma_key_green_image(
+            raw_frame,
+            preserve_bright_color_foreground=preserve_bright_color_foreground,
+        )
         if source_canvas_size is None:
             source_canvas_size = [int(keyed.width), int(keyed.height)]
         if normalization_mode == SOURCE_CANVAS_NORMALIZATION:
-            enhanced = normalize_source_canvas_frame(keyed)
+            enhanced = normalize_source_canvas_frame(
+                keyed,
+                preserve_opaque_green=preserve_bright_color_foreground,
+            )
         else:
             kwargs = {}
             if visible_height is not None:
                 kwargs["visible_height"] = visible_height
             if visible_max_width is not None:
                 kwargs["visible_max_width"] = visible_max_width
-            enhanced = normalize_candidate_frame(keyed, global_bounds, **kwargs)  # type: ignore[arg-type]
+            enhanced = normalize_candidate_frame(
+                keyed,
+                global_bounds,
+                preserve_opaque_green=preserve_bright_color_foreground,
+                **kwargs,
+            )  # type: ignore[arg-type]
         enhanced, _trim_info = trim_ground_alpha_remnants_auto(
             enhanced,
             enabled=trim_ground_alpha_auto,
@@ -1067,6 +1137,8 @@ def process_frames_to_processed(
         info["stableGround"] = stable_ground_info
     if clean_detached_artifacts_enabled:
         info["detachedArtifacts"] = detached_artifact_info
+    if preserve_bright_color_foreground:
+        info["brightColorForegroundProtection"] = True
     return sorted(processed_dir.glob("frame_*.png")), info
 
 

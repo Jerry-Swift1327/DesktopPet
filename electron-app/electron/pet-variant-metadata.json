@@ -391,9 +391,9 @@
       "id": "pet2612",
       "date": "2026-07-13",
       "scope": "custom",
-      "tier": "basic",
+      "tier": "advanced",
       "species": "cat",
-      "notes": "客户定制-基础",
+      "notes": "客户定制-高级",
       "version": "1.0",
       "scale": 1.1,
       "platforms": [
@@ -410,6 +410,70 @@
           "splits",
           "stretch",
           "spin"
+        ],
+        "assets": [
+          "yawn"
+        ]
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "idleYawn"
+        ],
+        "disable": []
+      }
+    },
+    "pet2613": {
+      "id": "pet2613",
+      "date": "2026-07-14",
+      "scope": "custom",
+      "tier": "basic",
+      "species": "dog",
+      "notes": "客户定制-基础",
+      "version": "1.1",
+      "scale": 1.1,
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "pet2613",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
+        ],
+        "assets": [
+          "yawn"
+        ]
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "idleYawn"
+        ],
+        "disable": []
+      }
+    },
+    "pet2614": {
+      "id": "pet2614",
+      "date": "2026-07-14",
+      "scope": "custom",
+      "tier": "basic",
+      "species": "cat",
+      "notes": "客户定制-基础",
+      "version": "1.2",
+      "scale": 1.1,
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "pet2614",
+      "actions": {
+        "buttons": [
+          "squat",
+          "walk",
+          "feed",
+          "ball"
         ],
         "assets": [
           "yawn"

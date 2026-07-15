@@ -234,7 +234,7 @@ test("bootstrap dry-run builds a plan without writing metadata", () => {
   assert.deepEqual(metadata.variants, {});
 });
 
-test("bootstrap freezes yawn for new idleYawn variants only", () => {
+test("bootstrap freezes idle yawn for every species and protects colorful ball props", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");
@@ -243,22 +243,26 @@ test("bootstrap freezes yawn for new idleYawn variants only", () => {
   writeMetadata(metadataFile);
   writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball", "yawn"]);
 
-  const plan = buildBootstrapPlan(
-    {
-      species: "cat",
-      scope: "custom",
-      tier: "basic",
-      date: "2026-06-30",
-      source: sourceDir,
-      "action-assets": "yawn",
-      features: "autoStart,idleYawn"
-    },
-    { metadataFile, animationsRoot }
-  );
-  const byAction = Object.fromEntries(plan.processCommands.map((command) => [command.action, command.args]));
+  for (const species of ["cat", "dog"]) {
+    const plan = buildBootstrapPlan(
+      {
+        species,
+        scope: "custom",
+        tier: "basic",
+        date: "2026-06-30",
+        source: sourceDir,
+        "action-assets": "yawn",
+        features: "autoStart,idleYawn"
+      },
+      { metadataFile, animationsRoot }
+    );
+    const byAction = Object.fromEntries(plan.processCommands.map((command) => [command.action, command.args]));
 
-  assert.equal(byAction.yawn.includes("--freeze-last-frame"), true);
-  assert.equal(["squat", "walk", "feed", "ball"].every((action) => !byAction[action].includes("--freeze-last-frame")), true);
+    assert.equal(byAction.yawn.includes("--freeze-last-frame"), true);
+    assert.equal(["squat", "walk", "feed", "ball"].every((action) => !byAction[action].includes("--freeze-last-frame")), true);
+    assert.equal(byAction.ball.includes("--preserve-bright-color-foreground"), true);
+    assert.equal(["squat", "walk", "feed", "yawn"].every((action) => !byAction[action].includes("--preserve-bright-color-foreground")), true);
+  }
 });
 
 test("bootstrap can use the full processed frame range for runtime frames", () => {

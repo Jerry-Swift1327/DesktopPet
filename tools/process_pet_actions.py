@@ -124,6 +124,7 @@ def process_action_core(
     detached_artifact_max_area: int = 256,
     detached_artifact_max_span: int = 64,
     detached_artifact_min_gap: int = 2,
+    preserve_bright_color_foreground: bool = False,
     stable_ground: bool = False,
     stable_ground_max_shift: int = 32,
     visible_height: int | None = None,
@@ -189,6 +190,7 @@ def process_action_core(
         detached_artifact_max_area=detached_artifact_max_area,
         detached_artifact_max_span=detached_artifact_max_span,
         detached_artifact_min_gap=detached_artifact_min_gap,
+        preserve_bright_color_foreground=preserve_bright_color_foreground,
         stable_ground=stable_ground,
         stable_ground_max_shift=stable_ground_max_shift,
         center_visible_action_x=center_visible_action_x,
@@ -532,6 +534,7 @@ def cmd_process(args: argparse.Namespace) -> None:
             detached_artifact_max_area=args.detached_artifact_max_area,
             detached_artifact_max_span=args.detached_artifact_max_span,
             detached_artifact_min_gap=args.detached_artifact_min_gap,
+            preserve_bright_color_foreground=args.preserve_bright_color_foreground,
             stable_ground=args.stable_ground,
             stable_ground_max_shift=args.stable_ground_max_shift,
             visible_height=args.visible_height,
@@ -595,6 +598,7 @@ def cmd_replace(args: argparse.Namespace) -> None:
         detached_artifact_max_area=args.detached_artifact_max_area,
         detached_artifact_max_span=args.detached_artifact_max_span,
         detached_artifact_min_gap=args.detached_artifact_min_gap,
+        preserve_bright_color_foreground=args.preserve_bright_color_foreground,
         stable_ground=args.stable_ground,
         stable_ground_max_shift=args.stable_ground_max_shift,
         visible_height=args.visible_height,
@@ -652,6 +656,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--detached-artifact-max-area", type=int, default=256, help="Maximum area for --clean-detached-artifacts components.")
     parser.add_argument("--detached-artifact-max-span", type=int, default=64, help="Maximum width/height for --clean-detached-artifacts components.")
     parser.add_argument("--detached-artifact-min-gap", type=int, default=2, help="Minimum pixel gap from the subject for --clean-detached-artifacts components.")
+    parser.add_argument("--preserve-bright-color-foreground", action="store_true", help="Protect bright colorful props that differ from the sampled green-screen color.")
     parser.add_argument("--stable-ground", action="store_true", help="Use subject-component analysis to clear small bottom artifacts and align frames to a stable subject bottom.")
     parser.add_argument("--stable-ground-max-shift", type=int, default=32, help="Maximum vertical shift for --stable-ground.")
     parser.add_argument("--visible-height", type=int, default=None, help="Override sprite visible height for this action.")

@@ -485,6 +485,9 @@ function appendActionProcessingArgs(processArgs, action, options = {}) {
   } else if (preset === "direction64") {
     processArgs.push("--direction-count", "64");
   }
+  if (action === "ball") {
+    processArgs.push("--preserve-bright-color-foreground");
+  }
   if (options.freezeLastFrame) {
     processArgs.push("--freeze-last-frame");
   }
