@@ -22,13 +22,23 @@ function cssBlock(selector) {
 
 function createFakeNode(className = "") {
   const children = new Map();
+  const listeners = new Map();
   return {
     className,
     html: "",
     isConnected: true,
     scrollTop: 0,
     scrollLeft: 0,
-    addEventListener() {},
+    addEventListener(type, listener, options) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push({ listener, capture: options === true || options?.capture === true });
+    },
+    async dispatchEvent(type, event) {
+      const registered = (listeners.get(type) || []).slice().sort((left, right) => Number(right.capture) - Number(left.capture));
+      for (const { listener } of registered) {
+        await listener(event);
+      }
+    },
     querySelector(selector) {
       if (selector === ".wizard-left" && this.html.includes("wizard-left")) {
         if (!children.has(selector)) {
@@ -57,7 +67,7 @@ function createFakeNode(className = "") {
   };
 }
 
-function createRendererHarness() {
+function createRendererHarness(options = {}) {
   const appNode = createFakeNode("");
   const sidebarNode = createFakeNode("sidebar");
   const workspaceNode = createFakeNode("workspace");
@@ -134,7 +144,7 @@ function createRendererHarness() {
     runRenameAssets: () => Promise.resolve({}),
     buildMetadataEditPreview: () => Promise.resolve({}),
     applyMetadataEdit: () => Promise.resolve({}),
-    getActionFramePool: ({ action }) => Promise.resolve({
+    getActionFramePool: ({ action }) => Promise.resolve(options.framePool || {
       action,
       hasProcessedFrames: false,
       hasCanonicalVideo: true,
@@ -153,28 +163,39 @@ function createRendererHarness() {
     onTaskLog: () => {},
     onTaskStatus: () => {}
   };
+  const documentListeners = new Map();
+  const documentNode = {
+    getElementById: (id) => (id === "app" ? appNode : null),
+    querySelector: (selector) => {
+      if (selector === ".sidebar") {
+        return sidebarNode;
+      }
+      if (selector === ".workspace") {
+        return workspaceNode;
+      }
+      if (selector === ".wizard-left" || selector === ".wizard-right") {
+        return appNode.querySelector(selector);
+      }
+      return null;
+    },
+    addEventListener(type, listener) {
+      if (!documentListeners.has(type)) documentListeners.set(type, []);
+      documentListeners.get(type).push(listener);
+    },
+    async dispatchEvent(type, event) {
+      for (const listener of documentListeners.get(type) || []) {
+        await listener(event);
+      }
+    }
+  };
   const context = {
     window: { variantDevtools: api, confirm: () => true },
-    document: {
-      getElementById: (id) => (id === "app" ? appNode : null),
-      querySelector: (selector) => {
-        if (selector === ".sidebar") {
-          return sidebarNode;
-        }
-        if (selector === ".workspace") {
-          return workspaceNode;
-        }
-        if (selector === ".wizard-left" || selector === ".wizard-right") {
-          return appNode.querySelector(selector);
-        }
-        return null;
-      }
-    },
+    document: documentNode,
     console,
     Promise
   };
 
-  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, loadMaintainDetails, generateCatalogGallery, buildReplacePreview, buildMetadataPreview, applyMetadataEdit, renderMaintainVariant, appNode, sidebarNode, workspaceNode: document.querySelector(".workspace") };`, context, {
+  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, loadMaintainDetails, generateCatalogGallery, buildReplacePreview, buildMetadataPreview, applyMetadataEdit, renderMaintainVariant, renderRuntimeFrameReselect, appNode, sidebarNode, workspaceNode: document.querySelector(".workspace"), documentNode: document };`, context, {
     filename: "devtools/renderer/app.js"
   });
   return context.__rendererHarness;
@@ -183,6 +204,13 @@ function createRendererHarness() {
 async function flushRendererPromises() {
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
+}
+
+function createEventTarget(dataset = {}, closestTargets = {}) {
+  return {
+    dataset,
+    closest: (selector) => closestTargets[selector] || null
+  };
 }
 
 test("devtools renderNewVariant groups panels into left and right dashboard columns", () => {
@@ -538,4 +566,125 @@ test("devtools frame maintenance exposes pool, selection, lightbox, and yawn fre
   assert.match(appSource, /末帧休眠（5 分钟）/);
   assert.match(stylesSource, /\.frame-lightbox\s*\{/);
   assert.match(stylesSource, /\.frame-pool-grid\s*\{/);
+  assert.match(cssBlock(".summary-grid.frame-pool-summary"), /repeat\(auto-fit, minmax\(120px, 1fr\)\)/);
+});
+
+test("devtools frame lightbox opens from a nested thumbnail and disables endpoint arrows", async () => {
+  const frames = [
+    { index: 10, name: "frame010.png", url: "frame010.png" },
+    { index: 20, name: "frame020.png", url: "frame020.png" }
+  ];
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  harness.state.maintain.framePool = {
+    hasProcessedFrames: true,
+    processedFrames: frames,
+    runtimeFrames: frames,
+    selectedSourceFrames: [10],
+    freezeLastFrame: false,
+    protected: false
+  };
+
+  const firstButton = createEventTarget({ openFrameLightbox: "0" });
+  const nestedImage = createEventTarget({}, { "[data-open-frame-lightbox]": firstButton });
+  await harness.appNode.dispatchEvent("click", { target: nestedImage, shiftKey: false });
+
+  assert.equal(harness.state.maintain.frameLightboxIndex, 0);
+  let framePanel = harness.renderRuntimeFrameReselect();
+  assert.match(framePanel, /class="frame-lightbox"/);
+  assert.match(framePanel, /data-frame-lightbox-step="-1" disabled/);
+  assert.doesNotMatch(framePanel, /data-frame-lightbox-step="1" disabled/);
+
+  const nextButton = createEventTarget({ frameLightboxStep: "1" });
+  nextButton.closest = (selector) => selector === "[data-frame-lightbox-step]" ? nextButton : null;
+  await harness.appNode.dispatchEvent("click", { target: nextButton, shiftKey: false });
+
+  assert.equal(harness.state.maintain.frameLightboxIndex, 1);
+  framePanel = harness.renderRuntimeFrameReselect();
+  assert.match(framePanel, /data-frame-lightbox-step="1" disabled/);
+});
+
+test("devtools read-only runtime frames support lightbox browsing and Escape closing", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  harness.state.maintain.framePool = {
+    hasProcessedFrames: false,
+    processedFrames: [],
+    runtimeFrames: [{ index: 0, name: "runtime000.png", url: "runtime000.png" }],
+    selectedSourceFrames: [],
+    freezeLastFrame: false,
+    protected: false
+  };
+  harness.appNode.innerHTML = harness.renderRuntimeFrameReselect();
+  assert.match(harness.appNode.innerHTML, /runtime-readonly-grid[\s\S]*data-open-frame-lightbox="0"/);
+
+  const runtimeButton = createEventTarget({ openFrameLightbox: "0" });
+  const nestedImage = createEventTarget({}, { "[data-open-frame-lightbox]": runtimeButton });
+  await harness.appNode.dispatchEvent("click", { target: nestedImage, shiftKey: false });
+  assert.match(harness.renderRuntimeFrameReselect(), /runtime000\.png[\s\S]*class="frame-lightbox"/);
+
+  let prevented = false;
+  await harness.documentNode.dispatchEvent("keydown", {
+    key: "Escape",
+    preventDefault: () => { prevented = true; }
+  });
+  assert.equal(harness.state.maintain.frameLightboxIndex, null);
+  assert.equal(prevented, true);
+  assert.doesNotMatch(harness.renderRuntimeFrameReselect(), /class="frame-lightbox"/);
+});
+
+test("devtools Shift selection follows pool positions and renders selection statistics", async () => {
+  const frames = [10, 20, 30].map((index) => ({ index, name: `frame${index}.png`, url: `frame${index}.png` }));
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  harness.state.maintain.framePool = {
+    hasProcessedFrames: true,
+    processedFrames: frames,
+    runtimeFrames: [frames[0]],
+    selectedSourceFrames: [10],
+    freezeLastFrame: false,
+    protected: false
+  };
+  harness.state.maintain.reselectSelection = [10];
+  harness.state.maintain.lastFrameSelectionIndex = 10;
+
+  const checkbox = createEventTarget({ sourceFrame: "30" });
+  checkbox.checked = true;
+  checkbox.closest = (selector) => selector === "[data-source-frame]" ? checkbox : null;
+  await harness.appNode.dispatchEvent("click", { target: checkbox, shiftKey: true });
+  await harness.appNode.dispatchEvent("change", { target: checkbox });
+
+  assert.deepEqual(Array.from(harness.state.maintain.reselectSelection), [10, 20, 30]);
+  const framePanel = harness.renderRuntimeFrameReselect();
+  assert.match(framePanel, /<span>已选素材帧<\/span><strong>3<\/strong>/);
+  assert.match(framePanel, /<span>首帧索引<\/span><strong>10<\/strong>/);
+  assert.match(framePanel, /<span>尾帧索引<\/span><strong>30<\/strong>/);
+  assert.match(framePanel, /<span>索引断点<\/span><strong>2<\/strong>/);
+  assert.match(framePanel, /frame-pool-card is-current is-selected/);
+});
+
+test("devtools frame selection supports full select and clear", async () => {
+  const frames = [0, 1, 2].map((index) => ({ index, name: `frame${index}.png`, url: `frame${index}.png` }));
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  harness.state.maintain.framePool = {
+    hasProcessedFrames: true,
+    processedFrames: frames,
+    runtimeFrames: [frames[0]],
+    selectedSourceFrames: [0],
+    freezeLastFrame: false,
+    protected: false
+  };
+
+  await harness.appNode.dispatchEvent("click", {
+    target: createEventTarget({ selectAllFrames: "" }),
+    shiftKey: false
+  });
+  assert.deepEqual(Array.from(harness.state.maintain.reselectSelection), [0, 1, 2]);
+
+  await harness.appNode.dispatchEvent("click", {
+    target: createEventTarget({ clearFrameSelection: "" }),
+    shiftKey: false
+  });
+  assert.deepEqual(Array.from(harness.state.maintain.reselectSelection), []);
 });

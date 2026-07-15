@@ -339,8 +339,39 @@ select:focus {
   color: #64748b;
 }
 
-.frame-pool-summary {
+.summary-grid.frame-pool-summary {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   margin-top: 14px;
+}
+
+.frame-selection-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.frame-selection-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.frame-selection-legend span::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  content: "";
+}
+
+.frame-selection-legend .current-marker::before {
+  background: #d97706;
+}
+
+.frame-selection-legend .selected-marker::before {
+  background: #0284c7;
 }
 
 .frame-pool-grid {
@@ -370,6 +401,17 @@ select:focus {
   box-shadow: inset 0 0 0 1px #0284c7;
 }
 
+.frame-pool-card.is-current {
+  border-left: 4px solid #d97706;
+  background: #fffbeb;
+}
+
+.frame-pool-card.is-current.is-selected {
+  border-color: #0284c7;
+  border-left-color: #d97706;
+  background: #f0f9ff;
+}
+
 .frame-preview-button {
   width: 100%;
   aspect-ratio: 1;
@@ -377,6 +419,11 @@ select:focus {
   overflow: hidden;
   border: 0;
   background: #f1f5f9;
+  cursor: zoom-in;
+}
+
+.frame-preview-button:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 2px #0284c7;
 }
 
 .frame-preview-button img,

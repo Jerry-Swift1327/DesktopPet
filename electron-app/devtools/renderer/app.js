@@ -184,7 +184,8 @@ const state = {
     reselectPending: false,
     reselectFreezeLastFrame: false,
     frameLightboxIndex: null,
-    lastFrameSelectionIndex: null
+    lastFrameSelectionIndex: null,
+    pendingFrameSelectionShift: false
   },
   deleteVariant: {
     selectedId: "",
@@ -1289,10 +1290,10 @@ function renderFramePoolManagement() {
 }
 
 function renderFrameLightbox() {
-  const pool = state.maintain.framePool;
   const index = state.maintain.frameLightboxIndex;
-  if (!pool?.hasProcessedFrames || !Number.isInteger(index) || !pool.processedFrames[index]) return "";
-  const frame = pool.processedFrames[index];
+  const frames = frameLightboxFrames();
+  if (!Number.isInteger(index) || !frames[index]) return "";
+  const frame = frames[index];
   return `<div class="frame-lightbox" role="dialog" aria-modal="true" aria-label="素材帧放大浏览">
     <button type="button" class="frame-lightbox-close" data-close-frame-lightbox aria-label="关闭">×</button>
     <button type="button" class="frame-lightbox-arrow previous" data-frame-lightbox-step="-1"${index === 0 ? " disabled" : ""} aria-label="上一张">‹</button>
@@ -1300,13 +1301,34 @@ function renderFrameLightbox() {
       <img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}">
       <figcaption>${escapeHtml(frame.name)}</figcaption>
     </figure>
-    <button type="button" class="frame-lightbox-arrow next" data-frame-lightbox-step="1"${index === pool.processedFrames.length - 1 ? " disabled" : ""} aria-label="下一张">›</button>
+    <button type="button" class="frame-lightbox-arrow next" data-frame-lightbox-step="1"${index === frames.length - 1 ? " disabled" : ""} aria-label="下一张">›</button>
   </div>`;
+}
+
+function frameSelectionSummary(selection) {
+  const indexes = Array.from(new Set(selection)).sort((left, right) => left - right);
+  let gapCount = 0;
+  for (let index = 1; index < indexes.length; index += 1) {
+    if (indexes[index] - indexes[index - 1] > 1) gapCount += 1;
+  }
+  return {
+    count: indexes.length,
+    first: indexes[0] ?? null,
+    last: indexes[indexes.length - 1] ?? null,
+    gapCount
+  };
+}
+
+function frameLightboxFrames() {
+  const pool = state.maintain.framePool;
+  return pool?.hasProcessedFrames ? pool.processedFrames : pool?.runtimeFrames || [];
 }
 
 function renderRuntimeFrameReselect() {
   const pool = state.maintain.framePool;
   const selected = new Set(state.maintain.reselectSelection);
+  const current = new Set(pool?.selectedSourceFrames || []);
+  const selectionSummary = frameSelectionSummary(selected);
   const disabled = busy() || !pool?.hasProcessedFrames || pool?.protected;
   return `<section class="panel" data-scroll-anchor="runtime-frame-reselect">
     <div class="panel-header">
@@ -1325,13 +1347,16 @@ function renderRuntimeFrameReselect() {
     ${!pool?.hasProcessedFrames ? `<p class="muted">完整素材池不可用。请先在“素材池管理”中生成 processed_frames；当前运行帧仅供只读确认。</p>` : ""}
     ${pool ? `<div class="summary-grid summary-grid-compact frame-pool-summary">
       <div><span>当前运行帧</span><strong>${pool.runtimeFrames.length}</strong></div>
-      <div><span>已选素材帧</span><strong>${selected.size}</strong></div>
+      <div><span>已选素材帧</span><strong>${selectionSummary.count}</strong></div>
+      <div><span>首帧索引</span><strong>${selectionSummary.first ?? "-"}</strong></div>
+      <div><span>尾帧索引</span><strong>${selectionSummary.last ?? "-"}</strong></div>
+      <div><span>索引断点</span><strong>${selectionSummary.gapCount}</strong></div>
       <div><span>末帧休眠</span><strong>${pool.freezeLastFrame ? "开启" : "关闭"}</strong></div>
     </div>` : ""}
-    ${pool?.hasProcessedFrames ? `<div class="frame-pool-grid" data-scroll-key="frame-pool-grid">${pool.processedFrames.map((frame, index) => `<article class="frame-pool-card${selected.has(frame.index) ? " is-selected" : ""}">
+    ${pool?.hasProcessedFrames ? `<div class="frame-selection-legend"><span class="current-marker">当前运行帧</span><span class="selected-marker">本次选择</span></div><div class="frame-pool-grid" data-scroll-key="frame-pool-grid">${pool.processedFrames.map((frame, index) => `<article class="frame-pool-card${current.has(frame.index) ? " is-current" : ""}${selected.has(frame.index) ? " is-selected" : ""}">
       <button type="button" class="frame-preview-button" data-open-frame-lightbox="${index}" aria-label="放大 ${escapeHtml(frame.name)}"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"></button>
       <label><input type="checkbox" data-source-frame="${frame.index}"${selected.has(frame.index) ? " checked" : ""}${disabled ? " disabled" : ""}><span>${escapeHtml(frame.name)}</span></label>
-    </article>`).join("")}</div>` : `<div class="frame-pool-grid runtime-readonly-grid" data-scroll-key="frame-pool-grid">${(pool?.runtimeFrames || []).map((frame) => `<article class="frame-pool-card"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"><span>${escapeHtml(frame.name)}</span></article>`).join("")}</div>`}
+    </article>`).join("")}</div>` : `<div class="frame-pool-grid runtime-readonly-grid" data-scroll-key="frame-pool-grid">${(pool?.runtimeFrames || []).map((frame, index) => `<article class="frame-pool-card is-current"><button type="button" class="frame-preview-button" data-open-frame-lightbox="${index}" aria-label="放大 ${escapeHtml(frame.name)}"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"></button><span>${escapeHtml(frame.name)}</span></article>`).join("")}</div>`}
     ${state.maintain.frameAction === "yawn" && !pool?.protected ? `<label class="option-check freeze-option reselect-freeze">
       <input type="checkbox" data-reselect-freeze-last-frame${state.maintain.reselectFreezeLastFrame ? " checked" : ""}${disabled ? " disabled" : ""}>
       <span>末帧休眠（5 分钟）</span>
@@ -1636,6 +1661,7 @@ async function loadActionFramePool(action, options = {}) {
     state.maintain.reselectPreview = null;
     state.maintain.frameLightboxIndex = null;
     state.maintain.lastFrameSelectionIndex = null;
+    state.maintain.pendingFrameSelectionShift = false;
   } catch (error) {
     state.maintain.framePool = null;
     pushLog(error.message);
@@ -2131,6 +2157,13 @@ appNode.addEventListener("input", (event) => {
   }
 });
 
+appNode.addEventListener("click", (event) => {
+  const sourceFrame = event.target.closest?.("[data-source-frame]");
+  if (sourceFrame) {
+    state.maintain.pendingFrameSelectionShift = Boolean(event.shiftKey);
+  }
+}, true);
+
 appNode.addEventListener("change", async (event) => {
   if (busy()) {
     render();
@@ -2223,10 +2256,13 @@ appNode.addEventListener("change", async (event) => {
   } else if (event.target.dataset.sourceFrame !== undefined) {
     const index = Number(event.target.dataset.sourceFrame);
     const selection = new Set(state.maintain.reselectSelection);
-    if (event.shiftKey && Number.isInteger(state.maintain.lastFrameSelectionIndex)) {
-      const start = Math.min(index, state.maintain.lastFrameSelectionIndex);
-      const end = Math.max(index, state.maintain.lastFrameSelectionIndex);
-      for (let frameIndex = start; frameIndex <= end; frameIndex += 1) {
+    const frameIndexes = (state.maintain.framePool?.processedFrames || []).map((frame) => frame.index);
+    const currentPosition = frameIndexes.indexOf(index);
+    const previousPosition = frameIndexes.indexOf(state.maintain.lastFrameSelectionIndex);
+    if (state.maintain.pendingFrameSelectionShift && currentPosition >= 0 && previousPosition >= 0) {
+      const start = Math.min(currentPosition, previousPosition);
+      const end = Math.max(currentPosition, previousPosition);
+      for (const frameIndex of frameIndexes.slice(start, end + 1)) {
         if (event.target.checked) selection.add(frameIndex);
         else selection.delete(frameIndex);
       }
@@ -2235,6 +2271,7 @@ appNode.addEventListener("change", async (event) => {
     } else {
       selection.delete(index);
     }
+    state.maintain.pendingFrameSelectionShift = false;
     state.maintain.lastFrameSelectionIndex = index;
     state.maintain.reselectSelection = Array.from(selection).sort((left, right) => left - right);
     state.maintain.reselectPreview = null;
@@ -2285,6 +2322,9 @@ appNode.addEventListener("change", async (event) => {
 });
 
 appNode.addEventListener("click", async (event) => {
+  const openFrameControl = event.target.closest?.("[data-open-frame-lightbox]");
+  const frameStepControl = event.target.closest?.("[data-frame-lightbox-step]");
+  const closeFrameControl = event.target.closest?.("[data-close-frame-lightbox]");
   if (busy() && event.target.dataset.closeSuccess === undefined) {
     return;
   }
@@ -2362,14 +2402,14 @@ appNode.addEventListener("click", async (event) => {
     await buildReselectPreview();
   } else if (event.target.dataset.runReselect) {
     await runReselect(event.target.dataset.runReselect);
-  } else if (event.target.dataset.openFrameLightbox !== undefined) {
-    state.maintain.frameLightboxIndex = Number(event.target.dataset.openFrameLightbox);
+  } else if (openFrameControl) {
+    state.maintain.frameLightboxIndex = Number(openFrameControl.dataset.openFrameLightbox);
     renderPreservingScroll();
-  } else if (event.target.dataset.frameLightboxStep !== undefined) {
-    const next = state.maintain.frameLightboxIndex + Number(event.target.dataset.frameLightboxStep);
-    state.maintain.frameLightboxIndex = Math.min(Math.max(0, next), (state.maintain.framePool?.processedFrames.length || 1) - 1);
+  } else if (frameStepControl) {
+    const next = state.maintain.frameLightboxIndex + Number(frameStepControl.dataset.frameLightboxStep);
+    state.maintain.frameLightboxIndex = Math.min(Math.max(0, next), Math.max(0, frameLightboxFrames().length - 1));
     renderPreservingScroll();
-  } else if (event.target.dataset.closeFrameLightbox !== undefined) {
+  } else if (closeFrameControl) {
     state.maintain.frameLightboxIndex = null;
     renderPreservingScroll();
   } else if (event.target.dataset.resetMaintainEdits !== undefined) {
@@ -2397,7 +2437,7 @@ if (typeof document.addEventListener === "function") {
     } else if (event.key === "ArrowLeft") {
       state.maintain.frameLightboxIndex = Math.max(0, state.maintain.frameLightboxIndex - 1);
     } else if (event.key === "ArrowRight") {
-      state.maintain.frameLightboxIndex = Math.min((state.maintain.framePool?.processedFrames.length || 1) - 1, state.maintain.frameLightboxIndex + 1);
+      state.maintain.frameLightboxIndex = Math.min(Math.max(0, frameLightboxFrames().length - 1), state.maintain.frameLightboxIndex + 1);
     } else {
       return;
     }
