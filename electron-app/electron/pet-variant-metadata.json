@@ -55,9 +55,7 @@
           "feed",
           "ball"
         ],
-        "assets": [
-          "yawn"
-        ]
+        "assets": []
       },
       "features": {
         "enable": [

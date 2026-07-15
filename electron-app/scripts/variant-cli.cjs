@@ -181,11 +181,26 @@ function getVariantDetails(input, options = {}) {
   const manifest = path.join(animationsRoot, `${profile.assetPrefix}_actions_manifest.json`);
   const resourceActions = Object.entries(actionPool)
     .filter(([, config]) => config.asset)
-    .map(([action, config]) => ({
-      action,
-      path: path.join(animationsRoot, `${profile.assetPrefix}_${config.asset}`),
-      registered: getProfileActionKeys(profile).includes(action)
-    }))
+    .map(([action, config]) => {
+      const resourcePath = path.join(animationsRoot, `${profile.assetPrefix}_${config.asset}`);
+      const metadataPath = path.join(resourcePath, "loop.json");
+      let playback = {};
+      try {
+        playback = fs.existsSync(metadataPath) ? JSON.parse(fs.readFileSync(metadataPath, "utf8")) : {};
+      } catch {
+        playback = {};
+      }
+      return {
+        action,
+        path: resourcePath,
+        registered: getProfileActionKeys(profile).includes(action),
+        hasProcessedFrames: fs.existsSync(path.join(resourcePath, "processed_frames")),
+        hasCanonicalVideo: fs.existsSync(path.join(resourcePath, `${path.basename(resourcePath)}.mp4`)),
+        freezeLastFrame: playback.freezeLastFrame === true,
+        tailLoopStart: Number.isInteger(playback.tailLoopStart) ? playback.tailLoopStart : null,
+        protectedPlayback: Boolean(playback.directionFrameCount || playback.sourceStartPolicy || Number.isInteger(playback.tailLoopStart))
+      };
+    })
     .filter((item) => fs.existsSync(item.path));
   return {
     ...buildVariantSummary(profile),
@@ -488,8 +503,10 @@ function appendActionProcessingArgs(processArgs, action, options = {}) {
   if (action === "ball") {
     processArgs.push("--preserve-bright-color-foreground");
   }
-  if (options.freezeLastFrame) {
+  if (options.freezeLastFrame === true) {
     processArgs.push("--freeze-last-frame");
+  } else if (options.freezeLastFrame === false) {
+    processArgs.push("--no-freeze-last-frame");
   }
 
   const loopMode = normalizeLoopMode(options.loopMode, options);
@@ -571,7 +588,7 @@ function buildBootstrapPlan(args, options = {}) {
     args: getProcessArgs(draft.assetPrefix, action, {
       useFullRange: Boolean(args["use-full-range"]),
       loopMode: loopModes[action],
-      freezeLastFrame: action === "yawn" && draft.features.enable.includes("idleYawn")
+      freezeLastFrame: loopModes[action]?.freezeLastFrame ?? (action === "yawn" && draft.features.enable.includes("idleYawn"))
     })
   }));
   const preflightCommands = ["release", "installer"].map((channel) => ({
@@ -1083,6 +1100,10 @@ function buildReplaceActionPlan(payload = {}, options = {}) {
   if (!Object.prototype.hasOwnProperty.call(actionPool, action)) {
     throw new Error(`Unknown pet action ${action}. Register it in ACTION_POOL first.`);
   }
+  const existingPool = getActionFramePool({ id: profile.id, action }, { metadataFile, animationsRoot });
+  if (existingPool.protected) {
+    throw new Error(existingPool.protectedReason);
+  }
   const video = path.resolve(String(payload.video || payload.source || ""));
   if (!video || !/\.mp4$/i.test(video) || !fs.existsSync(video) || !fs.statSync(video).isFile()) {
     throw new Error(`Replacement video must be an existing .mp4 file: ${video}`);
@@ -1102,7 +1123,7 @@ function buildReplaceActionPlan(payload = {}, options = {}) {
     "128",
     "--trim-ground-alpha-auto"
   ];
-  appendActionProcessingArgs(args, action, { loopMode: payload.loopMode });
+  appendActionProcessingArgs(args, action, { loopMode: payload.loopMode, freezeLastFrame: payload.freezeLastFrame });
   return {
     kind: "replaceAction",
     id: profile.id,
@@ -1133,7 +1154,7 @@ function buildAddActionPlan(payload = {}, options = {}) {
     throw new Error(`New action video must be an existing .mp4 file: ${video}`);
   }
   const actionName = `${profile.assetPrefix}_${actionPool[action].asset}`;
-  const args = getProcessArgs(profile.assetPrefix, action, { loopMode: payload.loopMode });
+  const args = getProcessArgs(profile.assetPrefix, action, { loopMode: payload.loopMode, freezeLastFrame: payload.freezeLastFrame });
   args.splice(6, 0, "--video", video);
   return {
     kind: "addAction",
@@ -1167,6 +1188,104 @@ async function applyAddActionPlanAsync(plan, options = {}) {
   const runner = options.runCommand || runCommandAsync;
   await runner(plan.command.command, plan.command.args, { cwd: plan.command.cwd, stage: "addAction", onLog: options.onLog });
   return { id: plan.id, action: plan.action, added: true };
+}
+
+function getActionFramePool(payload = {}, options = {}) {
+  const metadataFile = options.metadataFile || PET_VARIANT_METADATA_FILE;
+  const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
+  const metadata = readMetadataFile(metadataFile);
+  const profile = getVariantProfileFromMetadata(payload.id, metadata);
+  const action = String(payload.action || "");
+  if (!Object.prototype.hasOwnProperty.call(actionPool, action)) {
+    throw new Error(`Unknown pet action ${action}.`);
+  }
+  const actionName = getProfileActionFolderName(profile, action);
+  const actionPath = path.join(animationsRoot, actionName);
+  const processedPath = path.join(actionPath, "processed_frames");
+  const runtimePath = path.join(actionPath, "transparent_frames");
+  const metadataPath = path.join(actionPath, "loop.json");
+  const canonicalVideo = path.join(actionPath, `${actionName}.mp4`);
+  let playback = {};
+  try {
+    playback = fs.existsSync(metadataPath) ? JSON.parse(fs.readFileSync(metadataPath, "utf8")) : {};
+  } catch {
+    playback = {};
+  }
+  const protectedReason = Number.isInteger(playback.tailLoopStart)
+    ? "该动作使用 tailLoopStart 专属尾段循环，只读保护已开启。"
+    : playback.directionFrameCount || playback.sourceStartPolicy
+      ? "该动作使用方向帧映射，只读保护已开启。"
+      : null;
+  const processedFrames = fs.existsSync(processedPath)
+    ? fs.readdirSync(processedPath).filter((name) => /^frame_\d+\.png$/i.test(name)).sort()
+    : [];
+  const runtimeFrames = fs.existsSync(runtimePath)
+    ? fs.readdirSync(runtimePath).filter((name) => /^frame_\d+\.png$/i.test(name)).sort()
+    : [];
+  let selectedSourceFrames = Array.isArray(playback.sourceFrames) ? playback.sourceFrames.filter(Number.isInteger) : [];
+  if (selectedSourceFrames.length === 0 && Number.isInteger(playback.sourceLoopStart) && Number.isInteger(playback.sourceLoopEnd)) {
+    for (let index = playback.sourceLoopStart; index <= playback.sourceLoopEnd; index += 1) selectedSourceFrames.push(index);
+  }
+  return {
+    id: profile.id,
+    action,
+    actionName,
+    actionPath,
+    manifest: path.join(animationsRoot, `${getProfileAssetPrefix(profile)}_actions_manifest.json`),
+    canonicalVideo,
+    hasCanonicalVideo: fs.existsSync(canonicalVideo),
+    hasProcessedFrames: processedFrames.length > 0,
+    processedFrames: processedFrames.map((name) => ({ name, index: Number(name.match(/\d+/)[0]), path: path.join(processedPath, name) })),
+    runtimeFrames: runtimeFrames.map((name) => ({ name, index: Number(name.match(/\d+/)[0]), path: path.join(runtimePath, name) })),
+    selectedSourceFrames: uniqueList(selectedSourceFrames).sort((left, right) => left - right),
+    freezeLastFrame: playback.freezeLastFrame === true,
+    protected: Boolean(protectedReason),
+    protectedReason,
+    playback
+  };
+}
+
+function buildGenerateFramePoolPlan(payload = {}, options = {}) {
+  const pool = getActionFramePool(payload, options);
+  if (pool.protected) {
+    throw new Error(pool.protectedReason);
+  }
+  if (!pool.hasCanonicalVideo) {
+    throw new Error(`Missing canonical action video: ${pool.canonicalVideo}`);
+  }
+  const args = ["tools\\process_pet_actions.py", "pool", "--action", pool.actionName, "--trim-ground-alpha", "128", "--trim-ground-alpha-auto"];
+  appendActionProcessingArgs(args, pool.action, { loopMode: { mode: "auto" } });
+  return { kind: "generateFramePool", id: pool.id, action: pool.action, command: { cwd: projectRoot, command: "python", args } };
+}
+
+function buildReselectRuntimeFramesPlan(payload = {}, options = {}) {
+  const pool = getActionFramePool(payload, options);
+  if (!pool.hasProcessedFrames) throw new Error(`Missing processed frame pool for ${pool.actionName}.`);
+  if (pool.protected) throw new Error(pool.protectedReason);
+  const sourceFrames = uniqueList((payload.sourceFrames || []).map(Number).filter(Number.isInteger)).sort((left, right) => left - right);
+  if (sourceFrames.length === 0) throw new Error("At least one source frame is required.");
+  const available = new Set(pool.processedFrames.map((frame) => frame.index));
+  const invalid = sourceFrames.filter((index) => !available.has(index));
+  if (invalid.length > 0) throw new Error(`Invalid source frame(s): ${invalid.join(", ")}`);
+  const args = [
+    "tools\\process_pet_actions.py", "reselect", "--action", pool.actionName,
+    "--manifest", path.basename(pool.manifest), "--source-frames", sourceFrames.join(",")
+  ];
+  if (payload.freezeLastFrame === true) args.push("--freeze-last-frame");
+  if (payload.freezeLastFrame === false) args.push("--no-freeze-last-frame");
+  return {
+    kind: "reselectRuntimeFrames", id: pool.id, action: pool.action, sourceFrames,
+    freezeLastFrame: payload.freezeLastFrame,
+    before: { frameCount: pool.runtimeFrames.length, sourceFrames: pool.selectedSourceFrames, freezeLastFrame: pool.freezeLastFrame },
+    after: { frameCount: sourceFrames.length, sourceFrames, freezeLastFrame: payload.freezeLastFrame },
+    command: { cwd: projectRoot, command: "python", args }
+  };
+}
+
+async function applyMaintenanceCommandPlanAsync(plan, options = {}) {
+  const runner = options.runCommand || runCommandAsync;
+  await runner(plan.command.command, plan.command.args, { cwd: plan.command.cwd, stage: plan.kind, onLog: options.onLog });
+  return { id: plan.id, action: plan.action, applied: true };
 }
 
 function getCurrentRuntimeVariant(runtimeAssetsRoot) {
@@ -1491,6 +1610,10 @@ module.exports = {
   applyReplaceActionPlanAsync,
   buildAddActionPlan,
   applyAddActionPlanAsync,
+  getActionFramePool,
+  buildGenerateFramePoolPlan,
+  buildReselectRuntimeFramesPlan,
+  applyMaintenanceCommandPlanAsync,
   buildMetadataEditPreview,
   applyMetadataEdit,
   buildDeleteActionPreview,

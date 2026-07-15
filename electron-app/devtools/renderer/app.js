@@ -3,7 +3,7 @@ const appNode = document.getElementById("app");
 const sidebarNode = document.querySelector(".sidebar");
 
 const newVariantStages = ["prepareStaging", "writeMetadata", "copyVideos", "processVideos", "runPreflight", "generateGallery", "complete"];
-const maintenanceStages = ["replaceAction", "addAction", "renameAssets", "writeMetadataEdit", "deleteActionResources", "deleteVariantResources", "complete"];
+const maintenanceStages = ["replaceAction", "addAction", "renameAssets", "generateFramePool", "reselectRuntimeFrames", "writeMetadataEdit", "deleteActionResources", "deleteVariantResources", "complete"];
 const allStageNames = Array.from(new Set(newVariantStages.concat(maintenanceStages)));
 
 const stageLabels = {
@@ -19,6 +19,8 @@ const stageLabels = {
   writeMetadataEdit: "写入维护元数据",
   deleteActionResources: "删除动作资源",
   deleteVariantResources: "删除测试资源",
+  generateFramePool: "生成素材池",
+  reselectRuntimeFrames: "重选运行帧",
   complete: "完成",
   task: "任务",
   window: "窗口"
@@ -49,6 +51,8 @@ const stageWeights = {
   renameAssets: 72,
   replaceAction: 72,
   addAction: 72,
+  generateFramePool: 72,
+  reselectRuntimeFrames: 84,
   writeMetadataEdit: 84,
   deleteActionResources: 90,
   deleteVariantResources: 90,
@@ -56,7 +60,7 @@ const stageWeights = {
 };
 
 const defaultActionButtons = ["squat", "walk", "feed", "ball"];
-const defaultEnabledFeatures = ["autoStart", "windowDocking", "windowRoam"];
+const defaultEnabledFeatures = ["autoStart"];
 
 const featureLabels = {
   autoStart: "开机自启",
@@ -98,7 +102,9 @@ function createDefaultForm() {
     sourceFolder: "",
     actionVideos: {},
     autoSelectLoop: false,
-    loopModes: {},
+    loopModes: {
+      yawn: { mode: "full", sourceStart: "", sourceEnd: "", freezeLastFrame: true }
+    },
     advanced: {
       actionButtons: defaultActionButtons.slice(),
       actionAssets: [],
@@ -167,7 +173,18 @@ const state = {
     metadataPreview: null,
     metadataPending: false,
     deleteActionPreview: null,
-    deleteActionPending: false
+    deleteActionPending: false,
+    frameAction: "",
+    framePool: null,
+    framePoolPending: false,
+    framePoolPreview: null,
+    framePoolBuildPending: false,
+    reselectSelection: [],
+    reselectPreview: null,
+    reselectPending: false,
+    reselectFreezeLastFrame: false,
+    frameLightboxIndex: null,
+    lastFrameSelectionIndex: null
   },
   deleteVariant: {
     selectedId: "",
@@ -176,6 +193,8 @@ const state = {
     confirmText: ""
   }
 };
+
+const viewScrollSnapshots = new Map();
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -279,6 +298,9 @@ function busy() {
     || state.maintain.replacePending
     || state.maintain.metadataPending
     || state.maintain.deleteActionPending
+    || state.maintain.framePoolPending
+    || state.maintain.framePoolBuildPending
+    || state.maintain.reselectPending
     || state.deleteVariant.pending;
 }
 
@@ -358,7 +380,7 @@ function defaultLoopMode() {
 
 function loopModeFor(action) {
   const explicit = state.form.loopModes[action];
-  return explicit || { mode: defaultLoopMode(), sourceStart: "", sourceEnd: "" };
+  return explicit || { mode: defaultLoopMode(), sourceStart: "", sourceEnd: "", freezeLastFrame: action === "yawn" };
 }
 
 function buildEffectiveLoopModes() {
@@ -371,6 +393,9 @@ function buildEffectiveLoopModes() {
     if (result[action].mode === "manual") {
       result[action].sourceStart = mode.sourceStart;
       result[action].sourceEnd = mode.sourceEnd;
+    }
+    if (action === "yawn") {
+      result[action].freezeLastFrame = mode.freezeLastFrame !== false;
     }
   }
   return result;
@@ -385,6 +410,8 @@ function clearMaintainPreviews() {
   state.maintain.replacePreview = null;
   state.maintain.metadataPreview = null;
   state.maintain.deleteActionPreview = null;
+  state.maintain.framePoolPreview = null;
+  state.maintain.reselectPreview = null;
 }
 
 function markMetadataPreviewDirty() {
@@ -514,30 +541,117 @@ function resetNewVariantForm() {
   render();
 }
 
+function getRenderedView() {
+  const root = appNode.querySelector("[data-current-view]");
+  if (root?.dataset?.currentView) {
+    return root.dataset.currentView;
+  }
+  return appNode.innerHTML.match(/data-current-view="([^"]+)"/)?.[1] || "";
+}
+
+function scrollContainerKey(node) {
+  if (node === document.querySelector(".workspace")) {
+    return "workspace";
+  }
+  if (String(node.className || "").split(/\s+/).includes("wizard-left")) {
+    return "wizard-left";
+  }
+  if (String(node.className || "").split(/\s+/).includes("wizard-right")) {
+    return "wizard-right";
+  }
+  return node.dataset?.scrollKey || "";
+}
+
+function getScrollContainers() {
+  const nodes = [document.querySelector(".workspace"), appNode.querySelector(".wizard-left"), appNode.querySelector(".wizard-right")];
+  if (typeof appNode.querySelectorAll === "function") {
+    nodes.push(...appNode.querySelectorAll("[data-scroll-key]"));
+  }
+  return Array.from(new Set(nodes.filter(Boolean)));
+}
+
+function readVisibleAnchor(node) {
+  if (typeof node.querySelectorAll !== "function" || typeof node.getBoundingClientRect !== "function") {
+    return null;
+  }
+  const containerRect = node.getBoundingClientRect();
+  const anchors = Array.from(node.querySelectorAll("[data-scroll-anchor], .panel"));
+  let best = null;
+  anchors.forEach((anchor, index) => {
+    if (typeof anchor.getBoundingClientRect !== "function") {
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    if (rect.bottom <= containerRect.top || rect.top >= containerRect.bottom) {
+      return;
+    }
+    const offset = rect.top - containerRect.top;
+    if (!best || Math.abs(offset) < Math.abs(best.offset)) {
+      best = {
+        key: anchor.dataset?.scrollAnchor || `panel-${index}`,
+        index,
+        offset
+      };
+    }
+  });
+  return best;
+}
+
 function readScrollSnapshot() {
-  return [document.querySelector(".workspace"), appNode.querySelector(".wizard-left"), appNode.querySelector(".wizard-right")]
-    .filter(Boolean)
-    .map((node) => ({
-      node,
-      className: node.className,
-      scrollTop: node.scrollTop,
-      scrollLeft: node.scrollLeft
-    }));
+  return getScrollContainers().map((node) => ({
+    key: scrollContainerKey(node),
+    scrollTop: node.scrollTop,
+    scrollLeft: node.scrollLeft,
+    anchor: readVisibleAnchor(node)
+  })).filter((item) => item.key);
 }
 
 function restoreScrollSnapshot(snapshot) {
   for (const item of snapshot || []) {
-    const selector = item.className ? `.${String(item.className).split(/\s+/).filter(Boolean).join(".")}` : null;
-    const node = item.node.isConnected ? item.node : (selector ? document.querySelector(selector) : null);
+    const node = item.key === "workspace"
+      ? document.querySelector(".workspace")
+      : appNode.querySelector(`.${item.key}`) || appNode.querySelector(`[data-scroll-key="${item.key}"]`);
     if (node) {
       node.scrollTop = item.scrollTop;
       node.scrollLeft = item.scrollLeft;
+      if (item.anchor && typeof node.querySelectorAll === "function" && typeof node.getBoundingClientRect === "function") {
+        const anchors = Array.from(node.querySelectorAll("[data-scroll-anchor], .panel"));
+        const anchor = anchors.find((candidate) => candidate.dataset?.scrollAnchor === item.anchor.key)
+          || anchors[item.anchor.index];
+        if (anchor && typeof anchor.getBoundingClientRect === "function") {
+          const currentOffset = anchor.getBoundingClientRect().top - node.getBoundingClientRect().top;
+          node.scrollTop += currentOffset - item.anchor.offset;
+        }
+      }
     }
   }
 }
 
 function renderPreservingScroll() {
   render({ preserveScroll: true });
+}
+
+function readFocusSnapshot() {
+  const active = document.activeElement;
+  if (!active || typeof appNode.contains !== "function" || !appNode.contains(active)) return null;
+  const datasetEntry = Object.entries(active.dataset || {})[0];
+  if (!datasetEntry) return null;
+  const attribute = datasetEntry[0].replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+  return {
+    selector: `[data-${attribute}="${String(datasetEntry[1]).replace(/"/g, "\\\"")}"]`,
+    selectionStart: active.selectionStart,
+    selectionEnd: active.selectionEnd
+  };
+}
+
+function restoreFocusSnapshot(snapshot) {
+  if (!snapshot) return;
+  const node = appNode.querySelector(snapshot.selector);
+  if (!node || typeof node.focus !== "function") return;
+  node.focus({ preventScroll: true });
+  if (typeof node.setSelectionRange === "function" && Number.isInteger(snapshot.selectionStart) && Number.isInteger(snapshot.selectionEnd)) {
+    node.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+  }
 }
 
 function renderSidebar() {
@@ -664,6 +778,10 @@ function renderLoopControls(action) {
       <input type="number" min="0" step="1" placeholder="start" data-loop-start="${escapeHtml(action)}" value="${escapeHtml(value.sourceStart ?? "")}"${disabled}>
       <input type="number" min="0" step="1" placeholder="end" data-loop-end="${escapeHtml(action)}" value="${escapeHtml(value.sourceEnd ?? "")}"${disabled}>
     </div>
+    ${action === "yawn" ? `<label class="option-check freeze-option">
+      <input type="checkbox" data-freeze-last-frame="${escapeHtml(action)}"${value.freezeLastFrame !== false ? " checked" : ""}${disabled}>
+      <span>末帧休眠（5 分钟）</span>
+    </label>` : ""}
   </div>`;
 }
 
@@ -1029,14 +1147,25 @@ function renderMaintainMetadataControls(fields, disabled) {
 function maintainLoopModeFor(collectionName, action) {
   const collection = state.maintain[collectionName];
   if (!collection[action]) {
-    collection[action] = { mode: "full", sourceStart: "", sourceEnd: "" };
+    const resource = state.maintain.details?.resources?.resourceActions?.find((item) => item.action === action);
+    collection[action] = {
+      mode: "full",
+      sourceStart: "",
+      sourceEnd: "",
+      freezeLastFrame: action === "yawn"
+        ? (collectionName === "replacementLoopModes" ? resource?.freezeLastFrame === true : true)
+        : undefined
+    };
   }
   return collection[action];
 }
 
 function renderMaintainCardLoopControls(action, collectionName, dataPrefix) {
   const value = maintainLoopModeFor(collectionName, action);
-  const disabled = busy() ? " disabled" : "";
+  const resource = state.maintain.details?.resources?.resourceActions?.find((item) => item.action === action);
+  const controlsDisabled = busy() || (collectionName === "replacementLoopModes" && resource?.protectedPlayback);
+  const disabled = controlsDisabled ? " disabled" : "";
+  const freezeDisabled = busy() || resource?.protectedPlayback;
   return `<div class="loop-controls">
     <label>运行帧
       <select data-${dataPrefix}-loop-mode="${escapeHtml(action)}"${disabled}>
@@ -1049,6 +1178,10 @@ function renderMaintainCardLoopControls(action, collectionName, dataPrefix) {
       <input type="number" min="0" step="1" placeholder="start" data-${dataPrefix}-loop-start="${escapeHtml(action)}" value="${escapeHtml(value.sourceStart ?? "")}"${disabled}>
       <input type="number" min="0" step="1" placeholder="end" data-${dataPrefix}-loop-end="${escapeHtml(action)}" value="${escapeHtml(value.sourceEnd ?? "")}"${disabled}>
     </div>
+    ${action === "yawn" ? `<label class="option-check freeze-option${resource?.protectedPlayback ? " is-readonly" : ""}">
+      <input type="checkbox" data-${dataPrefix}-freeze-last-frame="${escapeHtml(action)}"${value.freezeLastFrame === true ? " checked" : ""}${freezeDisabled ? " disabled" : ""}>
+      <span>末帧休眠（5 分钟）</span>
+    </label>` : ""}
   </div>`;
 }
 
@@ -1062,6 +1195,8 @@ function renderMaintainActionCard(action, { kind, video, loopModes, dataPrefix }
   const sourceText = video || (kind === "replace"
     ? `${state.maintain.details.profile.assetPrefix}_${state.options.actions[action].asset}`
     : "未选择视频");
+  const resource = state.maintain.details?.resources?.resourceActions?.find((item) => item.action === action);
+  const protectedPlayback = kind === "replace" && resource?.protectedPlayback;
   return `<article class="action-card ${status}">
     <div class="action-copy">
       <div class="action-title-row">
@@ -1070,11 +1205,12 @@ function renderMaintainActionCard(action, { kind, video, loopModes, dataPrefix }
       </div>
       <span class="badge">${escapeHtml(sourceLabel)}</span>
       <p>${escapeHtml(sourceText)}</p>
+      ${protectedPlayback ? `<p class="warning">专属播放动作，只读保护已开启。</p>` : ""}
       ${renderMaintainCardLoopControls(action, loopModes, dataPrefix)}
     </div>
     <div class="action-controls">
-      <button type="button" data-${dataPrefix}-video="${escapeHtml(action)}"${busy() ? " disabled" : ""}>${selected ? "更换视频" : (kind === "replace" ? "替换视频" : "选择视频")}</button>
-      ${kind === "replace" ? `<button type="button" class="danger-button" data-build-delete-action="${escapeHtml(action)}"${busy() ? " disabled" : ""}>删除资源</button>` : ""}
+      <button type="button" data-${dataPrefix}-video="${escapeHtml(action)}"${busy() || protectedPlayback ? " disabled" : ""}>${selected ? "更换视频" : (kind === "replace" ? "替换视频" : "选择视频")}</button>
+      ${kind === "replace" ? `<button type="button" class="danger-button" data-build-delete-action="${escapeHtml(action)}"${busy() || protectedPlayback ? " disabled" : ""}>删除资源</button>` : ""}
     </div>
   </article>`;
 }
@@ -1112,6 +1248,97 @@ function renderNewActionCards() {
       dataPrefix: "new-action"
     })).join("")}</div>
   </div>`;
+}
+
+function selectedFrameResource() {
+  return state.maintain.details?.resources?.resourceActions?.find((item) => item.action === state.maintain.frameAction) || null;
+}
+
+function renderFrameActionOptions() {
+  const actions = maintainResourceActions(state.maintain.details);
+  return actions.map((action) => `<option value="${escapeHtml(action)}"${state.maintain.frameAction === action ? " selected" : ""}>${escapeHtml(actionLabel(action))}</option>`).join("");
+}
+
+function renderFramePoolManagement() {
+  const resource = selectedFrameResource();
+  const pool = state.maintain.framePool;
+  const disabled = busy() ? " disabled" : "";
+  const canGenerate = Boolean(resource?.hasCanonicalVideo && !resource?.protectedPlayback);
+  return `<section class="panel" data-scroll-anchor="frame-pool-management">
+    <div class="panel-header">
+      <div>
+        <h2>素材池管理</h2>
+        <p class="muted">从动作目录的标准 MP4 仅生成 processed_frames，不改运行帧和动作元数据。</p>
+      </div>
+      <div class="button-row">
+        <button type="button" data-build-frame-pool${disabled || !canGenerate ? " disabled" : ""}>生成预览</button>
+        <button type="button" class="primary" data-run-frame-pool="${escapeHtml(state.maintain.framePoolPreview?.previewId || "")}"${disabled || !state.maintain.framePoolPreview ? " disabled" : ""}>确认生成</button>
+      </div>
+    </div>
+    <label>选择动作
+      <select data-frame-action${disabled}>${renderFrameActionOptions()}</select>
+    </label>
+    <div class="summary-grid summary-grid-compact frame-pool-summary">
+      <div><span>标准源视频</span><strong>${resource?.hasCanonicalVideo ? "存在" : "缺失"}</strong></div>
+      <div><span>素材池</span><strong>${pool?.hasProcessedFrames ? `${pool.processedFrames.length} 帧` : "尚未生成"}</strong></div>
+      <div><span>运行帧</span><strong>${pool ? `${pool.runtimeFrames.length} 帧（保持不变）` : "-"}</strong></div>
+    </div>
+    ${resource?.protectedPlayback ? `<p class="warning">该动作使用专属播放元数据，素材池与运行帧维护均为只读。</p>` : ""}
+    ${state.maintain.framePoolPreview ? `<pre>${renderJson(state.maintain.framePoolPreview.command)}</pre>` : ""}
+  </section>`;
+}
+
+function renderFrameLightbox() {
+  const pool = state.maintain.framePool;
+  const index = state.maintain.frameLightboxIndex;
+  if (!pool?.hasProcessedFrames || !Number.isInteger(index) || !pool.processedFrames[index]) return "";
+  const frame = pool.processedFrames[index];
+  return `<div class="frame-lightbox" role="dialog" aria-modal="true" aria-label="素材帧放大浏览">
+    <button type="button" class="frame-lightbox-close" data-close-frame-lightbox aria-label="关闭">×</button>
+    <button type="button" class="frame-lightbox-arrow previous" data-frame-lightbox-step="-1"${index === 0 ? " disabled" : ""} aria-label="上一张">‹</button>
+    <figure>
+      <img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}">
+      <figcaption>${escapeHtml(frame.name)}</figcaption>
+    </figure>
+    <button type="button" class="frame-lightbox-arrow next" data-frame-lightbox-step="1"${index === pool.processedFrames.length - 1 ? " disabled" : ""} aria-label="下一张">›</button>
+  </div>`;
+}
+
+function renderRuntimeFrameReselect() {
+  const pool = state.maintain.framePool;
+  const selected = new Set(state.maintain.reselectSelection);
+  const disabled = busy() || !pool?.hasProcessedFrames || pool?.protected;
+  return `<section class="panel" data-scroll-anchor="runtime-frame-reselect">
+    <div class="panel-header">
+      <div>
+        <h2>重新选择运行帧</h2>
+        <p class="muted">任意多选，写入时自动去重并按素材索引升序播放。</p>
+      </div>
+      <div class="button-row">
+        <button type="button" data-select-all-frames${disabled ? " disabled" : ""}>全选</button>
+        <button type="button" data-clear-frame-selection${disabled ? " disabled" : ""}>清空</button>
+        <button type="button" data-build-reselect-preview${disabled || selected.size === 0 ? " disabled" : ""}>生成预览</button>
+        <button type="button" class="primary" data-run-reselect="${escapeHtml(state.maintain.reselectPreview?.previewId || "")}"${disabled || !state.maintain.reselectPreview ? " disabled" : ""}>确认写入</button>
+      </div>
+    </div>
+    ${pool?.protected ? `<p class="warning">${escapeHtml(pool.protectedReason)}</p>` : ""}
+    ${!pool?.hasProcessedFrames ? `<p class="muted">完整素材池不可用。请先在“素材池管理”中生成 processed_frames；当前运行帧仅供只读确认。</p>` : ""}
+    ${pool ? `<div class="summary-grid summary-grid-compact frame-pool-summary">
+      <div><span>当前运行帧</span><strong>${pool.runtimeFrames.length}</strong></div>
+      <div><span>已选素材帧</span><strong>${selected.size}</strong></div>
+      <div><span>末帧休眠</span><strong>${pool.freezeLastFrame ? "开启" : "关闭"}</strong></div>
+    </div>` : ""}
+    ${pool?.hasProcessedFrames ? `<div class="frame-pool-grid" data-scroll-key="frame-pool-grid">${pool.processedFrames.map((frame, index) => `<article class="frame-pool-card${selected.has(frame.index) ? " is-selected" : ""}">
+      <button type="button" class="frame-preview-button" data-open-frame-lightbox="${index}" aria-label="放大 ${escapeHtml(frame.name)}"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"></button>
+      <label><input type="checkbox" data-source-frame="${frame.index}"${selected.has(frame.index) ? " checked" : ""}${disabled ? " disabled" : ""}><span>${escapeHtml(frame.name)}</span></label>
+    </article>`).join("")}</div>` : `<div class="frame-pool-grid runtime-readonly-grid" data-scroll-key="frame-pool-grid">${(pool?.runtimeFrames || []).map((frame) => `<article class="frame-pool-card"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"><span>${escapeHtml(frame.name)}</span></article>`).join("")}</div>`}
+    ${state.maintain.frameAction === "yawn" && !pool?.protected ? `<label class="option-check freeze-option reselect-freeze">
+      <input type="checkbox" data-reselect-freeze-last-frame${state.maintain.reselectFreezeLastFrame ? " checked" : ""}${disabled ? " disabled" : ""}>
+      <span>末帧休眠（5 分钟）</span>
+    </label>` : ""}
+    ${state.maintain.reselectPreview ? `<div class="preview-grid"><section><h3>写入前</h3><pre>${renderJson(state.maintain.reselectPreview.before)}</pre></section><section><h3>写入后</h3><pre>${renderJson(state.maintain.reselectPreview.after)}</pre></section></div>` : ""}
+    ${renderFrameLightbox()}
+  </section>`;
 }
 
 function renderMaintainVariant() {
@@ -1155,6 +1382,9 @@ function renderMaintainVariant() {
         </div>` : ""}
         ${renderDeleteActionPreview()}
       </section>
+
+      ${details ? renderFramePoolManagement() : ""}
+      ${details ? renderRuntimeFrameReselect() : ""}
 
       <section class="panel">
         <div class="panel-header">
@@ -1299,8 +1529,13 @@ function renderViewShell(view, content) {
 }
 
 function render(options = {}) {
-  const scrollSnapshot = options.preserveScroll ? readScrollSnapshot() : null;
+  const renderedView = getRenderedView();
+  const focusSnapshot = renderedView === state.view ? readFocusSnapshot() : null;
+  if (options.preserveScroll !== false && isKnownView(renderedView)) {
+    viewScrollSnapshots.set(renderedView, readScrollSnapshot());
+  }
   const currentView = normalizeView(state.view);
+  const scrollSnapshot = options.resetScroll ? null : viewScrollSnapshots.get(currentView);
   if (state.view !== currentView) {
     state.view = currentView;
   }
@@ -1317,6 +1552,7 @@ function render(options = {}) {
   }
   appNode.innerHTML = renderViewShell(currentView, viewRenderers[currentView]());
   restoreScrollSnapshot(scrollSnapshot);
+  restoreFocusSnapshot(focusSnapshot);
 }
 
 function pushLog(message) {
@@ -1373,11 +1609,113 @@ async function loadMaintainDetails(id, options = {}) {
   try {
     state.maintain.details = await api.getVariantDetails(id);
     syncMaintainFields(state.maintain.details);
+    const actions = maintainResourceActions(state.maintain.details);
+    if (!actions.includes(state.maintain.frameAction)) {
+      state.maintain.frameAction = actions[0] || "";
+    }
+    if (state.maintain.frameAction && api.getActionFramePool) {
+      await loadActionFramePool(state.maintain.frameAction, { renderAfter: false });
+    }
   } catch (error) {
     state.maintain.details = null;
     pushLog(error.message);
   }
   renderDetails();
+}
+
+async function loadActionFramePool(action, options = {}) {
+  if (!action || !api.getActionFramePool) return;
+  state.maintain.framePoolPending = true;
+  state.maintain.frameAction = action;
+  if (options.renderAfter !== false) renderPreservingScroll();
+  try {
+    state.maintain.framePool = await api.getActionFramePool({ id: state.maintain.selectedId, action });
+    state.maintain.reselectSelection = state.maintain.framePool.selectedSourceFrames.slice();
+    state.maintain.reselectFreezeLastFrame = state.maintain.framePool.freezeLastFrame;
+    state.maintain.framePoolPreview = null;
+    state.maintain.reselectPreview = null;
+    state.maintain.frameLightboxIndex = null;
+    state.maintain.lastFrameSelectionIndex = null;
+  } catch (error) {
+    state.maintain.framePool = null;
+    pushLog(error.message);
+  } finally {
+    state.maintain.framePoolPending = false;
+    if (options.renderAfter !== false) renderPreservingScroll();
+  }
+}
+
+async function buildFramePoolPreview() {
+  state.maintain.framePoolBuildPending = true;
+  state.maintain.framePoolPreview = null;
+  renderPreservingScroll();
+  try {
+    state.maintain.framePoolPreview = await api.buildGenerateFramePoolPreview({ id: state.maintain.selectedId, action: state.maintain.frameAction });
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.maintain.framePoolBuildPending = false;
+    renderPreservingScroll();
+  }
+}
+
+async function runFramePool(previewId) {
+  if (!previewId || !window.confirm("确认仅生成这个动作的 processed_frames 素材池吗？")) return;
+  state.running = true;
+  state.activeOperation = "maintainVariant";
+  state.logs = [];
+  state.stages = {};
+  renderPreservingScroll();
+  try {
+    await api.generateFramePool(previewId);
+    state.stages.complete = "done";
+    await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    renderPreservingScroll();
+  }
+}
+
+async function buildReselectPreview() {
+  state.maintain.reselectPending = true;
+  state.maintain.reselectPreview = null;
+  renderPreservingScroll();
+  try {
+    state.maintain.reselectPreview = await api.buildReselectRuntimeFramesPreview({
+      id: state.maintain.selectedId,
+      action: state.maintain.frameAction,
+      sourceFrames: state.maintain.reselectSelection,
+      freezeLastFrame: state.maintain.frameAction === "yawn" ? state.maintain.reselectFreezeLastFrame : undefined
+    });
+  } catch (error) {
+    pushLog(error.message);
+  } finally {
+    state.maintain.reselectPending = false;
+    renderPreservingScroll();
+  }
+}
+
+async function runReselect(previewId) {
+  if (!previewId || !window.confirm("确认用选中的素材帧重建运行帧并写入动作元数据吗？")) return;
+  state.running = true;
+  state.activeOperation = "maintainVariant";
+  state.logs = [];
+  state.stages = {};
+  renderPreservingScroll();
+  try {
+    await api.reselectRuntimeFrames(previewId);
+    state.stages.complete = "done";
+    await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
+  } catch (error) {
+    state.stages.complete = "failed";
+    pushLog(error.message);
+  } finally {
+    state.running = false;
+    renderPreservingScroll();
+  }
 }
 
 async function loadCatalogDetails(id) {
@@ -1836,6 +2174,8 @@ appNode.addEventListener("change", async (event) => {
     setRunOption(runOption, event.target.checked);
   } else if (event.target.dataset.loopMode) {
     setLoopMode(event.target.dataset.loopMode, { mode: event.target.value });
+  } else if (event.target.dataset.freezeLastFrame !== undefined) {
+    setLoopMode(event.target.dataset.freezeLastFrame, { freezeLastFrame: event.target.checked });
   } else if (catalogFilter) {
     state.catalog.filters[catalogFilter] = event.target.value;
     const rows = filterVariants(state.variants, state.catalog.filters);
@@ -1857,7 +2197,13 @@ appNode.addEventListener("change", async (event) => {
     state.maintain.newActionVideos = {};
     state.maintain.newActionLoopModes = {};
     state.maintain.deleteActionPreview = null;
+    state.maintain.frameAction = "";
+    state.maintain.framePool = null;
+    state.maintain.framePoolPreview = null;
+    state.maintain.reselectPreview = null;
     await loadMaintainDetails(event.target.value);
+  } else if (event.target.dataset.frameAction !== undefined) {
+    await loadActionFramePool(event.target.value);
   } else if (event.target.dataset.replaceLoopMode !== undefined) {
     maintainLoopModeFor("replacementLoopModes", event.target.dataset.replaceLoopMode).mode = event.target.value;
     state.maintain.replacePreview = null;
@@ -1866,6 +2212,37 @@ appNode.addEventListener("change", async (event) => {
     maintainLoopModeFor("newActionLoopModes", event.target.dataset.newActionLoopMode).mode = event.target.value;
     state.maintain.metadataPreview = null;
     render();
+  } else if (event.target.dataset.replaceFreezeLastFrame !== undefined) {
+    maintainLoopModeFor("replacementLoopModes", event.target.dataset.replaceFreezeLastFrame).freezeLastFrame = event.target.checked;
+    state.maintain.replacePreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.newActionFreezeLastFrame !== undefined) {
+    maintainLoopModeFor("newActionLoopModes", event.target.dataset.newActionFreezeLastFrame).freezeLastFrame = event.target.checked;
+    state.maintain.metadataPreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.sourceFrame !== undefined) {
+    const index = Number(event.target.dataset.sourceFrame);
+    const selection = new Set(state.maintain.reselectSelection);
+    if (event.shiftKey && Number.isInteger(state.maintain.lastFrameSelectionIndex)) {
+      const start = Math.min(index, state.maintain.lastFrameSelectionIndex);
+      const end = Math.max(index, state.maintain.lastFrameSelectionIndex);
+      for (let frameIndex = start; frameIndex <= end; frameIndex += 1) {
+        if (event.target.checked) selection.add(frameIndex);
+        else selection.delete(frameIndex);
+      }
+    } else if (event.target.checked) {
+      selection.add(index);
+    } else {
+      selection.delete(index);
+    }
+    state.maintain.lastFrameSelectionIndex = index;
+    state.maintain.reselectSelection = Array.from(selection).sort((left, right) => left - right);
+    state.maintain.reselectPreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.reselectFreezeLastFrame !== undefined) {
+    state.maintain.reselectFreezeLastFrame = event.target.checked;
+    state.maintain.reselectPreview = null;
+    renderPreservingScroll();
   } else if (maintainField) {
     state.maintain.metadataFields[maintainField] = event.target.value;
     if (maintainField === "tier" && state.maintain.metadataFields.notePreset !== "custom") {
@@ -1969,6 +2346,32 @@ appNode.addEventListener("click", async (event) => {
     await buildReplacePreview();
   } else if (event.target.dataset.runReplaceActions) {
     await runReplaceAction(event.target.dataset.runReplaceActions);
+  } else if (event.target.dataset.buildFramePool !== undefined) {
+    await buildFramePoolPreview();
+  } else if (event.target.dataset.runFramePool) {
+    await runFramePool(event.target.dataset.runFramePool);
+  } else if (event.target.dataset.selectAllFrames !== undefined) {
+    state.maintain.reselectSelection = (state.maintain.framePool?.processedFrames || []).map((frame) => frame.index);
+    state.maintain.reselectPreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.clearFrameSelection !== undefined) {
+    state.maintain.reselectSelection = [];
+    state.maintain.reselectPreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.buildReselectPreview !== undefined) {
+    await buildReselectPreview();
+  } else if (event.target.dataset.runReselect) {
+    await runReselect(event.target.dataset.runReselect);
+  } else if (event.target.dataset.openFrameLightbox !== undefined) {
+    state.maintain.frameLightboxIndex = Number(event.target.dataset.openFrameLightbox);
+    renderPreservingScroll();
+  } else if (event.target.dataset.frameLightboxStep !== undefined) {
+    const next = state.maintain.frameLightboxIndex + Number(event.target.dataset.frameLightboxStep);
+    state.maintain.frameLightboxIndex = Math.min(Math.max(0, next), (state.maintain.framePool?.processedFrames.length || 1) - 1);
+    renderPreservingScroll();
+  } else if (event.target.dataset.closeFrameLightbox !== undefined) {
+    state.maintain.frameLightboxIndex = null;
+    renderPreservingScroll();
   } else if (event.target.dataset.resetMaintainEdits !== undefined) {
     resetMaintainEdits();
   } else if (event.target.dataset.buildMetadataPreview !== undefined) {
@@ -1985,6 +2388,23 @@ appNode.addEventListener("click", async (event) => {
     await deleteTestVariant(event.target.dataset.deleteConfirm);
   }
 });
+
+if (typeof document.addEventListener === "function") {
+  document.addEventListener("keydown", (event) => {
+    if (!Number.isInteger(state.maintain.frameLightboxIndex)) return;
+    if (event.key === "Escape") {
+      state.maintain.frameLightboxIndex = null;
+    } else if (event.key === "ArrowLeft") {
+      state.maintain.frameLightboxIndex = Math.max(0, state.maintain.frameLightboxIndex - 1);
+    } else if (event.key === "ArrowRight") {
+      state.maintain.frameLightboxIndex = Math.min((state.maintain.framePool?.processedFrames.length || 1) - 1, state.maintain.frameLightboxIndex + 1);
+    } else {
+      return;
+    }
+    event.preventDefault();
+    renderPreservingScroll();
+  });
+}
 
 if (api) {
   api.onTaskStatus((event) => {

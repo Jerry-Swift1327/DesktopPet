@@ -134,6 +134,20 @@ function createRendererHarness() {
     runRenameAssets: () => Promise.resolve({}),
     buildMetadataEditPreview: () => Promise.resolve({}),
     applyMetadataEdit: () => Promise.resolve({}),
+    getActionFramePool: ({ action }) => Promise.resolve({
+      action,
+      hasProcessedFrames: false,
+      hasCanonicalVideo: true,
+      processedFrames: [],
+      runtimeFrames: [],
+      selectedSourceFrames: [],
+      freezeLastFrame: false,
+      protected: false
+    }),
+    buildGenerateFramePoolPreview: () => Promise.resolve({ previewId: "pool-preview", command: {} }),
+    generateFramePool: () => Promise.resolve({}),
+    buildReselectRuntimeFramesPreview: () => Promise.resolve({ previewId: "reselect-preview", before: {}, after: {} }),
+    reselectRuntimeFrames: () => Promise.resolve({}),
     buildDeleteVariantPreview: () => Promise.resolve({ previewId: "delete-preview", canDelete: true, paths: [] }),
     deleteTestVariant: () => Promise.resolve({}),
     onTaskLog: () => {},
@@ -510,6 +524,18 @@ test("devtools CSS locks global horizontal overflow while enabling dashboard col
   assert.match(stylesSource, /@media\s*\(max-width:\s*780px\)[\s\S]*\.new-pet-picker \.new-pet-option-grid,[\s\S]*\.summary-grid-compact,[\s\S]*\.summary-grid-wide\s*\{[\s\S]*grid-template-columns\s*:\s*1fr\s*;/);
 });
 test("devtools exposes drag window docking as an independent feature choice", () => {
-  assert.match(appSource, /const defaultEnabledFeatures = \["autoStart", "windowDocking", "windowRoam"\]/);
+  assert.match(appSource, /const defaultEnabledFeatures = \["autoStart"\]/);
   assert.match(appSource, /windowDocking: "拖拽吸附窗口"/);
+});
+
+test("devtools frame maintenance exposes pool, selection, lightbox, and yawn freeze controls", () => {
+  assert.match(appSource, /<h2>素材池管理<\/h2>/);
+  assert.match(appSource, /<h2>重新选择运行帧<\/h2>/);
+  assert.match(appSource, /data-source-frame=/);
+  assert.match(appSource, /data-open-frame-lightbox=/);
+  assert.match(appSource, /data-frame-lightbox-step=/);
+  assert.match(appSource, /data-close-frame-lightbox/);
+  assert.match(appSource, /末帧休眠（5 分钟）/);
+  assert.match(stylesSource, /\.frame-lightbox\s*\{/);
+  assert.match(stylesSource, /\.frame-pool-grid\s*\{/);
 });

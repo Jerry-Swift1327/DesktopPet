@@ -13,12 +13,12 @@ npm.cmd run devtools
 
 ## 当前范围
 
-当前窗口支持新增宠物、宠物库、维护宠物和删除宠物。宠物库覆盖 `variant:list/show/query/check/gallery` 的可视化查询、检查和本地图鉴生成；新增宠物复用 `variant:bootstrap`；维护宠物包含批量动作资源替换，以及带新增动作视频处理的结构化元数据编辑；删除能力只允许 `scope: "test"` 的 `pettest<seq>` 测试宠物。单独视频处理和打包控制仍不在这个窗口中提供。
+当前窗口支持新增宠物、宠物库、维护宠物和删除宠物。宠物库覆盖 `variant:list/show/query/check/gallery` 的可视化查询、检查和本地图鉴生成；新增宠物复用 `variant:bootstrap`；维护宠物包含批量动作资源替换、素材池生成、运行帧重选，以及带新增动作视频处理的结构化元数据编辑；删除能力只允许 `scope: "test"` 的 `pettest<seq>` 测试宠物。打包控制仍不在这个窗口中提供。
 
 ## 新增宠物流程
 
 1. 选择 `scope`、`tier`、`species`、`platforms` 和 `date`。
-2. 在主表单中选择动作和功能；`windowDocking` 是独立的拖拽吸附窗口开关，`windowRoam` 依赖它；基础四个按钮动作默认固定包含，只有被选中的额外动作才会要求上传源视频。
+2. 在主表单中选择动作和功能；功能默认只启用 `autoStart`，`windowDocking` 和依赖它的 `windowRoam` 可按需开启；基础四个按钮动作默认固定包含，只有被选中的额外动作才会要求上传源视频。
 3. 选择源视频文件夹，或在每个动作卡片上手动选择 `.mp4` 文件。
 4. 每个动作卡片都可以选择运行帧段模式：完整帧、自动选取或手动范围，默认使用完整帧。
 5. 点击“生成预览”生成预览。
@@ -43,6 +43,11 @@ npm.cmd run devtools
 5. 确认元数据修改后，工具先处理全部新增动作视频；全部成功后才写入 `electron/pet-variant-metadata.json`。视频处理失败不会提前写入元数据。
 6. 修改信息前可点击“取消修改并清空记录”恢复当前宠物元数据草稿，并清空新增动作视频选择、diff 和执行记录。
 7. 动作卡片中的“删除资源”会先预览动作目录、manifest 条目和动作级元数据变更，确认后同步删除资源目录、manifest 条目、`actions` 声明、`actionLabelOverrides` 与 `actionStatEffects`。套餐必需动作、仍被功能依赖的动作以及被其他变体共用的动作资源禁止删除。
+8. “素材池管理”使用动作目录内标准 `<actionName>.mp4` 仅生成 `processed_frames`，不上传或替换视频，也不改 `transparent_frames`、`loop.json` 和 manifest。
+9. “重新选择运行帧”可浏览带 `frame_000` 索引的素材池、放大查看、任意多选，并在预览后按索引升序重建 `transparent_frames`，同步写入 `loop.json` 和 manifest。缺少素材池时只读展示当前运行帧。
+10. `yawn` 动作卡片提供“末帧休眠（5 分钟）”选项；开启时保留现有运行逻辑：末帧冻结，5 分钟后切换到 `walk`。使用 `direction64` 或 `tailLoopStart` 的专属动作在替换、素材池和运行帧维护中均为只读。
+
+所有导航页分别记忆滚动锚点和焦点，按钮、下拉框、复选框、任务进度与日志更新后保持当前位置；切换页面后再次返回会恢复该页面上次位置。
 
 ## 删除宠物
 

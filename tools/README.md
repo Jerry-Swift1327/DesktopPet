@@ -29,7 +29,7 @@
 
 ## process_pet_actions.py
 
-统一资源处理脚本，包含三个子命令：`process`、`replace` 和 `audit`。
+统一资源处理脚本，包含 `process`、`replace`、`pool`、`reselect` 和 `audit` 子命令。
 
 ### 处理流程
 
@@ -81,7 +81,7 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--ffmpeg` | 指定 ffmpeg 路径 |
 | `--fps` | 抽帧帧率，默认 `100/3` |
 | `--frame-ms` | 写入 `loop.json` 的运行帧间隔，默认 30ms |
-| `--no-loop` | 跳过循环选取，只生成素材池 |
+| `--no-loop` | 跳过运行帧选取；仍会重写该动作的 `loop.json`，维护已有动作素材池时应改用独立 `pool` 子命令 |
 | `--skip-frames` | 排除素材池前 N 帧：`auto`（默认，自动检测亮度异常）、`0`（不排除）、数字（手动指定） |
 | `--direction-count` | 采样 N 帧方向帧（用于眼球追踪动作如 `tabby_look`） |
 | `--long-loop` | 倾向选择更长循环段 |
@@ -91,6 +91,7 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--search-start` / `--search-end` | 限制自动寻找循环段的源范围 |
 | `--use-full-range` | 使用完整抽帧范围 |
 | `--freeze-last-frame` | 将最终运行帧定格，不再循环所选帧段；新建且启用 `idleYawn` 的变体会对 yawn 自动添加此参数 |
+| `--no-freeze-last-frame` | 显式移除新生成播放元数据中的 `freezeLastFrame` |
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
 | `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
 | `--clean-detached-artifacts` | 在素材池阶段清理主体外的小型离散 alpha 组件，例如抠像后残留的水印碎片 |
@@ -128,6 +129,22 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 | `--video` | 替换视频路径 |
 | `--manifest` | 要更新的 manifest 文件名 |
 | 其他参数 | 与 `process` 子命令相同 |
+
+### pool 与 reselect 子命令
+
+`pool` 从动作目录内标准 `<actionName>.mp4` 仅生成 `processed_frames`。它使用 `_replacement_work` 暂存并交换素材池，不修改源视频、`transparent_frames`、`loop.json` 或 manifest：
+
+```powershell
+python tools\process_pet_actions.py pool --action dog_walk --trim-ground-alpha 128 --trim-ground-alpha-auto
+```
+
+`reselect` 从现有 `processed_frames` 按显式索引重建运行帧，索引会去重并升序写入；`transparent_frames`、`loop.json` 和 manifest 作为一次可回滚事务更新：
+
+```powershell
+python tools\process_pet_actions.py reselect --action dog_walk --manifest dog_actions_manifest.json --source-frames 12,14,15,18
+```
+
+包含 `directionFrameCount`/`sourceStartPolicy` 或 `tailLoopStart` 的专属动作禁止通过 `reselect` 修改。
 
 ### 亮度异常检测
 
@@ -182,7 +199,7 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 | `manifest.py` | manifest 文件更新（update_manifest） |
 | `audit.py` | 动作帧几何审计、参考动作差异和风险排序 |
 
-`process_pet_actions.py` 通过 `from pet_actions.xxx import ...` 导入所需函数和常量，仅保留 CLI 入口（process_action_core、cmd_process、cmd_replace、main）。
+`process_pet_actions.py` 通过 `from pet_actions.xxx import ...` 导入所需函数和常量，仅保留核心编排和 CLI 入口。
 
 ### audit 子命令
 

@@ -81,6 +81,11 @@ test("devtools workflow exposes maintenance helpers", () => {
   assert.equal(typeof workflow.runRenameAssets, "function");
   assert.equal(typeof workflow.buildMetadataEditPreview, "function");
   assert.equal(typeof workflow.applyMetadataEdit, "function");
+  assert.equal(typeof workflow.getActionFramePool, "function");
+  assert.equal(typeof workflow.buildGenerateFramePoolPreview, "function");
+  assert.equal(typeof workflow.generateFramePool, "function");
+  assert.equal(typeof workflow.buildReselectRuntimeFramesPreview, "function");
+  assert.equal(typeof workflow.reselectRuntimeFrames, "function");
   assert.equal(typeof workflow.buildDeleteActionPreview, "function");
   assert.equal(typeof workflow.deleteAction, "function");
   assert.equal(typeof workflow.buildDeleteVariantPreview, "function");
@@ -513,6 +518,45 @@ test("devtools maintenance workflow previews and applies metadata edits", async 
     "writeMetadataEdit:running",
     "writeMetadataEdit:done"
   ]);
+});
+
+test("devtools maintenance previews pool generation and explicit frame reselection", async () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  const actionDir = path.join(animationsRoot, "pettest01_walk");
+  fs.writeFileSync(path.join(actionDir, "pettest01_walk.mp4"), "video", "utf8");
+  fs.mkdirSync(path.join(actionDir, "processed_frames"), { recursive: true });
+  for (const index of [0, 1, 2]) {
+    fs.writeFileSync(path.join(actionDir, "processed_frames", `frame_${String(index).padStart(3, "0")}.png`), "png", "utf8");
+  }
+  fs.writeFileSync(path.join(actionDir, "loop.json"), JSON.stringify({
+    action: "pettest01_walk", frameCount: 1, sourceLoopStart: 0, sourceLoopEnd: 0
+  }), "utf8");
+  fs.writeFileSync(path.join(animationsRoot, "pettest01_actions_manifest.json"), JSON.stringify([{ action: "pettest01_walk" }]), "utf8");
+  const commands = [];
+  const workflow = createVariantWorkflow({
+    metadataFile,
+    animationsRoot,
+    idFactory: (() => { let index = 0; return () => `frame-preview-${++index}`; })(),
+    runCommand: async (command, args) => commands.push([command, args])
+  });
+
+  const pool = workflow.getActionFramePool({ id: "pettest01", action: "walk" });
+  const poolPreview = workflow.buildGenerateFramePoolPreview({ id: "pettest01", action: "walk" });
+  const reselectPreview = workflow.buildReselectRuntimeFramesPreview({
+    id: "pettest01", action: "walk", sourceFrames: [2, 0]
+  });
+  await workflow.generateFramePool(poolPreview.previewId);
+  await workflow.reselectRuntimeFrames(reselectPreview.previewId);
+
+  assert.equal(pool.processedFrames.length, 3);
+  assert.match(pool.processedFrames[0].url, /^file:/);
+  assert.deepEqual(reselectPreview.sourceFrames, [0, 2]);
+  assert.equal(commands[0][1][1], "pool");
+  assert.equal(commands[1][1][1], "reselect");
 });
 
 test("devtools metadata maintenance processes newly enabled action videos before writing metadata", async () => {

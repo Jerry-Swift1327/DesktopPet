@@ -120,6 +120,7 @@ class PetActionProcessingTests(unittest.TestCase):
         parser = argparse.ArgumentParser()
         add_common_args(parser)
         self.assertTrue(parser.parse_args(["--freeze-last-frame"]).freeze_last_frame)
+        self.assertFalse(parser.parse_args(["--no-freeze-last-frame"]).freeze_last_frame)
         _raw_frame_exists, generated_metadata = self.run_fake_action_processing(freeze_last_frame=True)
         self.assertTrue(generated_metadata["freezeLastFrame"])
 
@@ -134,6 +135,108 @@ class PetActionProcessingTests(unittest.TestCase):
 
             self.assertEqual(metadata["tailLoopStart"], 12)
             self.assertTrue(metadata["freezeLastFrame"])
+
+            metadata = {}
+            preserve_existing_metadata(action_dir, metadata, preserve_freeze_last_frame=False)
+            self.assertEqual(metadata["tailLoopStart"], 12)
+            self.assertNotIn("freezeLastFrame", metadata)
+
+    def test_pool_command_only_replaces_processed_frames(self) -> None:
+        import process_pet_actions as cli
+
+        with tempfile.TemporaryDirectory() as tmp:
+            animations_root = Path(tmp) / "animations"
+            action_dir = animations_root / "test_walk"
+            runtime_dir = action_dir / "transparent_frames"
+            processed_dir = action_dir / "processed_frames"
+            runtime_dir.mkdir(parents=True)
+            processed_dir.mkdir()
+            (action_dir / "test_walk.mp4").write_bytes(b"video")
+            make_frame(runtime_dir / "frame_000.png", (4, 4, 8, 8))
+            make_frame(processed_dir / "frame_000.png", (2, 2, 6, 6))
+            loop_path = action_dir / "loop.json"
+            manifest_path = animations_root / "test_actions_manifest.json"
+            loop_path.write_text('{"action":"test_walk","frameCount":1}', encoding="utf-8")
+            manifest_path.write_text('[{"action":"test_walk","frameCount":1}]', encoding="utf-8")
+            runtime_before = (runtime_dir / "frame_000.png").read_bytes()
+            loop_before = loop_path.read_bytes()
+            manifest_before = manifest_path.read_bytes()
+
+            original_root = cli.ANIMATIONS_ROOT
+            original_find_ffmpeg = cli.find_ffmpeg
+            original_generate = cli.generate_processed_frame_pool
+            try:
+                cli.ANIMATIONS_ROOT = animations_root
+                cli.find_ffmpeg = lambda _value: "ffmpeg"
+
+                def fake_generate(_action, _video, _raw, staged_processed, *_args, **_kwargs):
+                    staged_processed.mkdir(parents=True, exist_ok=True)
+                    make_frame(staged_processed / "frame_000.png", (10, 10, 16, 16))
+                    return 1, {}
+
+                cli.generate_processed_frame_pool = fake_generate
+                args = argparse.Namespace(
+                    action="test_walk", ffmpeg=None, fps="1", trim_ground_alpha=128,
+                    trim_ground_padding=1, trim_ground_alpha_auto=True, clean_detached_artifacts=False,
+                    detached_artifact_max_area=256, detached_artifact_max_span=64,
+                    detached_artifact_min_gap=2, preserve_bright_color_foreground=False,
+                    stable_ground=False, stable_ground_max_shift=32, visible_height=None,
+                    visible_max_width=None, normalization_mode="source-canvas",
+                    center_visible_action_x=False, center_visible_target_x=None,
+                    center_visible_max_shift=32, align_reference_action=None,
+                    align_reference_center_x=False, align_reference_bottom=False,
+                    align_reference_bottom_per_frame=False, align_reference_max_shift=32,
+                )
+                cli.cmd_pool(args)
+            finally:
+                cli.ANIMATIONS_ROOT = original_root
+                cli.find_ffmpeg = original_find_ffmpeg
+                cli.generate_processed_frame_pool = original_generate
+
+            self.assertEqual((runtime_dir / "frame_000.png").read_bytes(), runtime_before)
+            self.assertEqual(loop_path.read_bytes(), loop_before)
+            self.assertEqual(manifest_path.read_bytes(), manifest_before)
+            self.assertNotEqual((processed_dir / "frame_000.png").read_bytes(), runtime_before)
+
+    def test_reselect_command_updates_runtime_frames_and_playback_metadata(self) -> None:
+        import json
+        import process_pet_actions as cli
+
+        with tempfile.TemporaryDirectory() as tmp:
+            animations_root = Path(tmp) / "animations"
+            action_dir = animations_root / "test_yawn"
+            processed_dir = action_dir / "processed_frames"
+            runtime_dir = action_dir / "transparent_frames"
+            processed_dir.mkdir(parents=True)
+            runtime_dir.mkdir()
+            for index in range(4):
+                make_frame(processed_dir / f"frame_{index:03d}.png", (2 + index, 3, 8 + index, 10))
+            make_frame(runtime_dir / "frame_000.png", (1, 1, 5, 5))
+            loop_path = action_dir / "loop.json"
+            manifest_path = animations_root / "test_actions_manifest.json"
+            loop_path.write_text(json.dumps({
+                "action": "test_yawn", "frameCount": 1, "loopStart": 0, "loopEnd": 0,
+                "sourceLoopStart": 0, "sourceLoopEnd": 0, "freezeLastFrame": True,
+            }), encoding="utf-8")
+            manifest_path.write_text(json.dumps([{"action": "test_yawn", "frameCount": 1}]), encoding="utf-8")
+
+            original_root = cli.ANIMATIONS_ROOT
+            try:
+                cli.ANIMATIONS_ROOT = animations_root
+                cli.cmd_reselect(argparse.Namespace(
+                    action="test_yawn", manifest="test_actions_manifest.json",
+                    source_frames="3,1,3", freeze_last_frame=False,
+                ))
+            finally:
+                cli.ANIMATIONS_ROOT = original_root
+
+            metadata = json.loads(loop_path.read_text(encoding="utf-8"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["sourceFrames"], [1, 3])
+            self.assertEqual(metadata["frameCount"], 2)
+            self.assertNotIn("freezeLastFrame", metadata)
+            self.assertEqual(manifest[0], metadata)
+            self.assertEqual(len(list(runtime_dir.glob("frame_*.png"))), 2)
 
     def test_bright_color_foreground_protection_is_opt_in(self) -> None:
         from pet_actions.chroma import chroma_key_green_image

@@ -40,7 +40,7 @@ const TIER_PROFILES = Object.freeze({
     actionButtons: Object.freeze(["squat", "walk", "feed", "ball"]),
     actionAssets: Object.freeze([]),
     features: Object.freeze({
-      enable: Object.freeze(["autoStart", "windowDocking", "windowRoam"]),
+      enable: Object.freeze(["autoStart"]),
       disable: Object.freeze([])
     })
   }),
@@ -49,7 +49,7 @@ const TIER_PROFILES = Object.freeze({
     actionButtons: Object.freeze(["squat", "walk", "feed", "ball", "lie", "lick", "belly", "stretch"]),
     actionAssets: Object.freeze(["yawn", "hiss"]),
     features: Object.freeze({
-      enable: Object.freeze(["autoStart", "windowDocking", "windowRoam", "idleYawn", "wakeHiss"]),
+      enable: Object.freeze(["autoStart"]),
       disable: Object.freeze([])
     })
   })

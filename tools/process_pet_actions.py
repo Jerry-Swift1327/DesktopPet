@@ -1,13 +1,15 @@
 """Unified pet action resource processing script.
 
 Merges the functionality of process_pet_videos.py and replace_action_video.py
-into a single script with two subcommands: ``process`` and ``replace``.
+into a single script with processing, replacement, pool, reselection, and audit subcommands.
 
 资源处理函数已拆分到 ``pet_actions`` 包中，本文件仅保留 CLI 入口和核心处理流程。
 
 Usage:
     python tools/process_pet_actions.py process --variant tabby --actions look walk
     python tools/process_pet_actions.py replace --action tabby_look --video new.mp4
+    python tools/process_pet_actions.py pool --action dog_walk
+    python tools/process_pet_actions.py reselect --action dog_walk --manifest dog_actions_manifest.json --source-frames 12,14,15
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import argparse
 import json
 import shutil
 import sys
+import uuid
 from pathlib import Path
 
 from PIL import Image
@@ -96,6 +99,74 @@ def score_explicit_source_frames(processed_frame_list: list[Path], source_frames
     return round(float(score), 6)
 
 
+def generate_processed_frame_pool(
+    action: str,
+    video_path: Path,
+    raw_dir: Path,
+    processed_dir: Path,
+    ffmpeg: str,
+    fps: str,
+    trim_ground_alpha: int = 0,
+    trim_ground_padding: int = 1,
+    trim_ground_alpha_auto: bool = False,
+    clean_detached_artifacts: bool = False,
+    detached_artifact_max_area: int = 256,
+    detached_artifact_max_span: int = 64,
+    detached_artifact_min_gap: int = 2,
+    preserve_bright_color_foreground: bool = False,
+    stable_ground: bool = False,
+    stable_ground_max_shift: int = 32,
+    visible_height: int | None = None,
+    visible_max_width: int | None = None,
+    normalization_mode: str = SOURCE_CANVAS_NORMALIZATION,
+    center_visible_action_x: bool = False,
+    center_visible_target_x: float | None = None,
+    center_visible_max_shift: int = 32,
+    align_reference_action: str | None = None,
+    align_reference_center_x: bool = False,
+    align_reference_bottom: bool = False,
+    align_reference_bottom_per_frame: bool = False,
+    align_reference_max_shift: int = 32,
+) -> tuple[int, dict[str, object]]:
+    """Extract and process a video into a caller-owned material pool."""
+    validate_normalization_options(normalization_mode, visible_height, visible_max_width)
+    if not video_path.exists():
+        raise FileNotFoundError(f"Missing video: {video_path}")
+
+    extract_frames(ffmpeg, video_path, raw_dir, fps)
+    processed_trim_ground_alpha = trim_ground_alpha if trim_ground_alpha > 0 else 128
+    align_reference = load_reference_geometry(align_reference_action) if align_reference_action else None
+    _processed_frames, processing_info = process_frames_to_processed(
+        raw_dir,
+        processed_dir,
+        visible_height,
+        visible_max_width,
+        normalization_mode,
+        trim_ground_alpha_auto=trim_ground_alpha_auto,
+        trim_ground_alpha=processed_trim_ground_alpha,
+        trim_ground_padding=trim_ground_padding,
+        clean_detached_artifacts_enabled=clean_detached_artifacts,
+        detached_artifact_max_area=detached_artifact_max_area,
+        detached_artifact_max_span=detached_artifact_max_span,
+        detached_artifact_min_gap=detached_artifact_min_gap,
+        preserve_bright_color_foreground=preserve_bright_color_foreground,
+        stable_ground=stable_ground,
+        stable_ground_max_shift=stable_ground_max_shift,
+        center_visible_action_x=center_visible_action_x,
+        center_visible_target_x=center_visible_target_x,
+        center_visible_max_shift=center_visible_max_shift,
+        align_reference=align_reference,
+        align_center_x=align_reference_center_x,
+        align_bottom=align_reference_bottom,
+        align_bottom_per_frame=align_reference_bottom_per_frame,
+        align_max_shift=align_reference_max_shift,
+    )
+    processed_frame_count = len(list(processed_dir.glob("frame_*.png")))
+    if processed_frame_count <= 0:
+        raise RuntimeError(f"No processed frames generated for {action}")
+    return processed_frame_count, processing_info
+
+
 def process_action_core(
     action: str,
     ffmpeg: str,
@@ -142,12 +213,10 @@ def process_action_core(
     clean_raw: bool = False,
     is_replace: bool = False,
     direction_count: int | None = None,
-    freeze_last_frame: bool = False,
+    freeze_last_frame: bool | None = None,
 ) -> dict[str, object]:
     """Core processing logic shared by process and replace subcommands."""
     action_dir = ANIMATIONS_ROOT / action
-    validate_normalization_options(normalization_mode, visible_height, visible_max_width)
-
     if is_replace:
         if not action_dir.exists():
             raise FileNotFoundError(f"Missing action directory: {action_dir}")
@@ -171,38 +240,38 @@ def process_action_core(
 
     print(f"\n[{action}] video: {video_path.name}")
 
-    # Step 1: Extract frames
-    extract_frames(ffmpeg, video_path, raw_dir, fps)
-
-    # Step 2: Generate processed_frames (256px enhanced asset pool)
+    # Steps 1-2: Extract frames and generate the enhanced material pool.
     processed_trim_ground_alpha = trim_ground_alpha if trim_ground_alpha > 0 else 128
-    align_reference = load_reference_geometry(align_reference_action) if align_reference_action else None
-    _processed_frames, processing_info = process_frames_to_processed(
+    processed_frame_count, processing_info = generate_processed_frame_pool(
+        action,
+        video_path,
         raw_dir,
         processed_dir,
-        visible_height,
-        visible_max_width,
-        normalization_mode,
-        trim_ground_alpha_auto=trim_ground_alpha_auto,
-        trim_ground_alpha=processed_trim_ground_alpha,
+        ffmpeg,
+        fps,
+        trim_ground_alpha=trim_ground_alpha,
         trim_ground_padding=trim_ground_padding,
-        clean_detached_artifacts_enabled=clean_detached_artifacts,
+        trim_ground_alpha_auto=trim_ground_alpha_auto,
+        clean_detached_artifacts=clean_detached_artifacts,
         detached_artifact_max_area=detached_artifact_max_area,
         detached_artifact_max_span=detached_artifact_max_span,
         detached_artifact_min_gap=detached_artifact_min_gap,
         preserve_bright_color_foreground=preserve_bright_color_foreground,
         stable_ground=stable_ground,
         stable_ground_max_shift=stable_ground_max_shift,
+        visible_height=visible_height,
+        visible_max_width=visible_max_width,
+        normalization_mode=normalization_mode,
         center_visible_action_x=center_visible_action_x,
         center_visible_target_x=center_visible_target_x,
         center_visible_max_shift=center_visible_max_shift,
-        align_reference=align_reference,
-        align_center_x=align_reference_center_x,
-        align_bottom=align_reference_bottom,
-        align_bottom_per_frame=align_reference_bottom_per_frame,
-        align_max_shift=align_reference_max_shift,
+        align_reference_action=align_reference_action,
+        align_reference_center_x=align_reference_center_x,
+        align_reference_bottom=align_reference_bottom,
+        align_reference_bottom_per_frame=align_reference_bottom_per_frame,
+        align_reference_max_shift=align_reference_max_shift,
     )
-    processed_frame_count = len(list(processed_dir.glob("frame_*.png")))
+    align_reference = load_reference_geometry(align_reference_action) if align_reference_action else None
     print(f"[{action}] processed_frames: {processed_frame_count} frames")
 
     # Step 3: Loop selection / direction sampling
@@ -371,7 +440,7 @@ def process_action_core(
     else:
         print(f"[{action}] skipping loop selection (--no-loop)")
 
-    preserve_existing_metadata(action_dir, metadata)
+    preserve_existing_metadata(action_dir, metadata, preserve_freeze_last_frame=freeze_last_frame is None)
 
     # Step 4: Write loop.json
     write_json(action_dir / "loop.json", metadata)
@@ -416,7 +485,11 @@ def load_reference_geometry(action: str) -> dict[str, float | int] | None:
     return geometry
 
 
-def preserve_existing_metadata(action_dir: Path, metadata: dict[str, object]) -> None:
+def preserve_existing_metadata(
+    action_dir: Path,
+    metadata: dict[str, object],
+    preserve_freeze_last_frame: bool = True,
+) -> None:
     """Keep hand-authored playback metadata when regenerating action frames."""
     metadata_path = action_dir / "loop.json"
     if not metadata_path.exists():
@@ -425,7 +498,10 @@ def preserve_existing_metadata(action_dir: Path, metadata: dict[str, object]) ->
         existing = json.loads(metadata_path.read_text(encoding="utf-8"))
     except Exception:
         return
-    for key in ("tailLoopStart", "freezeLastFrame"):
+    keys = ["tailLoopStart"]
+    if preserve_freeze_last_frame:
+        keys.append("freezeLastFrame")
+    for key in keys:
         if key in existing and key not in metadata:
             metadata[key] = existing[key]
 
@@ -628,6 +704,165 @@ def cmd_replace(args: argparse.Namespace) -> None:
     print(f"\nReplaced action '{args.action}'")
 
 
+def cmd_pool(args: argparse.Namespace) -> None:
+    """Generate only processed_frames from the action directory's canonical video."""
+    action_dir = ANIMATIONS_ROOT / args.action
+    video_path = action_dir / f"{args.action}.mp4"
+    if not action_dir.is_dir():
+        raise FileNotFoundError(f"Missing action directory: {action_dir}")
+    if not video_path.is_file():
+        raise FileNotFoundError(f"Missing canonical action video: {video_path}")
+
+    ffmpeg = find_ffmpeg(args.ffmpeg)
+    work_dir = action_dir / "_replacement_work" / f"pool-{uuid.uuid4().hex}"
+    staged_raw = work_dir / "raw_frames"
+    staged_processed = work_dir / "processed_frames"
+    processed_dir = action_dir / "processed_frames"
+    backup_dir = work_dir / "processed_frames.backup"
+    swapped = False
+    try:
+        frame_count, _processing_info = generate_processed_frame_pool(
+            args.action,
+            video_path,
+            staged_raw,
+            staged_processed,
+            ffmpeg,
+            args.fps,
+            trim_ground_alpha=args.trim_ground_alpha,
+            trim_ground_padding=args.trim_ground_padding,
+            trim_ground_alpha_auto=args.trim_ground_alpha_auto,
+            clean_detached_artifacts=args.clean_detached_artifacts,
+            detached_artifact_max_area=args.detached_artifact_max_area,
+            detached_artifact_max_span=args.detached_artifact_max_span,
+            detached_artifact_min_gap=args.detached_artifact_min_gap,
+            preserve_bright_color_foreground=args.preserve_bright_color_foreground,
+            stable_ground=args.stable_ground,
+            stable_ground_max_shift=args.stable_ground_max_shift,
+            visible_height=args.visible_height,
+            visible_max_width=args.visible_max_width,
+            normalization_mode=args.normalization_mode,
+            center_visible_action_x=args.center_visible_action_x,
+            center_visible_target_x=args.center_visible_target_x,
+            center_visible_max_shift=args.center_visible_max_shift,
+            align_reference_action=resolve_align_reference_action(
+                args.align_reference_action,
+                None,
+                args.action,
+                args.align_reference_center_x,
+                args.align_reference_bottom,
+            ),
+            align_reference_center_x=args.align_reference_center_x,
+            align_reference_bottom=args.align_reference_bottom,
+            align_reference_bottom_per_frame=args.align_reference_bottom_per_frame,
+            align_reference_max_shift=args.align_reference_max_shift,
+        )
+        if processed_dir.exists():
+            processed_dir.rename(backup_dir)
+        staged_processed.rename(processed_dir)
+        swapped = True
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir)
+        print(json.dumps({"action": args.action, "processedFrameCount": frame_count}, ensure_ascii=False))
+    except Exception:
+        if swapped and processed_dir.exists() and backup_dir.exists():
+            shutil.rmtree(processed_dir)
+        if backup_dir.exists():
+            backup_dir.rename(processed_dir)
+        raise
+    finally:
+        if work_dir.exists():
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def cmd_reselect(args: argparse.Namespace) -> None:
+    """Rebuild runtime frames from processed_frames and update action metadata atomically."""
+    action_dir = ANIMATIONS_ROOT / args.action
+    processed_dir = action_dir / "processed_frames"
+    runtime_dir = action_dir / "transparent_frames"
+    metadata_path = action_dir / "loop.json"
+    manifest_path = ANIMATIONS_ROOT / args.manifest
+    source_frames = sorted(set(parse_source_frames(args.source_frames) or []))
+    if not processed_dir.is_dir():
+        raise FileNotFoundError(f"Missing processed frame pool: {processed_dir}")
+    if not metadata_path.is_file():
+        raise FileNotFoundError(f"Missing action metadata: {metadata_path}")
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"Missing action manifest: {manifest_path}")
+    if not source_frames:
+        raise ValueError("At least one source frame is required.")
+
+    metadata_before = json.loads(metadata_path.read_text(encoding="utf-8"))
+    manifest_before = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(metadata_before, dict) or not isinstance(manifest_before, list):
+        raise ValueError("Action metadata or manifest has an invalid structure.")
+    if "tailLoopStart" in metadata_before or metadata_before.get("directionFrameCount") or metadata_before.get("sourceStartPolicy"):
+        raise ValueError(f"Action {args.action} uses protected playback metadata and is read-only.")
+
+    work_dir = action_dir / "_replacement_work" / f"reselect-{uuid.uuid4().hex}"
+    staged_runtime = work_dir / "transparent_frames"
+    runtime_backup = work_dir / "transparent_frames.backup"
+    try:
+        metadata_after = dict(metadata_before)
+        processed_frames = sorted(processed_dir.glob("frame_*.png"))
+        frame_count = build_enhanced_frames_from_source_indices(
+            processed_dir,
+            staged_runtime,
+            source_frames,
+            int(metadata_before.get("trimGroundAlpha", 0)),
+            int(metadata_before.get("trimGroundPadding", 1)),
+        )
+        metadata_after.update({
+            "sourceFrameCount": len(processed_frames),
+            "frameCount": frame_count,
+            "loopStart": 0,
+            "loopEnd": frame_count - 1,
+            "sourceLoopStart": source_frames[0],
+            "sourceLoopEnd": source_frames[-1],
+            "sourceFrames": source_frames,
+            "sourceSampling": "explicit",
+            "loopSelection": "manual-frames",
+            "score": score_explicit_source_frames(processed_frames, source_frames),
+        })
+        for key in ("directionFrameCount", "sourceStartPolicy", "sourceExcludedFrames", "droppedDuplicateFrames", "dedupeThreshold", "qualityScore", "targetLength"):
+            metadata_after.pop(key, None)
+        if args.freeze_last_frame is True:
+            metadata_after["freezeLastFrame"] = True
+        elif args.freeze_last_frame is False:
+            metadata_after.pop("freezeLastFrame", None)
+
+        manifest_after = []
+        updated = False
+        for entry in manifest_before:
+            if isinstance(entry, dict) and entry.get("action") == args.action:
+                manifest_after.append(metadata_after)
+                updated = True
+            else:
+                manifest_after.append(entry)
+        if not updated:
+            raise ValueError(f"Missing manifest entry for action {args.action}")
+
+        try:
+            if runtime_dir.exists():
+                runtime_dir.rename(runtime_backup)
+            staged_runtime.rename(runtime_dir)
+            write_json(metadata_path, metadata_after)
+            write_json(manifest_path, manifest_after)
+            if runtime_backup.exists():
+                shutil.rmtree(runtime_backup)
+            print(json.dumps({"action": args.action, "sourceFrames": source_frames, "frameCount": frame_count}, ensure_ascii=False))
+        except Exception:
+            write_json(metadata_path, metadata_before)
+            write_json(manifest_path, manifest_before)
+            if runtime_dir.exists():
+                shutil.rmtree(runtime_dir)
+            if runtime_backup.exists():
+                runtime_backup.rename(runtime_dir)
+            raise
+    finally:
+        if work_dir.exists():
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -679,7 +914,10 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     raw_group.add_argument("--keep-raw", action="store_true", help="Keep raw_frames after processing. This is the default.")
     raw_group.add_argument("--clean-raw", action="store_true", help="Remove raw_frames after processing.")
     parser.add_argument("--direction-count", type=int, default=None, help="Sample N direction frames (for eye-tracking actions like tabby_look).")
-    parser.add_argument("--freeze-last-frame", action="store_true", help="Freeze the final runtime frame instead of looping the selected frame range.")
+    freeze_group = parser.add_mutually_exclusive_group()
+    freeze_group.add_argument("--freeze-last-frame", dest="freeze_last_frame", action="store_true", help="Freeze the final runtime frame instead of looping the selected frame range.")
+    freeze_group.add_argument("--no-freeze-last-frame", dest="freeze_last_frame", action="store_false", help="Remove freezeLastFrame from generated playback metadata.")
+    parser.set_defaults(freeze_last_frame=None)
 
 
 def cmd_audit(args: argparse.Namespace) -> None:
@@ -721,6 +959,19 @@ def main() -> None:
     replace_parser.add_argument("--manifest", required=True, help="Manifest file name to update, e.g. tabby_actions_manifest.json.")
     add_common_args(replace_parser)
 
+    pool_parser = subparsers.add_parser("pool", help="Generate only processed_frames from an action's canonical video.")
+    pool_parser.add_argument("--action", required=True, help="Full action directory name, e.g. tabby_walk.")
+    add_common_args(pool_parser)
+
+    reselect_parser = subparsers.add_parser("reselect", help="Rebuild runtime frames from an existing processed frame pool.")
+    reselect_parser.add_argument("--action", required=True, help="Full action directory name, e.g. tabby_walk.")
+    reselect_parser.add_argument("--manifest", required=True, help="Manifest file name to update.")
+    reselect_parser.add_argument("--source-frames", required=True, help="Comma-separated processed frame indices.")
+    freeze_group = reselect_parser.add_mutually_exclusive_group()
+    freeze_group.add_argument("--freeze-last-frame", dest="freeze_last_frame", action="store_true")
+    freeze_group.add_argument("--no-freeze-last-frame", dest="freeze_last_frame", action="store_false")
+    reselect_parser.set_defaults(freeze_last_frame=None)
+
     audit_parser = subparsers.add_parser("audit", help="Audit current action frame geometry without modifying resources.")
     audit_parser.add_argument("--variants", nargs="*", default=None, help="Variant names to audit. Defaults to all variants.")
     audit_parser.add_argument("--frame-folder", default="transparent_frames", help="Frame folder to inspect, default transparent_frames.")
@@ -733,6 +984,10 @@ def main() -> None:
         cmd_process(args)
     elif args.command == "replace":
         cmd_replace(args)
+    elif args.command == "pool":
+        cmd_pool(args)
+    elif args.command == "reselect":
+        cmd_reselect(args)
     elif args.command == "audit":
         cmd_audit(args)
 

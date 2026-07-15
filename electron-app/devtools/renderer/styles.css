@@ -331,6 +331,154 @@ select:focus {
   max-width: 620px;
 }
 
+.freeze-option {
+  margin-top: 8px;
+}
+
+.freeze-option.is-readonly {
+  color: #64748b;
+}
+
+.frame-pool-summary {
+  margin-top: 14px;
+}
+
+.frame-pool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  max-height: 520px;
+  margin-top: 14px;
+  padding-right: 4px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.frame-pool-card {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.frame-pool-card.is-selected {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  box-shadow: inset 0 0 0 1px #0284c7;
+}
+
+.frame-preview-button {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: #f1f5f9;
+}
+
+.frame-preview-button img,
+.runtime-readonly-grid img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.frame-pool-card label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.frame-pool-card label span,
+.frame-pool-card > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reselect-freeze {
+  margin-top: 14px;
+}
+
+.frame-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 720px) 52px;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  padding: 48px;
+  background: rgba(9, 13, 22, 0.9);
+}
+
+.frame-lightbox figure {
+  display: grid;
+  min-width: 0;
+  max-height: calc(100vh - 96px);
+  gap: 10px;
+  margin: 0;
+  justify-items: center;
+}
+
+.frame-lightbox figure img {
+  width: min(70vh, 720px);
+  max-width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 7px;
+}
+
+.frame-lightbox figcaption {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.frame-lightbox-close,
+.frame-lightbox-arrow {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  place-items: center;
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 30px;
+}
+
+.frame-lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+
+.frame-lightbox-arrow:disabled {
+  opacity: 0.25;
+}
+
+@media (max-width: 700px) {
+  .frame-lightbox {
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+    gap: 8px;
+    padding: 52px 12px 20px;
+  }
+
+  .frame-lightbox-close,
+  .frame-lightbox-arrow {
+    width: 38px;
+    height: 38px;
+  }
+}
+
 .maintain-summary,
 .maintain-metadata-basics {
   grid-template-columns: repeat(3, minmax(0, 1fr));

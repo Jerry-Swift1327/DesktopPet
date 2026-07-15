@@ -43,6 +43,8 @@
 
 `raw_frames`、`processed_frames` 和源视频用于本机维护，不提交到 Git；`transparent_frames`、`loop.json` 和 manifest 需要提交以保证跨机器运行一致。`raw_frames` 默认保留，便于查看源帧分辨率和抠像前后差异；需要清理时使用 `--clean-raw`。修复资源时应先通过处理脚本修正素材池生成结果，再导出运行帧，避免只改运行帧导致下次重新导出时丢失修复。
 
+Devtools 的“素材池管理”只使用动作目录内标准 `<actionName>.mp4` 生成 `processed_frames`，不会修改已选运行帧或运行元数据；“重新选择运行帧”再从素材池显式选择帧并事务更新 `transparent_frames`、`loop.json` 和 manifest。方向采样动作和带 `tailLoopStart` 的专属动作保持只读。
+
 `loop.json` 和 manifest 中的 `frameSize` 是运行 PNG 画布尺寸，当前仍为 256；Electron 默认基础精灵是 128 CSS 像素，因此 256px 运行帧属于 2x 素材。`sourceCanvasSize` 记录源视频抽帧尺寸，不要求所有动作相同。
 
 `stableGround` 元数据表示素材池生成时启用了稳定贴地：工具会识别主体组件，清理主体底线以下的小型离散残点，并按稳定主体底线做有限垂直对齐。若底部存在较大的离散组件，工具会保留它并在 `stableGround.warnings` 与 audit 的 `groundArtifacts` 中提示，避免把真实宠物或有效道具误裁掉。
@@ -72,7 +74,7 @@
 
 manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新；生成阶段启用稳定贴地或主体外离散组件清理时，也会记录 `stableGround`、`detachedArtifacts` 等审计信息。
 
-新建且启用 `idleYawn` 的变体会在 bootstrap 处理 yawn 时自动写入 `freezeLastFrame: true`，运行时播放完整个所选帧段后定格最后一帧作为睡眠阶段。已有变体重新生成动作时保留原有的尾段循环或末帧冻结语义。
+新建且启用 `idleYawn` 的变体会在 bootstrap 处理 yawn 时自动写入 `freezeLastFrame: true`，运行时播放完整个所选帧段后定格最后一帧作为睡眠阶段，并在 5 分钟后切换到 `walk`。Devtools 可通过“末帧休眠（5 分钟）”显式维护普通 yawn 的该字段；带 `tailLoopStart` 的专属尾段循环动作保持只读。
 
 ## 常用命令
 

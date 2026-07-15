@@ -276,7 +276,7 @@ test("explicit feature draft overrides do not inherit tier feature defaults", ()
   assert.equal(Boolean(profile.features.windowDocking), false);
 });
 
-test("new variant drafts enable drag window docking by default without forcing idle yawn", () => {
+test("new variant drafts enable only auto start by default", () => {
   const draft = createPetVariantMetadataDraft({
     species: "cat",
     tier: "basic",
@@ -284,9 +284,9 @@ test("new variant drafts enable drag window docking by default without forcing i
   });
   const profile = resolvePetVariantProfile(draft);
 
-  assert.deepEqual(draft.features.enable, ["autoStart", "windowDocking", "windowRoam"]);
-  assert.equal(profile.features.windowDocking, true);
-  assert.equal(profile.features.windowRoam, true);
+  assert.deepEqual(draft.features.enable, ["autoStart"]);
+  assert.equal(Boolean(profile.features.windowDocking), false);
+  assert.equal(Boolean(profile.features.windowRoam), false);
   assert.equal(Boolean(profile.features.idleYawn), false);
 });
 

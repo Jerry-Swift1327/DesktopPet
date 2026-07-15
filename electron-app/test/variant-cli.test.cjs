@@ -16,6 +16,9 @@ const {
   buildReplaceActionPlan,
   buildAddActionPlan,
   applyAddActionPlanAsync,
+  getActionFramePool,
+  buildGenerateFramePoolPlan,
+  buildReselectRuntimeFramesPlan,
   buildMetadataEditPreview,
   applyMetadataEdit,
   buildDeleteVariantPreview,
@@ -723,6 +726,61 @@ test("add action plan uses process semantics without requiring an existing actio
 
   assert.equal(result.added, true);
   assert.equal(commands[0].runOptions.stage, "addAction");
+});
+
+test("frame pool plans use canonical video and sort explicit runtime frames", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  const actionDir = path.join(animationsRoot, "pettest01_walk");
+  fs.writeFileSync(path.join(actionDir, "pettest01_walk.mp4"), "video", "utf8");
+  fs.mkdirSync(path.join(actionDir, "processed_frames"), { recursive: true });
+  for (const index of [0, 1, 2]) {
+    fs.writeFileSync(path.join(actionDir, "processed_frames", `frame_${String(index).padStart(3, "0")}.png`), "png", "utf8");
+  }
+  fs.writeFileSync(path.join(actionDir, "loop.json"), JSON.stringify({
+    action: "pettest01_walk", frameCount: 2, loopStart: 0, loopEnd: 1, sourceLoopStart: 0, sourceLoopEnd: 1
+  }), "utf8");
+  fs.writeFileSync(path.join(animationsRoot, "pettest01_actions_manifest.json"), JSON.stringify([{ action: "pettest01_walk" }]), "utf8");
+
+  const pool = getActionFramePool({ id: "pettest01", action: "walk" }, { metadataFile, animationsRoot });
+  const poolPlan = buildGenerateFramePoolPlan({ id: "pettest01", action: "walk" }, { metadataFile, animationsRoot });
+  const reselect = buildReselectRuntimeFramesPlan({
+    id: "pettest01", action: "walk", sourceFrames: [2, 0, 2]
+  }, { metadataFile, animationsRoot });
+
+  assert.equal(pool.hasCanonicalVideo, true);
+  assert.equal(pool.processedFrames.length, 3);
+  assert.deepEqual(poolPlan.command.args.slice(0, 4), ["tools\\process_pet_actions.py", "pool", "--action", "pettest01_walk"]);
+  assert.deepEqual(reselect.sourceFrames, [0, 2]);
+  assert.equal(reselect.command.args.includes("0,2"), true);
+});
+
+test("protected playback actions reject replacement and frame maintenance", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const video = path.join(tempDir, "replacement.mp4");
+  writeMaintenanceMetadata(metadataFile);
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+  metadata.variants.pettest01.actions.assets = ["yawn"];
+  fs.writeFileSync(metadataFile, JSON.stringify(metadata), "utf8");
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball", "yawn"]);
+  const actionDir = path.join(animationsRoot, "pettest01_yawn");
+  fs.writeFileSync(path.join(actionDir, "pettest01_yawn.mp4"), "video", "utf8");
+  fs.writeFileSync(path.join(actionDir, "loop.json"), JSON.stringify({ action: "pettest01_yawn", tailLoopStart: 10 }), "utf8");
+  fs.writeFileSync(video, "replacement", "utf8");
+
+  assert.throws(
+    () => buildReplaceActionPlan({ id: "pettest01", action: "yawn", video }, { metadataFile, animationsRoot }),
+    /tailLoopStart/
+  );
+  assert.throws(
+    () => buildGenerateFramePoolPlan({ id: "pettest01", action: "yawn" }, { metadataFile, animationsRoot }),
+    /tailLoopStart/
+  );
 });
 
 test("delete variant preview and apply only remove test-scope variant resources", () => {

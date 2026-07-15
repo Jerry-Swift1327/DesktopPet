@@ -25,7 +25,7 @@
 | `electron-app/electron/pet-catalog.cjs` | 动作池、功能池、tier profile 和 notes pool | 新增动作 ID、功能开关（如 `windowDocking`）、套餐默认值或 notes 规则 |
 | `electron-app/electron/pet-variants.cjs` | 将 V2 元数据和 catalog 展开为运行时配置、动作 ID、渠道配置和打包 profile | 调整派生规则、动作顺序、feature 平台 gating 或打包输出 |
 | `electron-app/scripts/variant-cli.cjs` | 查询/新增/bootstrap 变体，按 species/tier/date/scope 筛选，资源检查，维护预览/应用纯函数，生成本地图鉴 | 新增变体流程、维护中心能力或 CLI 能力 |
-| `electron-app/devtools/` | 内部 Electron 开发者工具窗口，用于新增宠物、宠物库查询/检查/图鉴、替换或批量导入动作资源、编辑元数据和删除测试宠物 | 维护内部宠物向导、维护中心、预览执行流程或工具窗口文档 |
+| `electron-app/devtools/` | 内部 Electron 开发者工具窗口，用于新增宠物、宠物库查询/检查/图鉴、替换动作资源、补建素材池、浏览和重选运行帧、编辑元数据和删除测试宠物 | 维护内部宠物向导、维护中心、预览执行流程或工具窗口文档 |
 | `electron-app/electron/walk-clock.cjs` | 行走循环暂停/恢复计时 | 修改行走倒计时或暂停恢复规则 |
 | `electron-app/electron/window-surfaces.ps1` | Windows 可贴靠窗口候选探测 | 修复窗口贴靠或漫游候选问题 |
 | `electron-app/electron/window-from-point.ps1` | 根据屏幕点查找窗口 | 修复拖拽吸附命中问题 |
@@ -94,7 +94,7 @@ npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --dat
 
 | 文件 | 作用 |
 | --- | --- |
-| `tools/process_pet_actions.py` | 统一资源处理 CLI 入口：抽帧、抠像、保源画布 256px 增强、稳定贴地、循环选取、方向采样和几何审计 |
+| `tools/process_pet_actions.py` | 统一资源处理 CLI 入口：抽帧、抠像、保源画布 256px 增强、只生成素材池、显式重选运行帧、循环选取、方向采样和几何审计 |
 | `tools/pet_actions/` | 资源处理 Python 包，按职责拆分到子模块（ffmpeg、files、chroma 归一化与稳定贴地、frames、loops、manifest、audit） |
 | `tools/build_quality_previews.py` | 生成当前/候选/对比预览视频 |
 | `tools/process_pet_videos.py` | （已弃用）旧版批量处理脚本，功能已合并到 `process_pet_actions.py` |

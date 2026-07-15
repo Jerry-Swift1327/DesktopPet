@@ -95,7 +95,7 @@ npm run installer:mac -- --pet-variant=pet2604 --arch=x64
 npm.cmd run devtools
 ```
 
-Devtools 支持新增宠物、宠物库、维护宠物和删除测试宠物，并复用 `variant:list/show/query/check/new/bootstrap/rename-assets/gallery` 的同一套规则或纯函数。Devtools 源码位于 `devtools/`，不包含在正常交付包中。
+Devtools 支持新增宠物、宠物库、维护宠物和删除测试宠物；维护页可替换动作资源、从目录内标准视频补建 `processed_frames` 素材池、浏览并重选运行帧，以及维护普通 yawn 的末帧休眠状态。方向采样和专属尾段循环动作保持只读。Devtools 源码位于 `devtools/`，不包含在正常交付包中。
 
 ## 关键目录
 

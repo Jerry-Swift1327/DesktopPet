@@ -260,6 +260,49 @@ ipcMain.handle("devtools:applyMetadataEdit", async (event, previewId) => {
   }
 });
 
+ipcMain.handle("devtools:getActionFramePool", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.getActionFramePool(payload || {});
+});
+
+ipcMain.handle("devtools:buildGenerateFramePoolPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildGenerateFramePoolPreview(payload || {});
+});
+
+ipcMain.handle("devtools:generateFramePool", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) throw new Error("已有 devtools 任务正在执行。");
+  activeRun = workflow.generateFramePool(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
+ipcMain.handle("devtools:buildReselectRuntimeFramesPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildReselectRuntimeFramesPreview(payload || {});
+});
+
+ipcMain.handle("devtools:reselectRuntimeFrames", async (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) throw new Error("已有 devtools 任务正在执行。");
+  activeRun = workflow.reselectRuntimeFrames(previewId, {
+    onStage: (payload) => sendToRenderer("devtools:taskStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:taskLog", payload)
+  });
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
 ipcMain.handle("devtools:buildDeleteActionPreview", (event, payload) => {
   assertDevtoolsSender(event);
   return workflow.buildDeleteActionPreview(payload || {});

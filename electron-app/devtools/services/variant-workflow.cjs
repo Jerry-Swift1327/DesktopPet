@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { pathToFileURL } = require("url");
 const {
   buildBootstrapPlan,
   applyBootstrapPlanAsync,
@@ -17,6 +18,10 @@ const {
   applyDeleteAction: applyCliDeleteAction,
   buildDeleteVariantPreview: buildCliDeleteVariantPreview,
   applyDeleteVariant: applyCliDeleteVariant,
+  getActionFramePool: getCliActionFramePool,
+  buildGenerateFramePoolPlan,
+  buildReselectRuntimeFramesPlan,
+  applyMaintenanceCommandPlanAsync,
   generateVariantGallery,
   listVariantSummaries,
   getVariantDetails: getCliVariantDetails,
@@ -421,7 +426,8 @@ function createVariantWorkflow(options = {}) {
         id: payload.id,
         action,
         video: typeof video === "string" ? video : video.path,
-        loopMode: loopModes[action] || video.loopMode || { mode: "full" }
+        loopMode: loopModes[action] || video.loopMode || { mode: "full" },
+        freezeLastFrame: loopModes[action]?.freezeLastFrame ?? video.freezeLastFrame
       }, { metadataFile, animationsRoot }));
   }
 
@@ -522,7 +528,8 @@ function createVariantWorkflow(options = {}) {
         id: payload.id,
         action,
         video: typeof actionVideos[action] === "string" ? actionVideos[action] : actionVideos[action].path,
-        loopMode: loopModes[action] || actionVideos[action].loopMode || { mode: "full" }
+        loopMode: loopModes[action] || actionVideos[action].loopMode || { mode: "full" },
+        freezeLastFrame: loopModes[action]?.freezeLastFrame ?? actionVideos[action].freezeLastFrame
       }, { metadataFile, animationsRoot }));
     const plannedActions = actionPlans.map((plan) => plan.action);
     const missingActionVideos = newlyEnabledActions.filter((action) => !plannedActions.includes(action));
@@ -562,6 +569,50 @@ function createVariantWorkflow(options = {}) {
       emitHook(hooks, "onStage", { stage: "writeMetadataEdit", status: "failed", error: error.message });
       throw error;
     }
+  }
+
+  function getActionFramePool(payload = {}) {
+    const pool = getCliActionFramePool(payload, { metadataFile, animationsRoot });
+    return {
+      ...pool,
+      processedFrames: pool.processedFrames.map((frame) => ({ ...frame, url: pathToFileURL(frame.path).toString() })),
+      runtimeFrames: pool.runtimeFrames.map((frame) => ({ ...frame, url: pathToFileURL(frame.path).toString() }))
+    };
+  }
+
+  function buildGenerateFramePoolPreview(payload = {}) {
+    return storePreview("generateFramePool", buildGenerateFramePoolPlan(payload, { metadataFile, animationsRoot }));
+  }
+
+  function buildReselectRuntimeFramesPreview(payload = {}) {
+    return storePreview("reselectRuntimeFrames", buildReselectRuntimeFramesPlan(payload, { metadataFile, animationsRoot }));
+  }
+
+  async function runMaintenanceCommand(previewId, kind, stage, hooks = {}) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== kind) {
+      throw new Error(`未找到维护预览方案：${previewId}`);
+    }
+    emitHook(hooks, "onStage", { stage, status: "running" });
+    try {
+      const result = await applyMaintenanceCommandPlanAsync(entry.plan, {
+        runCommand: options.runCommand,
+        onLog: (event) => emitHook(hooks, "onLog", event)
+      });
+      emitHook(hooks, "onStage", { stage, status: "done" });
+      return result;
+    } catch (error) {
+      emitHook(hooks, "onStage", { stage, status: "failed", error: error.message });
+      throw error;
+    }
+  }
+
+  function generateFramePool(previewId, hooks = {}) {
+    return runMaintenanceCommand(previewId, "generateFramePool", "generateFramePool", hooks);
+  }
+
+  function reselectRuntimeFrames(previewId, hooks = {}) {
+    return runMaintenanceCommand(previewId, "reselectRuntimeFrames", "reselectRuntimeFrames", hooks);
   }
 
   function buildDeleteActionPreview(payload = {}) {
@@ -631,6 +682,11 @@ function createVariantWorkflow(options = {}) {
     runRenameAssets,
     buildMetadataEditPreview,
     applyMetadataEdit,
+    getActionFramePool,
+    buildGenerateFramePoolPreview,
+    generateFramePool,
+    buildReselectRuntimeFramesPreview,
+    reselectRuntimeFrames,
     buildDeleteActionPreview,
     deleteAction,
     buildDeleteVariantPreview,
