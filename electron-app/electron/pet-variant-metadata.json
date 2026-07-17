@@ -5,9 +5,9 @@
       "id": "pet2601",
       "date": "2026-05-08",
       "scope": "internal",
-      "tier": "basic",
+      "tier": "advanced",
       "species": "dog",
-      "notes": "内部使用-基础",
+      "notes": "内部使用-高级",
       "version": "1.1",
       "scale": 1.1,
       "platforms": [
@@ -20,7 +20,10 @@
           "squat",
           "walk",
           "feed",
-          "ball"
+          "ball",
+          "lick",
+          "spin",
+          "stretch"
         ],
         "assets": []
       },
