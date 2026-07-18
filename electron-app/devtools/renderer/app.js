@@ -626,6 +626,14 @@ function renderPreservingScroll() {
 function readFocusSnapshot() {
   const active = document.activeElement;
   if (!active || typeof appNode.contains !== "function" || !appNode.contains(active)) return null;
+  const focusKey = active.dataset?.focusKey;
+  if (focusKey) {
+    return {
+      selector: `[data-focus-key="${String(focusKey).replace(/"/g, "\\\"")}"]`,
+      selectionStart: active.selectionStart,
+      selectionEnd: active.selectionEnd
+    };
+  }
   const datasetEntry = Object.entries(active.dataset || {})[0];
   if (!datasetEntry) return null;
   const attribute = datasetEntry[0].replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
@@ -1081,6 +1089,18 @@ function derivedRegistrationStateId(actionKey) {
     : "等待有效 actionKey";
 }
 
+function syncActionRegistrationDraftUi(input, registration, field) {
+  const panel = input.closest?.(".action-registration-panel");
+  if (!panel) return;
+  if (field === "actionKey") {
+    const stateIdNode = panel.querySelector("[data-action-registration-state-id]");
+    if (stateIdNode) {
+      stateIdNode.textContent = derivedRegistrationStateId(registration.actionKey);
+    }
+  }
+  panel.querySelector("[data-action-registration-feedback]")?.replaceChildren();
+}
+
 function renderActionRegistrationPanel(context) {
   const registration = state.actionRegistration[context];
   const disabled = busy() ? " disabled" : "";
@@ -1096,10 +1116,10 @@ function renderActionRegistrationPanel(context) {
     </div>
     <div class="form-grid action-registration-fields">
       <label>动作标识 actionKey
-        <input type="text" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="actionKey" value="${escapeHtml(registration.actionKey)}" placeholder="例如 tailWag"${disabled}>
+        <input type="text" data-focus-key="${escapeHtml(context)}:actionKey" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="actionKey" value="${escapeHtml(registration.actionKey)}" placeholder="例如 tailWag"${disabled}>
       </label>
       <label>显示名称 label
-        <input type="text" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="label" value="${escapeHtml(registration.label)}" placeholder="例如 摇尾巴"${disabled}>
+        <input type="text" data-focus-key="${escapeHtml(context)}:label" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="label" value="${escapeHtml(registration.label)}" placeholder="例如 摇尾巴"${disabled}>
       </label>
     </div>
     <div class="playback-mode-group">
@@ -1112,21 +1132,23 @@ function renderActionRegistrationPanel(context) {
         ].map(([mode, label]) => `<label><input type="radio" name="${escapeHtml(context)}-playback-mode" data-action-registration-mode="${escapeHtml(mode)}" data-action-registration-context="${escapeHtml(context)}"${registration.playbackMode === mode ? " checked" : ""}${disabled}><span>${label}</span></label>`).join("")}
       </div>
       ${timed ? `<label class="duration-field">持续分钟
-        <input type="number" min="0.1" max="1440" step="0.1" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="durationMinutes" value="${escapeHtml(registration.durationMinutes)}"${disabled}>
+        <input type="number" min="0.1" max="1440" step="0.1" data-focus-key="${escapeHtml(context)}:durationMinutes" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="durationMinutes" value="${escapeHtml(registration.durationMinutes)}"${disabled}>
       </label>` : ""}
     </div>
     <div class="summary-grid summary-grid-compact action-registration-summary">
-      <div><span>运行时 stateId</span><strong>${escapeHtml(derivedRegistrationStateId(registration.actionKey))}</strong></div>
+      <div><span>运行时 stateId</span><strong data-action-registration-state-id>${escapeHtml(derivedRegistrationStateId(registration.actionKey))}</strong></div>
       <div><span>显示位置</span><strong>悬浮面板</strong></div>
       <div><span>结束状态</span><strong>squat</strong></div>
       <div><span>运动方式</span><strong>原地</strong></div>
     </div>
-    ${registration.error ? `<p class="danger">${escapeHtml(registration.error)}</p>` : ""}
-    ${registration.preview ? `<div class="metadata-diff action-registration-preview">
+    <div data-action-registration-feedback>
+      ${registration.error ? `<p class="danger">${escapeHtml(registration.error)}</p>` : ""}
+      ${registration.preview ? `<div class="metadata-diff action-registration-preview">
       <h3>全局注册预览</h3>
       <pre>${renderJson({ actionKey: registration.preview.actionKey, definition: registration.preview.definition })}</pre>
       <button type="button" class="primary" data-apply-action-registration="${escapeHtml(context)}" data-action-registration-preview-id="${escapeHtml(registration.preview.previewId)}"${disabled}>确认注册并加入当前宠物</button>
-    </div>` : ""}
+      </div>` : ""}
+    </div>
   </section>`;
 }
 
@@ -2221,7 +2243,7 @@ appNode.addEventListener("input", (event) => {
     registration[registrationField] = event.target.value;
     registration.preview = null;
     registration.error = "";
-    renderPreservingScroll();
+    syncActionRegistrationDraftUi(event.target, registration, registrationField);
     return;
   }
   const maintainField = event.target.dataset.maintainField;

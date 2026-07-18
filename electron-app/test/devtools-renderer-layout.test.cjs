@@ -472,6 +472,57 @@ test("devtools renders independent action registration panels on new and mainten
   assert.match(renderMaintainVariantBody, /renderActionRegistrationPanel\("maintainVariant"\)/);
   assert.match(registrationBody, /播放一次[\s\S]*指定分钟[\s\S]*持续循环/);
   assert.match(registrationBody, /data-action-registration-field="actionKey"[\s\S]*data-action-registration-field="label"/);
+  assert.match(registrationBody, /data-focus-key="\$\{escapeHtml\(context\)\}:actionKey"/);
+  assert.match(registrationBody, /data-focus-key="\$\{escapeHtml\(context\)\}:label"/);
+  assert.match(registrationBody, /data-focus-key="\$\{escapeHtml\(context\)\}:durationMinutes"/);
+});
+
+test("devtools action registration inputs update locally without rerendering", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  const stateIdNode = { textContent: "" };
+  let feedbackClearCount = 0;
+  const feedbackNode = { replaceChildren: () => { feedbackClearCount += 1; } };
+  const panel = {
+    querySelector(selector) {
+      if (selector === "[data-action-registration-state-id]") return stateIdNode;
+      if (selector === "[data-action-registration-feedback]") return feedbackNode;
+      return null;
+    }
+  };
+  const actionKeyInput = createEventTarget(
+    { actionRegistrationContext: "newVariant", actionRegistrationField: "actionKey" },
+    { ".action-registration-panel": panel }
+  );
+  actionKeyInput.value = "p";
+  const htmlBeforeActionKey = harness.appNode.html;
+
+  await harness.appNode.dispatchEvent("input", { target: actionKeyInput });
+
+  assert.equal(harness.state.actionRegistration.newVariant.actionKey, "p");
+  assert.equal(harness.appNode.html, htmlBeforeActionKey);
+  assert.equal(stateIdNode.textContent, "petP");
+  assert.equal(feedbackClearCount, 1);
+
+  const labelInput = createEventTarget(
+    { actionRegistrationContext: "newVariant", actionRegistrationField: "label" },
+    { ".action-registration-panel": panel }
+  );
+  labelInput.value = "跑";
+  const htmlBeforeLabel = harness.appNode.html;
+
+  await harness.appNode.dispatchEvent("input", { target: labelInput });
+
+  assert.equal(harness.state.actionRegistration.newVariant.label, "跑");
+  assert.equal(harness.appNode.html, htmlBeforeLabel);
+  assert.equal(feedbackClearCount, 2);
+});
+
+test("devtools focus snapshots prefer stable registration focus keys", () => {
+  const focusBody = appSource.match(/function readFocusSnapshot\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(focusBody, /active\.dataset\?\.focusKey/);
+  assert.match(focusBody, /selector: `\[data-focus-key=/);
 });
 
 test("devtools maintenance renders newly enabled actions as source video cards", async () => {
