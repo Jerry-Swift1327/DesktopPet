@@ -81,11 +81,38 @@ function createStateController(context) {
     STATE_HISS,
     TABBY_IDLE_STATES,
     ONE_SHOT_STATES,
-    states
+    states,
+    setTimeoutFn = setTimeout,
+    clearTimeoutFn = clearTimeout
   } = context;
 
   let pendingActionStatsState = null;
   let pendingVisualStateCommit = null;
+  let playbackTimer = null;
+
+  function clearPlaybackTimer() {
+    if (playbackTimer) {
+      clearTimeoutFn(playbackTimer);
+      playbackTimer = null;
+    }
+  }
+
+  function scheduleTimedPlayback(state) {
+    clearPlaybackTimer();
+    const durationMinutes = Number(state?.playback?.durationMinutes);
+    if (state?.playback?.mode !== "timed" || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      return;
+    }
+    const stateId = state.id;
+    const completeTo = state.playback.completeTo || DEFAULT_STATE;
+    playbackTimer = setTimeoutFn(() => {
+      playbackTimer = null;
+      if (getActiveState() === stateId) {
+        setState(completeTo, false);
+      }
+    }, durationMinutes * 60 * 1000);
+    playbackTimer?.unref?.();
+  }
 
   function setWalkDirection(nextDirection) {
     const normalizedDirection = nextDirection >= 0 ? 1 : -1;
@@ -100,6 +127,7 @@ function createStateController(context) {
     if (!states.some((item) => item.id === state)) {
       return;
     }
+    clearPlaybackTimer();
 
     if (shouldRecordInteraction && TABBY_IDLE_STATES.has(state)) {
       return;
@@ -140,6 +168,7 @@ function createStateController(context) {
     }
     setSelectedState(state);
     setActiveState(state);
+    scheduleTimedPlayback(nextState);
     if (previousState !== state) {
       clearTabbySleepPoseTimer();
     }

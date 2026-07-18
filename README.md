@@ -88,12 +88,12 @@ Windows 打包脚本只能在 Windows 上执行，可通过 `-PetVariant` 指定
 
 ## 变体管理
 
-新增定制变体时使用 V2 元数据字段（`species`、`scope`、`tier`、`notes`、`assetPrefix`）描述变体。推荐通过 bootstrap 从源视频目录完成元数据、动作目录、manifest、`loop.json` 和本地图鉴生成；未知动作会严格报错，需要先注册到动作池：
+新增定制变体时使用 V3 元数据字段（`species`、`scope`、`notes`、`assetPrefix`、`actions.enabled`）描述变体。推荐通过 bootstrap 从源视频目录完成元数据、动作目录、manifest、`loop.json` 和本地图鉴生成；未知动作可先在 DevTools 的新增宠物或维护宠物页面注册到全局动作池：
 
 ```powershell
 cd electron-app
-npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --date 2026-07-06 --source C:\path\to\source-videos
-npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --date 2026-07-06 --source C:\path\to\source-videos --apply
+npm.cmd run variant:bootstrap -- --scope custom --species cat --date 2026-07-06 --source C:\path\to\source-videos
+npm.cmd run variant:bootstrap -- --scope custom --species cat --date 2026-07-06 --source C:\path\to\source-videos --apply
 ```
 
 现有变体保留旧动画资源前缀并通过 `assetPrefix` 读取；新增变体默认使用 `pet<yy><seq>_<action>` 作为动作目录和源视频前缀。Windows 打包路径为 `<scope>/<id>/<channel>`。

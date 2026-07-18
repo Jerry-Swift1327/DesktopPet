@@ -17,19 +17,19 @@ npm.cmd run devtools
 
 ## 新增宠物流程
 
-1. 选择 `scope`、`tier`、`species`、`platforms` 和 `date`。
+1. 选择 `scope`、`species`、`platforms` 和 `date`。
 2. 在主表单中选择动作和功能；功能默认只启用 `autoStart`，`windowDocking` 和依赖它的 `windowRoam` 可按需开启；基础四个按钮动作默认固定包含，只有被选中的额外动作才会要求上传源视频。
-3. 选择源视频文件夹，或在每个动作卡片上手动选择 `.mp4` 文件。
-4. 每个动作卡片都可以选择运行帧段模式：完整帧、自动选取或手动范围，默认使用完整帧。
-5. 点击“生成预览”生成预览。
-6. 检查元数据草稿、视频复制目标、处理命令、预检命令和警告。
+3. 如果动作池中没有需要的动作，在“注册新动作”板块输入纯英文小驼峰 `actionKey` 和 `label`，选择播放一次、指定分钟或持续循环。系统生成 `petXxx` stateId，注册后自动加入当前宠物。
+4. 选择源视频文件夹，或在每个动作卡片上手动选择 `.mp4` 文件。
+5. 每个动作卡片都可以选择运行帧段模式：完整帧、自动选取或手动范围，默认使用完整帧。
+6. 点击“生成预览”并检查元数据草稿、视频复制目标、处理命令、预检命令和警告。
 7. 二次确认后点击“开始生成”执行生成。
 
 工具会把选中的视频暂存到 `electron-app/.devtools-staging/`，再把暂存目录交给现有的 `variant:bootstrap` 流程处理。该暂存目录已被 `.gitignore` 忽略。
 
 ## 宠物库
 
-1. 按 `species`、`tier`、`scope` 和 `date` 筛选宠物列表。
+1. 按 `species`、`scope` 和 `date` 筛选宠物列表。
 2. 选择宠物后查看摘要、资源路径和 manifest 信息。
 3. 点击“检查资源”查看动作目录、manifest、Windows release/installer 输出路径和已存在资源。
 4. 点击“生成图鉴”写入 `electron-app/.variant-gallery/index.html`，再点击“打开图鉴”从系统浏览器查看。主进程只允许打开这个 Devtools 生成的固定文件。
@@ -38,14 +38,15 @@ npm.cmd run devtools
 
 1. 在“维护宠物”中选择已有宠物。
 2. “替换动作资源”直接显示当前变体已有动作，也会标出磁盘或 manifest 中存在但元数据未登记的孤立动作。为一个或多个动作选择新的 `.mp4`，分别设置完整帧、自动选取或手动范围，生成批量替换预览后统一确认执行。底层按顺序调用 `tools/process_pet_actions.py replace` 更新动作资源和 manifest。
-3. 修改信息/元数据时编辑同一行中的 `species`、`tier`、`version`，并通过多选和 notes 标准项/自定义输入编辑动作及功能列表。
-4. 新勾选的动作会显示在“新增动作源视频”卡片区。每个新增动作都必须选择 `.mp4` 并设置运行帧模式，元数据预览会同时列出字段 diff 和动作处理命令。新增动作使用 `process --variant <assetPrefix> --actions <action> --video <source>` 创建资源目录、帧、`loop.json` 和 manifest 条目；已有动作替换继续使用 `replace`。
-5. 确认元数据修改后，工具先处理全部新增动作视频；全部成功后才写入 `electron/pet-variant-metadata.json`。视频处理失败不会提前写入元数据。
-6. 修改信息前可点击“取消修改并清空记录”恢复当前宠物元数据草稿，并清空新增动作视频选择、diff 和执行记录。
-7. 动作卡片中的“删除资源”会先预览动作目录、manifest 条目和动作级元数据变更，确认后同步删除资源目录、manifest 条目、`actions` 声明、`actionLabelOverrides` 与 `actionStatEffects`。套餐必需动作、仍被功能依赖的动作以及被其他变体共用的动作资源禁止删除。
-8. “素材池管理”使用动作目录内标准 `<actionName>.mp4` 仅生成 `processed_frames`，不上传或替换视频，也不改 `transparent_frames`、`loop.json` 和 manifest。
-9. “重新选择运行帧”可浏览带 `frame_000` 索引的素材池、放大查看、任意多选，并在预览后按索引升序重建 `transparent_frames`，同步写入 `loop.json` 和 manifest。缺少素材池时只读展示当前运行帧。
-10. `yawn` 动作卡片提供“末帧休眠（5 分钟）”选项；开启时保留现有运行逻辑：末帧冻结，5 分钟后切换到 `walk`。使用 `direction64` 或 `tailLoopStart` 的专属动作在替换、素材池和运行帧维护中均为只读。
+3. “注册新动作”板块与新增宠物页共用全局动作注册能力；注册成功后自动加入当前维护宠物，并显示对应源视频卡片。
+4. 修改信息/元数据时编辑 `species`、`version` 和 notes，并通过 `actions.enabled` 多选及功能列表维护变体能力。
+5. 新勾选的动作会显示在“新增动作源视频”卡片区。每个新增动作都必须选择 `.mp4` 并设置运行帧模式，元数据预览会同时列出字段 diff 和动作处理命令。新增动作使用 `process --variant <assetPrefix> --actions <action> --video <source>` 创建资源目录、帧、`loop.json` 和 manifest 条目；已有动作替换继续使用 `replace`。
+6. 确认元数据修改后，工具先处理全部新增动作视频；全部成功后才写入 `electron/pet-variant-metadata.json`。视频处理失败不会提前写入元数据。
+7. 修改信息前可点击“取消修改并清空记录”恢复当前宠物元数据草稿，并清空新增动作视频选择、diff 和执行记录。
+8. 动作卡片中的“删除资源”会先预览动作目录、manifest 条目和动作级元数据变更，确认后同步删除资源目录、manifest 条目、`actions` 声明、`actionLabelOverrides` 与 `actionStatEffects`。四个系统必需动作、仍被功能依赖的动作以及被其他变体共用的动作资源禁止删除。
+9. “素材池管理”使用动作目录内标准 `<actionName>.mp4` 仅生成 `processed_frames`，不上传或替换视频，也不改 `transparent_frames`、`loop.json` 和 manifest。
+10. “重新选择运行帧”可浏览带 `frame_000` 索引的素材池、放大查看、任意多选，并在预览后按索引升序重建 `transparent_frames`，同步写入 `loop.json` 和 manifest。缺少素材池时只读展示当前运行帧。
+11. `yawn` 动作卡片提供“末帧休眠（5 分钟）”选项；开启时保留现有运行逻辑：末帧冻结，5 分钟后切换到 `walk`。使用 `direction64` 或 `tailLoopStart` 的专属动作在替换、素材池和运行帧维护中均为只读。
 
 所有导航页分别记忆滚动锚点和焦点，按钮、下拉框、复选框、任务进度与日志更新后保持当前位置；切换页面后再次返回会恢复该页面上次位置。
 

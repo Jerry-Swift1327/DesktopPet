@@ -260,6 +260,19 @@ ipcMain.handle("devtools:applyMetadataEdit", async (event, previewId) => {
   }
 });
 
+ipcMain.handle("devtools:buildActionRegistrationPreview", (event, payload) => {
+  assertDevtoolsSender(event);
+  return workflow.buildActionRegistrationPreview(payload || {});
+});
+
+ipcMain.handle("devtools:applyActionRegistration", (event, previewId) => {
+  assertDevtoolsSender(event);
+  if (activeRun) {
+    throw new Error("已有 devtools 任务正在执行。");
+  }
+  return workflow.applyActionRegistration(previewId);
+});
+
 ipcMain.handle("devtools:getActionFramePool", (event, payload) => {
   assertDevtoolsSender(event);
   return workflow.getActionFramePool(payload || {});

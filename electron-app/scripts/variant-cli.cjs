@@ -9,21 +9,19 @@ const {
   PET_VARIANT_METADATA_FILE,
   buildPetVariantProfiles,
   createPetVariantMetadataDraft,
-  getActionPool,
   getPetVariantProfile,
   getSpeciesProfiles,
-  getTierProfiles,
   getVariantManifestName,
   getWindowsBuildProfile,
   resolvePetVariantProfile,
   requirePetVariantId
 } = require("../electron/pet-variants.cjs");
+const { ACTION_POOL: actionPool, getRequiredActionKeys } = require("../electron/pet-catalog.cjs");
 
 const appRoot = path.dirname(__dirname);
 const projectRoot = path.dirname(appRoot);
 const defaultAnimationsRoot = path.join(projectRoot, "assets", "animations");
 const defaultGalleryRoot = path.join(appRoot, ".variant-gallery");
-const actionPool = getActionPool();
 
 function readArgs(argv = process.argv.slice(2)) {
   const args = { _: [] };
@@ -55,6 +53,7 @@ function readMetadataFile(metadataFile = PET_VARIANT_METADATA_FILE) {
 }
 
 function writeMetadataFile(metadata, metadataFile = PET_VARIANT_METADATA_FILE) {
+  metadata.schemaVersion = 3;
   fs.writeFileSync(metadataFile, `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
 }
 
@@ -112,8 +111,7 @@ function parseListOption(value) {
 function getVariantActionAssets(input) {
   const id = resolveVariantInput(input);
   const profile = getPetVariantProfile(id);
-  return (profile.actionButtons || profile.actions || PET_ACTION_ORDER)
-    .concat(profile.actionAssets || profile.extraAnimationAssets || [])
+  return getProfileActionKeys(profile)
     .map((action) => `${profile.animationPrefix}_${actionPool[action].asset}`);
 }
 
@@ -123,8 +121,13 @@ function getEnabledFeatureNames(features = {}) {
     .map(([feature]) => feature);
 }
 
+function getRawEnabledActions(profile = {}) {
+  if (Array.isArray(profile.actions?.enabled)) return uniqueList(profile.actions.enabled);
+  return uniqueList((profile.actions?.buttons || []).concat(profile.actions?.assets || []));
+}
+
 function getProfileActionKeys(profile) {
-  return uniqueList((profile.actionButtons || profile.actions || PET_ACTION_ORDER)
+  return uniqueList((profile.enabledActions || profile.actions?.enabled || profile.actionButtons || profile.actions || PET_ACTION_ORDER)
     .concat(profile.actionAssets || profile.extraAnimationAssets || []));
 }
 
@@ -141,14 +144,12 @@ function buildVariantSummary(profile) {
     id: profile.id,
     notes: profile.notes,
     species: profile.species,
-    tier: profile.tier,
     date: profile.date,
     scope: profile.scope,
     platforms: profile.platforms,
     version: profile.version,
     scale: profile.scale,
-    actions: profile.actionButtons || profile.actions,
-    actionAssets: profile.actionAssets || profile.extraAnimationAssets,
+    actions: getProfileActionKeys(profile),
     features: profile.features,
     enabledFeatures: getEnabledFeatureNames(profile.features),
     assetPrefix: profile.assetPrefix || profile.animationPrefix,
@@ -175,8 +176,7 @@ function getVariantDetails(input, options = {}) {
   const animationsRoot = options.animationsRoot || defaultAnimationsRoot;
   const metadata = readMetadataFile(metadataFile);
   const profile = getVariantProfileFromMetadata(input, metadata);
-  const animationFolders = (profile.actionButtons || profile.actions || [])
-    .concat(profile.actionAssets || profile.extraAnimationAssets || [])
+  const animationFolders = getProfileActionKeys(profile)
     .map((action) => path.join(animationsRoot, `${profile.assetPrefix}_${actionPool[action].asset}`));
   const manifest = path.join(animationsRoot, `${profile.assetPrefix}_actions_manifest.json`);
   const resourceActions = Object.entries(actionPool)
@@ -241,7 +241,6 @@ function formatList(rows) {
     { title: "id", value: (row) => row.id },
     { title: "notes", value: (row) => row.notes || "-" },
     { title: "species", value: (row) => row.species },
-    { title: "tier", value: (row) => row.tier },
     { title: "date", value: (row) => row.date || "-" },
     { title: "scope", value: (row) => row.scope },
     { title: "platforms", value: (row) => row.platforms.join(",") },
@@ -265,7 +264,6 @@ function queryVariants(args) {
     .map(getVariantSummary)
     .filter((row) => !queryId || row.id === queryId)
     .filter((row) => !args.species || row.species === args.species)
-    .filter((row) => !args.tier || row.tier === args.tier)
     .filter((row) => !args.date || row.date === args.date)
     .filter((row) => !args.scope || row.scope === args.scope);
   console.log(formatList(rows));
@@ -297,7 +295,6 @@ function buildCheckVariantResult(input, options = {}) {
     id: profile.id,
     notes: profile.notes,
     species: profile.species,
-    tier: profile.tier,
     scope: profile.scope,
     platforms: profile.platforms,
     version: profile.version,
@@ -321,7 +318,7 @@ function assertDraftDoesNotConflict(metadata, draft, options = {}) {
   if (variants[draft.id]) {
     throw new Error(`Variant already exists: ${draft.id}`);
   }
-  const actionKeys = uniqueList((draft.actions.buttons || []).concat(draft.actions.assets || []));
+  const actionKeys = getRawEnabledActions(draft);
   for (const action of actionKeys) {
     const actionDir = path.join(animationsRoot, `${draft.assetPrefix}_${actionPool[action].asset}`);
     if (fs.existsSync(actionDir)) {
@@ -335,15 +332,14 @@ function assertDraftDoesNotConflict(metadata, draft, options = {}) {
 }
 
 function createActionOverrideFromArgs(args) {
+  const enabled = parseListOption(args.actions);
   const buttons = parseListOption(args["action-buttons"]);
   const assets = parseListOption(args["action-assets"]);
-  if (!buttons && !assets) {
+  if (!enabled && !buttons && !assets) {
     return null;
   }
-  const tierProfile = getTierProfiles()[args.tier || "basic"];
   return {
-    buttons: buttons || tierProfile.actionButtons,
-    assets: assets || tierProfile.actionAssets
+    enabled: uniqueList(enabled || (buttons || getRequiredActionKeys()).concat(assets || []))
   };
 }
 
@@ -372,7 +368,6 @@ function createVariant(args, options = {}) {
     id: args.id,
     metadata,
     scope: args.scope || "custom",
-    tier: args.tier || "basic",
     version: args.version || null,
     scale: args.scale || 1.1,
     platform: args.platform || "win32",
@@ -385,6 +380,7 @@ function createVariant(args, options = {}) {
   assertDraftDoesNotConflict(metadata, draft, options);
 
   variants[draft.id] = draft;
+  metadata.schemaVersion = 3;
   writeMetadataFile(metadata, metadataFile);
 
   console.log(`Created pet variant: ${draft.id}`);
@@ -558,7 +554,6 @@ function buildBootstrapPlan(args, options = {}) {
     id: args.id,
     metadata,
     scope: args.scope || "custom",
-    tier: args.tier || "basic",
     version: args.version || null,
     scale: args.scale || 1.1,
     platform: args.platform || "win32",
@@ -570,7 +565,7 @@ function buildBootstrapPlan(args, options = {}) {
   });
   assertDraftDoesNotConflict(metadata, draft, { animationsRoot });
 
-  const actionKeys = uniqueList((draft.actions.buttons || []).concat(draft.actions.assets || []));
+  const actionKeys = getRawEnabledActions(draft);
   const copied = actionKeys.map((action) => {
     const source = findSourceVideo(sourceDir, action);
     const actionName = `${draft.assetPrefix}_${actionPool[action].asset}`;
@@ -614,6 +609,7 @@ function buildBootstrapPlan(args, options = {}) {
     warnings,
     metadataAfterApply: {
       ...metadata,
+      schemaVersion: 3,
       variants: {
         ...variants,
         [draft.id]: draft
@@ -831,16 +827,16 @@ function cloneMetadataWithPatch(metadata, id, fields) {
     ...clonePlainObject(current),
     id
   };
-  for (const key of ["scope", "tier", "species", "date", "notes", "version", "scale", "platforms", "assetPrefix", "soundPrefix"]) {
+  for (const key of ["scope", "species", "date", "notes", "version", "scale", "platforms", "assetPrefix", "soundPrefix"]) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       next[key] = fields[key];
     }
   }
   if (Object.prototype.hasOwnProperty.call(fields, "actions")) {
-    next.actions = {
-      ...(next.actions || {}),
-      ...clonePlainObject(fields.actions)
-    };
+    const enabled = Array.isArray(fields.actions?.enabled)
+      ? fields.actions.enabled
+      : (fields.actions?.buttons || []).concat(fields.actions?.assets || []);
+    next.actions = { enabled: uniqueList(enabled) };
   }
   if (Object.prototype.hasOwnProperty.call(fields, "features")) {
     next.features = {
@@ -850,6 +846,7 @@ function cloneMetadataWithPatch(metadata, id, fields) {
   }
   return {
     ...clonePlainObject(metadata),
+    schemaVersion: 3,
     variants: {
       ...clonePlainObject(variants),
       [id]: next
@@ -867,8 +864,7 @@ function buildMetadataDiff(before, after, fields) {
   const diff = [];
   for (const key of Object.keys(fields)) {
     if (key === "actions") {
-      addDiff(diff, "actions.buttons", before.actions?.buttons || [], after.actions?.buttons || []);
-      addDiff(diff, "actions.assets", before.actions?.assets || [], after.actions?.assets || []);
+      addDiff(diff, "actions.enabled", getRawEnabledActions(before), getRawEnabledActions(after));
     } else if (key === "features") {
       addDiff(diff, "features.enable", before.features?.enable || [], after.features?.enable || []);
       addDiff(diff, "features.disable", before.features?.disable || [], after.features?.disable || []);
@@ -881,7 +877,7 @@ function buildMetadataDiff(before, after, fields) {
 
 function findMissingActionResources(profile, animationsRoot, plannedActions = []) {
   const planned = new Set(plannedActions);
-  const actions = uniqueList((profile.actionButtons || profile.actions || []).concat(profile.actionAssets || profile.extraAnimationAssets || []));
+  const actions = getProfileActionKeys(profile);
   return actions
     .filter((action) => !planned.has(action))
     .map((action) => getActionResourcePath(animationsRoot, profile.assetPrefix || profile.animationPrefix || profile.id, action))
@@ -909,8 +905,7 @@ function buildDeleteActionPreview(payload = {}, options = {}) {
       && getProfileAssetPrefix(item) === assetPrefix
       && getProfileActionKeys(item).includes(action))
     .map((item) => item.id);
-  const tierProfile = getTierProfiles()[profile.tier];
-  const requiredActions = uniqueList((tierProfile.actionButtons || []).concat(tierProfile.actionAssets || []));
+  const requiredActions = getRequiredActionKeys();
   const dependencies = [];
   if (action === "yawn" && profile.features?.idleYawn) {
     dependencies.push("idleYawn");
@@ -929,9 +924,7 @@ function buildDeleteActionPreview(payload = {}, options = {}) {
   const manifestAfter = manifestBefore.filter((entry) => entry?.action !== actionName);
   const rawBefore = clonePlainObject(variants[id]);
   const rawAfter = clonePlainObject(rawBefore);
-  rawAfter.actions = rawAfter.actions || { buttons: [], assets: [] };
-  rawAfter.actions.buttons = (rawAfter.actions.buttons || []).filter((item) => item !== action);
-  rawAfter.actions.assets = (rawAfter.actions.assets || []).filter((item) => item !== action);
+  rawAfter.actions = { enabled: getRawEnabledActions(rawAfter).filter((item) => item !== action) };
   for (const field of ["actionLabelOverrides", "actionStatEffects"]) {
     if (rawAfter[field] && Object.prototype.hasOwnProperty.call(rawAfter[field], action)) {
       delete rawAfter[field][action];
@@ -946,7 +939,7 @@ function buildDeleteActionPreview(payload = {}, options = {}) {
   const hasDirectory = fs.existsSync(actionPath);
   const hasManifestEntry = manifestAfter.length !== manifestBefore.length;
   const blockers = [];
-  if (requiredActions.includes(action)) blockers.push(`动作 ${action} 是 ${profile.tier} 套餐的必需动作`);
+  if (requiredActions.includes(action)) blockers.push(`动作 ${action} 是所有宠物的系统必需动作`);
   if (dependencies.length > 0) blockers.push(`功能 ${dependencies.join(", ")} 仍依赖动作 ${action}`);
   if (sharedVariants.length > 0) blockers.push(`资源前缀 ${assetPrefix} 还被变体 ${sharedVariants.join(", ")} 共用`);
   if (!registered && !hasDirectory && !hasManifestEntry) blockers.push(`未找到动作 ${action} 的资源或元数据`);
@@ -1020,17 +1013,17 @@ function applyDeleteAction(preview, options = {}) {
 function findFeatureMissingActionResources(profile, animationsRoot, plannedActions = []) {
   const planned = new Set(plannedActions);
   const requiredActions = [];
-  if (profile.features?.idleYawn && !(profile.actionAssets || profile.extraAnimationAssets || []).includes("yawn")) {
+  const enabledActions = getProfileActionKeys(profile);
+  if (profile.features?.idleYawn && !enabledActions.includes("yawn")) {
     requiredActions.push("yawn");
   }
   const assetPrefix = profile.assetPrefix || profile.animationPrefix || profile.id;
-  const actionAssets = profile.actionAssets || profile.extraAnimationAssets || [];
   return uniqueList(requiredActions)
     .map((action) => ({
       feature: action === "yawn" ? "idleYawn" : "",
       action,
       resourcePath: getActionResourcePath(animationsRoot, assetPrefix, action),
-      hasActionAsset: actionAssets.includes(action),
+      hasActionAsset: enabledActions.includes(action),
       hasResource: planned.has(action) || fs.existsSync(getActionResourcePath(animationsRoot, assetPrefix, action))
     }))
     .filter((item) => !item.hasActionAsset || !item.hasResource);
@@ -1063,7 +1056,7 @@ function buildMetadataEditPreview(payload = {}, options = {}) {
     ? `Missing action resource(s): ${missingResources.join(", ")}`
     : missingFeatureResources.length > 0
       ? missingFeatureResources
-        .map((item) => `变体 ${profile.id} 缺少 ${item.feature} 所需的 ${item.action} 动作。请先在“替换动作”或“批量导入目录”中导入 ${item.action}，再把它加入 actions.assets。`)
+        .map((item) => `变体 ${profile.id} 缺少 ${item.feature} 所需的 ${item.action} 动作。请先导入 ${item.action}，再把它加入 actions.enabled。`)
         .join(" ")
       : null;
   return {
@@ -1469,15 +1462,13 @@ function generateVariantGallery({ metadataFile = PET_VARIANT_METADATA_FILE, anim
       ? `<img src="${escapeHtml(toRelativeWebPath(outputDir, frame))}" alt="${escapeHtml(profile.id)} squat" loading="lazy">`
       : `<span class="img-placeholder">missing squat frame</span>`;
     const features = getEnabledFeatureNames(profile.features).join(", ") || "-";
-    const assets = (profile.actionAssets || []).join(", ") || "-";
-    return `  <article class="card tier-${escapeHtml(profile.tier)}">
+    return `  <article class="card">
     <div class="thumb">${thumb}</div>
     <h2>${escapeHtml(profile.id)} <span class="notes">${escapeHtml(profile.notes || "-")}</span></h2>
     <table>
       <tr><th>id</th><td>${escapeHtml(profile.id)}</td></tr>
       <tr><th>notes</th><td>${escapeHtml(profile.notes || "-")}</td></tr>
       <tr><th>species</th><td>${escapeHtml(profile.species)}</td></tr>
-      <tr><th>tier</th><td>${escapeHtml(profile.tier)}</td></tr>
       <tr><th>scope</th><td>${escapeHtml(profile.scope)}</td></tr>
       <tr><th>date</th><td>${escapeHtml(profile.date)}</td></tr>
       <tr><th>platforms</th><td>${escapeHtml(profile.platforms.join(", "))}</td></tr>
@@ -1485,8 +1476,7 @@ function generateVariantGallery({ metadataFile = PET_VARIANT_METADATA_FILE, anim
       <tr><th>scale</th><td>${escapeHtml(profile.scale)}</td></tr>
       <tr><th>assetPrefix</th><td>${escapeHtml(profile.assetPrefix)}</td></tr>
       <tr><th>soundPrefix</th><td>${escapeHtml(profile.soundPrefix || "-")}</td></tr>
-      <tr><th>actions</th><td>${escapeHtml(profile.actionButtons.join(", "))}</td></tr>
-      <tr><th>assets</th><td>${escapeHtml(assets)}</td></tr>
+      <tr><th>actions</th><td>${escapeHtml(getProfileActionKeys(profile).join(", "))}</td></tr>
       <tr><th>features</th><td>${escapeHtml(features)}</td></tr>
     </table>
   </article>`;
@@ -1505,8 +1495,6 @@ function generateVariantGallery({ metadataFile = PET_VARIANT_METADATA_FILE, anim
   .meta { color: #6e6e73; font-size: 13px; margin-bottom: 24px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; }
   .card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-top: 4px solid #d2d2d7; }
-  .card.tier-basic { border-top-color: #6e6e73; }
-  .card.tier-advanced { border-top-color: #0071e3; }
   .thumb { display: flex; justify-content: center; align-items: center; height: 180px; margin-bottom: 12px; background: #fafafa; border-radius: 8px; }
   .thumb img { max-height: 160px; max-width: 100%; object-fit: contain; image-rendering: pixelated; }
   .img-placeholder { color: #aeaeb2; font-size: 13px; }
@@ -1535,22 +1523,17 @@ function printSpecies() {
   console.log(JSON.stringify(getSpeciesProfiles(), null, 2));
 }
 
-function printTiers() {
-  console.log(JSON.stringify(getTierProfiles(), null, 2));
-}
-
 function printHelp() {
   console.log(`Usage:
   node scripts/variant-cli.cjs list
   node scripts/variant-cli.cjs show --id <variant>
-  node scripts/variant-cli.cjs query [--id <variant>] [--species cat] [--tier basic] [--date YYYY-MM-DD] [--scope custom]
-  node scripts/variant-cli.cjs new --species cat --scope custom --tier basic --date YYYY-MM-DD
-   node scripts/variant-cli.cjs bootstrap --scope custom --species cat --tier advanced --date YYYY-MM-DD [--source <source-dir>] [--use-full-range] [--apply]
+  node scripts/variant-cli.cjs query [--id <variant>] [--species cat] [--date YYYY-MM-DD] [--scope custom]
+  node scripts/variant-cli.cjs new --species cat --scope custom --date YYYY-MM-DD [--actions squat,walk,feed,ball]
+  node scripts/variant-cli.cjs bootstrap --scope custom --species cat --date YYYY-MM-DD [--actions squat,walk,feed,ball] [--source <source-dir>] [--use-full-range] [--apply]
   node scripts/variant-cli.cjs check --id <variant>
   node scripts/variant-cli.cjs rename-assets --id <variant> --from <source-dir>
   node scripts/variant-cli.cjs gallery
-  node scripts/variant-cli.cjs species
-  node scripts/variant-cli.cjs tiers`);
+  node scripts/variant-cli.cjs species`);
 }
 
 function run(argv = process.argv.slice(2), options = {}) {
@@ -1575,8 +1558,6 @@ function run(argv = process.argv.slice(2), options = {}) {
       return generateVariantGallery(options);
     case "species":
       return printSpecies();
-    case "tiers":
-      return printTiers();
     case "help":
     case undefined:
       return printHelp();

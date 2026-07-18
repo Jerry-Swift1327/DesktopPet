@@ -31,9 +31,15 @@ const {
   getActionPool,
   getFeaturePool,
   getNotesPool,
+  getRequiredActionKeys,
+  reloadActionPool,
   getSpeciesProfiles,
-  getTierProfiles
 } = require("../../electron/pet-catalog.cjs");
+const {
+  ACTION_REGISTRY_FILE,
+  buildActionRegistrationPreview: buildRegistryActionRegistrationPreview,
+  applyActionRegistration: applyRegistryActionRegistration
+} = require("../../electron/pet/action-registry.cjs");
 
 const appRoot = path.resolve(__dirname, "..", "..");
 const projectRoot = path.dirname(appRoot);
@@ -64,45 +70,27 @@ function asArray(value) {
 function getCatalogOptions() {
   return {
     species: getSpeciesProfiles(),
-    tiers: getTierProfiles(),
     actions: getActionPool(),
+    requiredActions: getRequiredActionKeys(),
     features: getFeaturePool(),
     notes: getNotesPool()
   };
 }
 
-function getRequiredActions(tier) {
-  const tiers = getTierProfiles();
-  const profile = tiers[tier];
-  if (!profile) {
-    throw new Error(`未知套餐 tier：${tier}`);
-  }
-  return Array.from(new Set((profile.actionButtons || []).concat(profile.actionAssets || [])));
+function getRequiredActions() {
+  return getRequiredActionKeys();
 }
 
 function getEffectiveRequiredActions(formState) {
-  const tiers = getTierProfiles();
-  const profile = tiers[formState.tier];
-  if (!profile) {
-    throw new Error(`未知套餐 tier：${formState.tier}`);
-  }
-
-  const buttons = formState.advanced.actionButtons.length > 0
-    ? formState.advanced.actionButtons
-    : profile.actionButtons || [];
-  const assets = formState.advanced.actionAssets.length > 0
-    ? formState.advanced.actionAssets
-    : profile.actionAssets || [];
-  return Array.from(new Set(buttons.concat(assets)));
+  return Array.from(new Set(formState.advanced.enabledActions.length > 0
+    ? formState.advanced.enabledActions
+    : getRequiredActionKeys()));
 }
 
 function assertKnownFormValues(formState) {
   const options = getCatalogOptions();
   if (!options.species[formState.species]) {
     throw new Error(`未知物种 species：${formState.species}`);
-  }
-  if (!options.tiers[formState.tier]) {
-    throw new Error(`未知套餐 tier：${formState.tier}`);
   }
   if (!options.notes[formState.scope]) {
     throw new Error(`未知范围 scope：${formState.scope}`);
@@ -134,7 +122,7 @@ function scanSourceFolder(sourceDir, requiredActions) {
       continue;
     }
     if (!requiredSet.has(action)) {
-      warnings.push(`当前套餐不需要这个源视频：${entry.name}`);
+      warnings.push(`当前宠物未启用这个源视频动作：${entry.name}`);
       continue;
     }
     if (matches[action]) {
@@ -201,7 +189,6 @@ function normalizeFormState(formState = {}) {
     || Object.prototype.hasOwnProperty.call(formState, "features")
     || Object.prototype.hasOwnProperty.call(advanced, "disableFeatures")
     || Object.prototype.hasOwnProperty.call(formState, "disableFeatures");
-  const tier = formState.tier || "basic";
   const scope = formState.scope || "custom";
   const species = formState.species || "cat";
   const date = formState.date || new Date().toISOString().slice(0, 10);
@@ -209,7 +196,6 @@ function normalizeFormState(formState = {}) {
 
   return {
     scope,
-    tier,
     species,
     date,
     platforms,
@@ -226,8 +212,8 @@ function normalizeFormState(formState = {}) {
       assetPrefix: advanced.assetPrefix || formState.assetPrefix || null,
       scale: advanced.scale || formState.scale || null,
       version: advanced.version || formState.version || null,
-      actionButtons: asArray(advanced.actionButtons || formState.actionButtons),
-      actionAssets: asArray(advanced.actionAssets || formState.actionAssets),
+      enabledActions: asArray(advanced.enabledActions || formState.enabledActions
+        || asArray(advanced.actionButtons || formState.actionButtons).concat(asArray(advanced.actionAssets || formState.actionAssets))),
       features: asArray(advanced.features || formState.features),
       disableFeatures: asArray(advanced.disableFeatures || formState.disableFeatures),
       hasFeatureOverride
@@ -238,7 +224,6 @@ function normalizeFormState(formState = {}) {
 function buildBootstrapArgs(formState, stagingSource) {
   const args = {
     scope: formState.scope,
-    tier: formState.tier,
     species: formState.species,
     date: formState.date,
     platforms: formState.platforms,
@@ -257,10 +242,9 @@ function buildBootstrapArgs(formState, stagingSource) {
   if (formState.advanced.version) {
     args.version = formState.advanced.version;
   }
-  const hasActionOverride = formState.advanced.actionButtons.length > 0 || formState.advanced.actionAssets.length > 0;
+  const hasActionOverride = formState.advanced.enabledActions.length > 0;
   if (hasActionOverride) {
-    args["action-buttons"] = formState.advanced.actionButtons;
-    args["action-assets"] = formState.advanced.actionAssets;
+    args.actions = formState.advanced.enabledActions;
   }
   const hasFeatureOverride = formState.advanced.hasFeatureOverride
     || formState.advanced.features.length > 0
@@ -324,6 +308,7 @@ function createVariantWorkflow(options = {}) {
   const galleryRoot = options.galleryRoot || defaultGalleryRoot;
   const userDataRoot = options.userDataRoot || defaultUserDataRoot;
   const runtimeAssetsRoot = options.runtimeAssetsRoot || defaultRuntimeAssetsRoot;
+  const registryFile = options.registryFile || ACTION_REGISTRY_FILE;
   const idFactory = options.idFactory || createPreviewId;
   const plans = new Map();
 
@@ -514,10 +499,11 @@ function createVariantWorkflow(options = {}) {
 
   function buildMetadataEditPreview(payload = {}) {
     const details = getCliVariantDetails(payload.id, { metadataFile, animationsRoot });
-    const currentActions = new Set((details.profile.actionButtons || details.profile.actions || [])
-      .concat(details.profile.actionAssets || details.profile.extraAnimationAssets || []));
+    const currentActions = new Set(details.profile.enabledActions || []);
     const requestedActions = payload.fields?.actions
-      ? asArray(payload.fields.actions.buttons).concat(asArray(payload.fields.actions.assets))
+      ? (Array.isArray(payload.fields.actions.enabled)
+        ? asArray(payload.fields.actions.enabled)
+        : asArray(payload.fields.actions.buttons).concat(asArray(payload.fields.actions.assets)))
       : Array.from(currentActions);
     const newlyEnabledActions = Array.from(new Set(requestedActions)).filter((action) => !currentActions.has(action));
     const actionVideos = payload.actionVideos || {};
@@ -569,6 +555,21 @@ function createVariantWorkflow(options = {}) {
       emitHook(hooks, "onStage", { stage: "writeMetadataEdit", status: "failed", error: error.message });
       throw error;
     }
+  }
+
+  function buildActionRegistrationPreview(payload = {}) {
+    return storePreview("registerAction", buildRegistryActionRegistrationPreview(payload, { registryFile }));
+  }
+
+  function applyActionRegistration(previewId) {
+    const entry = plans.get(previewId);
+    if (!entry || entry.kind !== "registerAction") {
+      throw new Error(`未找到动作注册预览方案：${previewId}`);
+    }
+    const result = applyRegistryActionRegistration(entry.preview);
+    reloadActionPool();
+    plans.delete(previewId);
+    return result;
   }
 
   function getActionFramePool(payload = {}) {
@@ -682,6 +683,8 @@ function createVariantWorkflow(options = {}) {
     runRenameAssets,
     buildMetadataEditPreview,
     applyMetadataEdit,
+    buildActionRegistrationPreview,
+    applyActionRegistration,
     getActionFramePool,
     buildGenerateFramePoolPreview,
     generateFramePool,

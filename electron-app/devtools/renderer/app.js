@@ -95,7 +95,6 @@ function localDateString(date = new Date()) {
 function createDefaultForm() {
   return {
     scope: "custom",
-    tier: "basic",
     species: "cat",
     platforms: ["win32"],
     date: localDateString(),
@@ -106,8 +105,7 @@ function createDefaultForm() {
       yawn: { mode: "full", sourceStart: "", sourceEnd: "", freezeLastFrame: true }
     },
     advanced: {
-      actionButtons: defaultActionButtons.slice(),
-      actionAssets: [],
+      enabledActions: defaultActionButtons.slice(),
       features: defaultEnabledFeatures.slice(),
       disableFeatures: []
     },
@@ -140,7 +138,6 @@ const state = {
     selectedId: "",
     filters: {
       species: "",
-      tier: "",
       scope: "",
       date: ""
     },
@@ -161,12 +158,10 @@ const state = {
     newActionLoopModes: {},
     metadataFields: {
       species: "",
-      tier: "",
       version: "",
       notes: "",
       notePreset: "",
-      actionButtons: [],
-      actionAssets: [],
+      enabledActions: [],
       featuresEnable: [],
       featuresDisable: []
     },
@@ -186,6 +181,10 @@ const state = {
     frameLightboxIndex: null,
     lastFrameSelectionIndex: null,
     pendingFrameSelectionShift: false
+  },
+  actionRegistration: {
+    newVariant: createActionRegistrationState(),
+    maintainVariant: createActionRegistrationState()
   },
   deleteVariant: {
     selectedId: "",
@@ -236,18 +235,13 @@ function setListValue(list, value, checked) {
   return Array.from(selected);
 }
 
-function notePresetOptions(scope, tier) {
-  const result = [];
+function notePresetOptions(scope) {
   const notes = state.options?.notes || {};
-  for (const [scopeKey, tiers] of Object.entries(notes)) {
-    for (const [tierKey, note] of Object.entries(tiers || {})) {
-      result.push({
-        value: note,
-        label: `${scopeKey}/${tierKey} · ${note}`,
-        recommended: scopeKey === scope && tierKey === tier
-      });
-    }
-  }
+  const result = Object.entries(notes).map(([scopeKey, note]) => ({
+    value: note,
+    label: `${scopeKey} · ${note}`,
+    recommended: scopeKey === scope
+  }));
   return result.sort((left, right) => {
     if (left.recommended !== right.recommended) {
       return left.recommended ? -1 : 1;
@@ -256,16 +250,13 @@ function notePresetOptions(scope, tier) {
   });
 }
 
-function findNotePreset(value, scope, tier) {
-  return notePresetOptions(scope, tier).find((item) => item.value === value)?.value || "custom";
+function findNotePreset(value, scope) {
+  return notePresetOptions(scope).find((item) => item.value === value)?.value || "custom";
 }
 
 function filterVariants(rows, filters) {
   return rows.filter((variant) => {
     if (filters.species && variant.species !== filters.species) {
-      return false;
-    }
-    if (filters.tier && variant.tier !== filters.tier) {
       return false;
     }
     if (filters.scope && variant.scope !== filters.scope) {
@@ -302,11 +293,12 @@ function busy() {
     || state.maintain.framePoolPending
     || state.maintain.framePoolBuildPending
     || state.maintain.reselectPending
+    || Object.values(state.actionRegistration).some((item) => item.pending)
     || state.deleteVariant.pending;
 }
 
 function getNotesValue() {
-  return (state.options.notes[state.form.scope] || {})[state.form.tier] || "";
+  return state.options.notes[state.form.scope] || "";
 }
 
 function getDerivedDraftValue(name) {
@@ -330,17 +322,16 @@ function featureLabel(feature) {
 }
 
 function baseActionButtons() {
-  const basic = state.options && state.options.tiers.basic;
-  return basic && Array.isArray(basic.actionButtons) ? basic.actionButtons : defaultActionButtons;
+  return Array.isArray(state.options?.requiredActions) ? state.options.requiredActions : defaultActionButtons;
 }
 
 function selectedActionButtons() {
-  const selected = parseList(state.form.advanced.actionButtons);
+  const selected = parseList(state.form.advanced.enabledActions);
   return selected.length > 0 ? selected : baseActionButtons();
 }
 
 function selectedActionAssets() {
-  return parseList(state.form.advanced.actionAssets);
+  return [];
 }
 
 function selectedEnabledFeatures() {
@@ -474,9 +465,9 @@ function setAdvancedList(name, values) {
 }
 
 function toggleAction(action, kind, checked) {
-  const name = kind === "asset" ? "actionAssets" : "actionButtons";
-  const locked = kind === "button" ? new Set(baseActionButtons()) : new Set();
-  const selected = new Set(parseList(state.form.advanced[name]));
+  const name = "enabledActions";
+  const locked = new Set(baseActionButtons());
+  const selected = new Set(parseList(state.form.advanced.enabledActions));
   if (checked || locked.has(action)) {
     selected.add(action);
   } else {
@@ -645,6 +636,18 @@ function readFocusSnapshot() {
   };
 }
 
+function createActionRegistrationState() {
+  return {
+    actionKey: "",
+    label: "",
+    playbackMode: "once",
+    durationMinutes: "5",
+    preview: null,
+    pending: false,
+    error: ""
+  };
+}
+
 function restoreFocusSnapshot(snapshot) {
   if (!snapshot) return;
   const node = appNode.querySelector(snapshot.selector);
@@ -707,29 +710,21 @@ function renderFeatureOption(feature, name, checked) {
 function renderActionPicker() {
   const baseButtons = new Set(baseActionButtons());
   const buttons = new Set(selectedActionButtons());
-  const assets = new Set(selectedActionAssets());
   const entries = Object.entries(state.options.actions);
-  const extraButtons = entries
-    .filter(([action, item]) => item.kind === "button" && !baseButtons.has(action))
-    .map(([action]) => renderActionOption(action, "button", buttons.has(action)));
-  const assetOptions = entries
-    .filter(([, item]) => item.kind === "asset")
-    .map(([action]) => renderActionOption(action, "asset", assets.has(action)));
+  const optionalActions = entries
+    .filter(([action]) => !baseButtons.has(action))
+    .map(([action]) => renderActionOption(action, "action", buttons.has(action)));
 
   return `<details class="option-section collapsible-section new-pet-picker" data-picker="actions"${state.actionPickerOpen ? " open" : ""}>
     <summary>动作选择</summary>
-    <p class="muted">选择要出现在交互按钮和资源流程中的动作。</p>
+    <p class="muted">所有已注册动作都可复用；系统必需动作不可取消。</p>
     <div class="option-group">
-      <strong>基础按钮动作</strong>
+      <strong>系统必需动作</strong>
       <div class="option-grid new-pet-option-grid">${Array.from(baseButtons).map((action) => renderActionOption(action, "button", true, true)).join("")}</div>
     </div>
     <div class="option-group">
-      <strong>扩展按钮动作</strong>
-      <div class="option-grid new-pet-option-grid">${extraButtons.join("") || `<span class="muted">暂无扩展动作</span>`}</div>
-    </div>
-    <div class="option-group">
-      <strong>资源动作</strong>
-      <div class="option-grid new-pet-option-grid">${assetOptions.join("") || `<span class="muted">暂无资源动作</span>`}</div>
+      <strong>可选动作</strong>
+      <div class="option-grid new-pet-option-grid">${optionalActions.join("") || `<span class="muted">暂无可选动作</span>`}</div>
     </div>
   </details>`;
 }
@@ -827,7 +822,6 @@ function renderPreview() {
     <div class="summary-grid">
       <div><span>宠物 ID id</span><strong>${escapeHtml(state.preview.draft.id)}</strong></div>
       <div><span>物种 species</span><strong>${escapeHtml(state.preview.draft.species)}</strong></div>
-      <div><span>套餐 tier</span><strong>${escapeHtml(state.preview.draft.tier)}</strong></div>
       <div><span>版本 version</span><strong>${escapeHtml(state.preview.draft.version)}</strong></div>
     </div>
     <div class="preview-grid">
@@ -928,7 +922,6 @@ function renderNewVariant() {
         </div>
         <div class="form-grid new-pet-basics">
           <label>范围 scope ${renderSelect("scope", Object.keys(options.notes))}</label>
-          <label>套餐 tier ${renderSelect("tier", Object.keys(options.tiers))}</label>
           <label>物种 species ${renderSelect("species", Object.keys(options.species))}</label>
           <label class="date-field">日期 date <input type="date" data-field="date" value="${escapeHtml(state.form.date)}"${busy() ? " disabled" : ""}></label>
           <div class="platforms inline-platforms">${renderPlatformToggles()}</div>
@@ -938,6 +931,8 @@ function renderNewVariant() {
         ${renderDerivedSummary()}
         ${renderAdvancedControls()}
       </section>
+
+      ${renderActionRegistrationPanel("newVariant")}
 
       <section class="panel">
         <div class="panel-header source-panel-header">
@@ -994,7 +989,6 @@ function renderPetCatalog() {
             <input type="date" data-catalog-filter="date" value="${escapeHtml(dateValue)}"${disabled}>
           </label>
           ${renderCatalogFilter("species", Object.keys(options.species), "物种 species")}
-          ${renderCatalogFilter("tier", Object.keys(options.tiers), "套餐 tier")}
         </div>
       </section>
 
@@ -1006,7 +1000,7 @@ function renderPetCatalog() {
         <div class="catalog-list">
           ${rows.map((variant) => `<button type="button" class="catalog-row ${catalogToneClass(variant.id)} ${selected === variant.id ? "active" : ""}" data-catalog-id="${escapeHtml(variant.id)}"${disabled}>
             <strong>${escapeHtml(variant.id)}</strong>
-            <span>${escapeHtml([variant.scope, variant.species, variant.tier, variant.date].filter(Boolean).join(" · "))}</span>
+            <span>${escapeHtml([variant.scope, variant.species, variant.date].filter(Boolean).join(" · "))}</span>
           </button>`).join("") || `<p class="muted">没有匹配的宠物。</p>`}
         </div>
       </section>
@@ -1036,7 +1030,6 @@ function renderPetCatalog() {
             id: state.catalog.details.id,
             notes: state.catalog.details.notes,
             species: state.catalog.details.species,
-            tier: state.catalog.details.tier,
             scope: state.catalog.details.scope,
             platforms: state.catalog.details.platforms,
             version: state.catalog.details.version
@@ -1060,7 +1053,8 @@ function actionsFromDetails(details) {
   if (!details || !details.profile) {
     return [];
   }
-  return Array.from(new Set((details.profile.actionButtons || details.profile.actions || []).concat(details.profile.actionAssets || details.profile.extraAnimationAssets || [])));
+  return Array.from(new Set(details.profile.enabledActions
+    || (details.profile.actionButtons || details.profile.actions || []).concat(details.profile.actionAssets || details.profile.extraAnimationAssets || [])));
 }
 
 function syncMaintainFields(details) {
@@ -1071,15 +1065,69 @@ function syncMaintainFields(details) {
   const enabledFeatures = profile.enabledFeatures || Object.entries(profile.features || {}).filter(([, enabled]) => enabled).map(([name]) => name);
   state.maintain.metadataFields = {
     species: profile.species || "",
-    tier: profile.tier || "",
     version: profile.version || "1.0",
     notes: profile.notes || "",
-    notePreset: findNotePreset(profile.notes || "", profile.scope, profile.tier),
-    actionButtons: (profile.actionButtons || profile.actions || []).slice(),
-    actionAssets: (profile.actionAssets || profile.extraAnimationAssets || []).slice(),
+    notePreset: findNotePreset(profile.notes || "", profile.scope),
+    enabledActions: (profile.enabledActions
+      || (profile.actionButtons || profile.actions || []).concat(profile.actionAssets || profile.extraAnimationAssets || [])).slice(),
     featuresEnable: enabledFeatures.slice(),
     featuresDisable: []
   };
+}
+
+function derivedRegistrationStateId(actionKey) {
+  return /^[a-z]+(?:[A-Z][a-z]+)*$/.test(actionKey || "")
+    ? `pet${actionKey[0].toUpperCase()}${actionKey.slice(1)}`
+    : "等待有效 actionKey";
+}
+
+function renderActionRegistrationPanel(context) {
+  const registration = state.actionRegistration[context];
+  const disabled = busy() ? " disabled" : "";
+  const timed = registration.playbackMode === "timed";
+  const contextLabel = context === "newVariant" ? "新增宠物" : "维护宠物";
+  return `<section class="panel action-registration-panel" data-scroll-anchor="${escapeHtml(context)}-action-registration">
+    <div class="panel-header">
+      <div>
+        <h2>注册新动作</h2>
+        <p class="muted">注册到全局动作池，并加入当前${contextLabel}。</p>
+      </div>
+      <button type="button" data-build-action-registration="${escapeHtml(context)}"${disabled}>${registration.pending ? "处理中" : "生成注册预览"}</button>
+    </div>
+    <div class="form-grid action-registration-fields">
+      <label>动作标识 actionKey
+        <input type="text" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="actionKey" value="${escapeHtml(registration.actionKey)}" placeholder="例如 tailWag"${disabled}>
+      </label>
+      <label>显示名称 label
+        <input type="text" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="label" value="${escapeHtml(registration.label)}" placeholder="例如 摇尾巴"${disabled}>
+      </label>
+    </div>
+    <div class="playback-mode-group">
+      <strong>播放方式</strong>
+      <div class="segmented-control" role="radiogroup" aria-label="播放方式">
+        ${[
+          ["once", "播放一次"],
+          ["timed", "指定分钟"],
+          ["continuous", "持续循环"]
+        ].map(([mode, label]) => `<label><input type="radio" name="${escapeHtml(context)}-playback-mode" data-action-registration-mode="${escapeHtml(mode)}" data-action-registration-context="${escapeHtml(context)}"${registration.playbackMode === mode ? " checked" : ""}${disabled}><span>${label}</span></label>`).join("")}
+      </div>
+      ${timed ? `<label class="duration-field">持续分钟
+        <input type="number" min="0.1" max="1440" step="0.1" data-action-registration-context="${escapeHtml(context)}" data-action-registration-field="durationMinutes" value="${escapeHtml(registration.durationMinutes)}"${disabled}>
+      </label>` : ""}
+    </div>
+    <div class="summary-grid summary-grid-compact action-registration-summary">
+      <div><span>运行时 stateId</span><strong>${escapeHtml(derivedRegistrationStateId(registration.actionKey))}</strong></div>
+      <div><span>显示位置</span><strong>悬浮面板</strong></div>
+      <div><span>结束状态</span><strong>squat</strong></div>
+      <div><span>运动方式</span><strong>原地</strong></div>
+    </div>
+    ${registration.error ? `<p class="danger">${escapeHtml(registration.error)}</p>` : ""}
+    ${registration.preview ? `<div class="metadata-diff action-registration-preview">
+      <h3>全局注册预览</h3>
+      <pre>${renderJson({ actionKey: registration.preview.actionKey, definition: registration.preview.definition })}</pre>
+      <button type="button" class="primary" data-apply-action-registration="${escapeHtml(context)}" data-action-registration-preview-id="${escapeHtml(registration.preview.previewId)}"${disabled}>确认注册并加入当前宠物</button>
+    </div>` : ""}
+  </section>`;
 }
 
 function maintainResourceActions(details) {
@@ -1098,20 +1146,22 @@ function renderMaintainSelectField(name, label, values, selected, disabled) {
 
 function renderMaintainCheckboxList(name, label, values, selectedValues, disabled) {
   const selected = new Set(parseList(selectedValues));
+  const required = name === "enabledActions" ? new Set(baseActionButtons()) : new Set();
   return `<div class="option-group maintain-choice-group">
     <strong>${escapeHtml(label)}</strong>
     <div class="option-grid">
       ${values.map((value) => `<label class="option-check">
-        <input type="checkbox" data-maintain-list="${escapeHtml(name)}" data-maintain-list-value="${escapeHtml(value)}"${selected.has(value) ? " checked" : ""}${disabled}>
+        <input type="checkbox" data-maintain-list="${escapeHtml(name)}" data-maintain-list-value="${escapeHtml(value)}"${selected.has(value) ? " checked" : ""}${disabled || required.has(value) ? " disabled" : ""}>
         <span>${name.startsWith("features") ? escapeHtml(featureLabel(value)) : escapeHtml(actionLabel(value))}</span>
+        ${required.has(value) ? `<span class="option-note">必选</span>` : ""}
       </label>`).join("")}
     </div>
   </div>`;
 }
 
 function renderMaintainNotesField(fields, disabled) {
-  const presets = notePresetOptions(state.maintain.details?.profile?.scope, fields.tier);
-  const presetValue = fields.notePreset || findNotePreset(fields.notes, state.maintain.details?.profile?.scope, fields.tier);
+  const presets = notePresetOptions(state.maintain.details?.profile?.scope);
+  const presetValue = fields.notePreset || findNotePreset(fields.notes, state.maintain.details?.profile?.scope);
   return `<div class="notes-editor">
     <label>notes 标准项
       <select data-maintain-note-preset${disabled}>
@@ -1127,20 +1177,16 @@ function renderMaintainNotesField(fields, disabled) {
 
 function renderMaintainMetadataControls(fields, disabled) {
   const actions = Object.keys(state.options.actions);
-  const buttonActions = actions.filter((action) => state.options.actions[action].kind === "button");
-  const assetActions = actions.filter((action) => state.options.actions[action].kind === "asset");
   const features = Object.keys(state.options.features);
   return `<div class="form-grid maintain-metadata-basics">
     ${renderMaintainSelectField("species", "species", Object.keys(state.options.species), fields.species, disabled)}
-    ${renderMaintainSelectField("tier", "tier", Object.keys(state.options.tiers), fields.tier, disabled)}
     <label>version
       <input type="text" data-maintain-field="version" value="${escapeHtml(fields.version || "1.0")}"${disabled}>
     </label>
   </div>
   ${renderMaintainNotesField(fields, disabled)}
   <div class="option-section">
-    ${renderMaintainCheckboxList("actionButtons", "actions.buttons", buttonActions, fields.actionButtons, disabled)}
-    ${renderMaintainCheckboxList("actionAssets", "actions.assets", assetActions, fields.actionAssets, disabled)}
+    ${renderMaintainCheckboxList("enabledActions", "actions.enabled", actions, fields.enabledActions, disabled)}
     ${renderMaintainCheckboxList("featuresEnable", "启用功能 features", features, fields.featuresEnable, disabled)}
   </div>`;
 }
@@ -1218,8 +1264,7 @@ function renderMaintainActionCard(action, { kind, video, loopModes, dataPrefix }
 
 function newlyEnabledActions() {
   const current = new Set(actionsFromDetails(state.maintain.details));
-  return Array.from(new Set(parseList(state.maintain.metadataFields.actionButtons)
-    .concat(parseList(state.maintain.metadataFields.actionAssets))))
+  return Array.from(new Set(parseList(state.maintain.metadataFields.enabledActions)))
     .filter((action) => !current.has(action));
 }
 
@@ -1391,6 +1436,8 @@ function renderMaintainVariant() {
           <div><span>manifest</span><strong>${escapeHtml(details.resources.manifest)}</strong></div>
         </div>` : `<p class="muted">请选择一个宠物。</p>`}
       </section>
+
+      ${renderActionRegistrationPanel("maintainVariant")}
 
       <section class="panel">
         <div class="panel-header">
@@ -1843,6 +1890,53 @@ async function runPreview(previewId) {
   }
 }
 
+async function buildActionRegistrationPreview(context) {
+  const registration = state.actionRegistration[context];
+  if (!registration || busy()) return;
+  registration.pending = true;
+  registration.preview = null;
+  registration.error = "";
+  renderPreservingScroll();
+  try {
+    registration.preview = await api.buildActionRegistrationPreview({
+      actionKey: registration.actionKey,
+      label: registration.label,
+      playbackMode: registration.playbackMode,
+      durationMinutes: registration.playbackMode === "timed" ? Number(registration.durationMinutes) : undefined
+    });
+  } catch (error) {
+    registration.error = error.message;
+  } finally {
+    registration.pending = false;
+    renderPreservingScroll();
+  }
+}
+
+async function applyActionRegistration(context, previewId) {
+  const registration = state.actionRegistration[context];
+  if (!registration || busy() || !previewId) return;
+  registration.pending = true;
+  registration.error = "";
+  renderPreservingScroll();
+  try {
+    const result = await api.applyActionRegistration(previewId);
+    state.options = await api.getCatalogOptions();
+    if (context === "newVariant") {
+      state.form.advanced.enabledActions = setListValue(state.form.advanced.enabledActions, result.actionKey, true);
+      clearNewPreview();
+    } else if (state.maintain.details) {
+      state.maintain.metadataFields.enabledActions = setListValue(state.maintain.metadataFields.enabledActions, result.actionKey, true);
+      state.maintain.metadataPreview = null;
+    }
+    state.actionRegistration[context] = createActionRegistrationState();
+    pushLog(`已注册全局动作 ${result.actionKey}（${result.stateId}）`);
+  } catch (error) {
+    registration.error = error.message;
+    registration.pending = false;
+  }
+  renderPreservingScroll();
+}
+
 function buildMetadataPayload() {
   const fields = state.maintain.metadataFields;
   const newActions = newlyEnabledActions();
@@ -1855,12 +1949,10 @@ function buildMetadataPayload() {
       .map((action) => [action, maintainLoopModeFor("newActionLoopModes", action)])),
     fields: {
       species: fields.species,
-      tier: fields.tier,
       version: fields.version,
       notes: fields.notes,
       actions: {
-        buttons: parseList(fields.actionButtons),
-        assets: parseList(fields.actionAssets)
+        enabled: parseList(fields.enabledActions)
       },
       features: {
         enable: parseList(fields.featuresEnable),
@@ -2122,13 +2214,22 @@ appNode.addEventListener("toggle", (event) => {
 }, true);
 
 appNode.addEventListener("input", (event) => {
+  const registrationContext = event.target.dataset.actionRegistrationContext;
+  const registrationField = event.target.dataset.actionRegistrationField;
+  if (registrationContext && registrationField && state.actionRegistration[registrationContext]) {
+    const registration = state.actionRegistration[registrationContext];
+    registration[registrationField] = event.target.value;
+    registration.preview = null;
+    registration.error = "";
+    renderPreservingScroll();
+    return;
+  }
   const maintainField = event.target.dataset.maintainField;
   if (maintainField) {
     state.maintain.metadataFields[maintainField] = event.target.value;
     state.maintain.metadataFields.notePreset = findNotePreset(
       state.maintain.metadataFields.notes,
-      state.maintain.details?.profile?.scope,
-      state.maintain.metadataFields.tier
+      state.maintain.details?.profile?.scope
     );
     markMetadataPreviewDirty();
     return;
@@ -2181,8 +2282,15 @@ appNode.addEventListener("change", async (event) => {
   const maintainField = event.target.dataset.maintainField;
   const maintainList = event.target.dataset.maintainList;
   const maintainListValue = event.target.dataset.maintainListValue;
+  const registrationContext = event.target.dataset.actionRegistrationContext;
+  const registrationMode = event.target.dataset.actionRegistrationMode;
 
-  if (field) {
+  if (registrationContext && registrationMode && state.actionRegistration[registrationContext]) {
+    state.actionRegistration[registrationContext].playbackMode = registrationMode;
+    state.actionRegistration[registrationContext].preview = null;
+    state.actionRegistration[registrationContext].error = "";
+    renderPreservingScroll();
+  } else if (field) {
     setField(field, event.target.value);
   } else if (advanced) {
     setAdvancedField(advanced, event.target.value);
@@ -2282,14 +2390,6 @@ appNode.addEventListener("change", async (event) => {
     renderPreservingScroll();
   } else if (maintainField) {
     state.maintain.metadataFields[maintainField] = event.target.value;
-    if (maintainField === "tier" && state.maintain.metadataFields.notePreset !== "custom") {
-      const scope = state.maintain.details?.profile?.scope;
-      const nextNote = scope ? state.options.notes[scope]?.[event.target.value] : null;
-      if (nextNote) {
-        state.maintain.metadataFields.notes = nextNote;
-        state.maintain.metadataFields.notePreset = nextNote;
-      }
-    }
     state.maintain.metadataPreview = null;
     renderPreservingScroll();
   } else if (event.target.dataset.maintainNotePreset !== undefined) {
@@ -2331,8 +2431,14 @@ appNode.addEventListener("click", async (event) => {
   const catalogRow = event.target.closest("[data-catalog-id]");
   const action = event.target.dataset.chooseAction;
   const previewId = event.target.dataset.runPreview;
+  const registrationBuildContext = event.target.dataset.buildActionRegistration;
+  const registrationApplyContext = event.target.dataset.applyActionRegistration;
 
-  if (catalogRow) {
+  if (registrationBuildContext) {
+    await buildActionRegistrationPreview(registrationBuildContext);
+  } else if (registrationApplyContext) {
+    await applyActionRegistration(registrationApplyContext, event.target.dataset.actionRegistrationPreviewId);
+  } else if (catalogRow) {
     state.catalog.selectedId = catalogRow.dataset.catalogId;
     state.catalog.checkResult = null;
     await loadCatalogDetails(state.catalog.selectedId);

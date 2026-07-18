@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("variantDevtools", {
   runRenameAssets: (previewId) => ipcRenderer.invoke("devtools:runRenameAssets", previewId),
   buildMetadataEditPreview: (payload) => ipcRenderer.invoke("devtools:buildMetadataEditPreview", payload),
   applyMetadataEdit: (previewId) => ipcRenderer.invoke("devtools:applyMetadataEdit", previewId),
+  buildActionRegistrationPreview: (payload) => ipcRenderer.invoke("devtools:buildActionRegistrationPreview", payload),
+  applyActionRegistration: (previewId) => ipcRenderer.invoke("devtools:applyActionRegistration", previewId),
   getActionFramePool: (payload) => ipcRenderer.invoke("devtools:getActionFramePool", payload),
   buildGenerateFramePoolPreview: (payload) => ipcRenderer.invoke("devtools:buildGenerateFramePoolPreview", payload),
   generateFramePool: (previewId) => ipcRenderer.invoke("devtools:generateFramePool", previewId),

@@ -74,19 +74,19 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 
 ## 宠物变体
 
-变体人工维护数据集中在 `electron-app/electron/pet-variant-metadata.json`，动作池、功能池、tier 和 notes 规则集中在 `electron-app/electron/pet-catalog.cjs`，`electron-app/electron/pet-variants.cjs` 负责把 V2 元数据展开为运行时和打包 profile。`windowDocking` 是拖拽释放后吸附窗口的独立 feature；`windowRoam` 只有在 `windowDocking` 和平台能力同时可用时才暴露。真实 `id` 使用 `pet<yy><seq>`，是打包路径、注册表 key、singleInstanceKey 和用户数据目录的技术主键；现有变体通过 `assetPrefix` 继续读取旧资源目录和 manifest。变体只按真实 id 解析，不再使用 aliases。新增 custom 变体使用 `pet<yy><seq>` ID，Windows 打包路径为 `deliverables/<scope>/<id>/<channel>`。
+全局动作定义集中在 `electron-app/electron/pet-action-registry.json`，普通原地动作可由 DevTools 注册；动作记录包含 stateId、悬浮面板展示、播放方式、移动方式和资源处理预设。变体人工维护数据集中在 `pet-variant-metadata.json`，V3 通过 `actions.enabled` 引用全局动作，不再使用 tier。`pet-catalog.cjs` 负责加载动作、功能和 notes 规则，`pet-variants.cjs` 展开运行时与打包 profile。`windowDocking` 是拖拽释放后吸附窗口的独立 feature；`windowRoam` 只有在 `windowDocking` 和平台能力同时可用时才暴露。真实 `id` 使用 `pet<yy><seq>`，现有变体通过 `assetPrefix` 继续读取旧资源目录和 manifest，Windows 打包路径为 `deliverables/<scope>/<id>/<channel>`。
 
-| 变体 | species | tier | 范围 | 资源前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `pet2601` | dog | basic | internal | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
-| `pet2602` | cat | basic | internal | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
-| `pet2603` | cat | basic | custom | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
-| `pet2604` | dog | basic | custom | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
-| `pet2605` | cat | advanced | custom | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `pet2606` | cat | basic | custom | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `pet2607` | cat | basic | custom | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `pet2608` | cat | basic | custom | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
-| `pet2609` | cat | advanced | internal | `ragdoll` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| 变体 | species | 范围 | 资源前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pet2601` | dog | internal | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `pet2602` | cat | internal | `cat` | `1` | Windows、macOS | Windows 支持 | Windows 支持 |
+| `pet2603` | cat | custom | `shorthair` | `1.1` | Windows | 不支持 | 不支持 |
+| `pet2604` | dog | custom | `pomeranian` | `1.1` | macOS | 不支持 | 不支持 |
+| `pet2605` | cat | custom | `tabby` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2606` | cat | custom | `brit` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2607` | cat | custom | `van` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2608` | cat | custom | `bshmitted` | `1.1` | Windows | Windows 支持 | Windows 支持 |
+| `pet2609` | cat | internal | `ragdoll` | `1.1` | Windows | Windows 支持 | Windows 支持 |
 
 变体维护 CLI 位于 `electron-app/scripts/variant-cli.cjs`，可通过 `npm.cmd run variant:list`、`variant:query`、`variant:new`、`variant:bootstrap`、`variant:gallery` 和 `variant:species` 查询、生成或接入变体。
 

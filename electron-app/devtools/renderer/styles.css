@@ -933,6 +933,79 @@ select:focus {
   padding-top: 16px;
 }
 
+.action-registration-panel {
+  border-left: 4px solid #16856f;
+}
+
+.action-registration-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.playback-mode-group {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 620px);
+  border: 1px solid #c9d1d9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented-control label {
+  min-width: 0;
+  margin: 0;
+}
+
+.segmented-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented-control span {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  padding: 8px 12px;
+  border-right: 1px solid #c9d1d9;
+  background: #fff;
+  color: #30363d;
+  cursor: pointer;
+}
+
+.segmented-control label:last-child span {
+  border-right: 0;
+}
+
+.segmented-control input:checked + span {
+  background: #163f36;
+  color: #fff;
+}
+
+.segmented-control input:focus-visible + span {
+  outline: 2px solid #16856f;
+  outline-offset: -2px;
+}
+
+.segmented-control input:disabled + span {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.duration-field {
+  width: min(220px, 100%);
+}
+
+.action-registration-summary,
+.action-registration-preview {
+  margin-top: 16px;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -1342,5 +1415,19 @@ pre {
 
   .action-card button {
     width: 100%;
+  }
+
+  .action-registration-fields,
+  .segmented-control {
+    grid-template-columns: 1fr;
+  }
+
+  .segmented-control span {
+    border-right: 0;
+    border-bottom: 1px solid #c9d1d9;
+  }
+
+  .segmented-control label:last-child span {
+    border-bottom: 0;
   }
 }

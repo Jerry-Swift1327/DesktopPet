@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const variantWorkflow = require("../devtools/services/variant-workflow.cjs");
+const { ACTION_REGISTRY_FILE, readActionRegistry } = require("../electron/pet/action-registry.cjs");
 const { createVariantWorkflow, scanSourceFolder } = variantWorkflow;
 
 function createTempDir() {
@@ -11,7 +12,7 @@ function createTempDir() {
 }
 
 function writeMetadata(file, variants = {}) {
-  fs.writeFileSync(file, JSON.stringify({ schemaVersion: 2, variants }, null, 2), "utf8");
+  fs.writeFileSync(file, JSON.stringify({ schemaVersion: 3, variants }, null, 2), "utf8");
 }
 
 function writeSourceVideos(sourceDir, actions) {
@@ -27,24 +28,22 @@ function writeMaintenanceMetadata(file) {
       id: "pettest01",
       date: "2026-07-06",
       scope: "test",
-      tier: "basic",
       species: "cat",
       notes: "test draft",
       version: "1.0",
       assetPrefix: "pettest01",
-      actions: { buttons: ["squat", "walk", "feed", "ball"], assets: [] },
+      actions: { enabled: ["squat", "walk", "feed", "ball"] },
       features: { enable: ["autoStart"], disable: [] }
     },
     pet2601: {
       id: "pet2601",
       date: "2026-05-08",
       scope: "internal",
-      tier: "basic",
       species: "dog",
       notes: "internal",
       version: "1.1",
       assetPrefix: "dog",
-      actions: { buttons: ["squat", "walk", "feed", "ball"], assets: [] },
+      actions: { enabled: ["squat", "walk", "feed", "ball"] },
       features: { enable: ["autoStart"], disable: [] }
     }
   });
@@ -90,6 +89,27 @@ test("devtools workflow exposes maintenance helpers", () => {
   assert.equal(typeof workflow.deleteAction, "function");
   assert.equal(typeof workflow.buildDeleteVariantPreview, "function");
   assert.equal(typeof workflow.deleteTestVariant, "function");
+  assert.equal(typeof workflow.buildActionRegistrationPreview, "function");
+  assert.equal(typeof workflow.applyActionRegistration, "function");
+});
+
+test("devtools registers a timed global action through preview and apply", () => {
+  const tempDir = createTempDir();
+  const registryFile = path.join(tempDir, "pet-action-registry.json");
+  fs.copyFileSync(ACTION_REGISTRY_FILE, registryFile);
+  const workflow = createVariantWorkflow({ registryFile, idFactory: () => "register-tail-wag" });
+
+  const preview = workflow.buildActionRegistrationPreview({
+    actionKey: "tailWag",
+    label: "摇尾巴",
+    playbackMode: "timed",
+    durationMinutes: 3
+  });
+  const result = workflow.applyActionRegistration(preview.previewId);
+  const registry = readActionRegistry(registryFile);
+
+  assert.equal(result.stateId, "petTailWag");
+  assert.equal(registry.actions.tailWag.playback.durationMinutes, 3);
 });
 
 test("devtools workflow exposes catalog options for the new variant form", () => {
@@ -98,10 +118,10 @@ test("devtools workflow exposes catalog options for the new variant form", () =>
 
   assert.equal(Boolean(options.species.cat), true);
   assert.equal(Boolean(options.species.dog), true);
-  assert.deepEqual(options.tiers.basic.actionButtons, ["squat", "walk", "feed", "ball"]);
+  assert.deepEqual(options.requiredActions, ["squat", "walk", "feed", "ball"]);
   assert.equal(Boolean(options.actions.squat), true);
   assert.equal(Boolean(options.features.autoStart), true);
-  assert.equal(options.notes.custom.basic, "客户定制-基础");
+  assert.equal(options.notes.custom, "客户定制");
 });
 
 test("devtools source scan matches action mp4 files and reports unknown videos", () => {
@@ -151,8 +171,8 @@ test("devtools preview stages manual videos and reuses bootstrap draft rules", (
 
   assert.equal(preview.previewId, "preview-a");
   assert.equal(preview.draft.id, "pet2601");
-  assert.equal(preview.draft.notes, "客户定制-基础");
-  assert.deepEqual(preview.draft.actions.buttons, ["squat", "walk", "feed", "ball"]);
+  assert.equal(preview.draft.notes, "客户定制");
+  assert.deepEqual(preview.draft.actions.enabled, ["squat", "walk", "feed", "ball"]);
   assert.deepEqual(metadata.variants, {});
   assert.equal(fs.readFileSync(path.join(stagingRoot, "preview-a", "source", "squat.mp4"), "utf8"), "squat");
   assert.equal(preview.copied.length, 4);
@@ -303,8 +323,7 @@ test("devtools preview supports selected advanced actions and feature overrides"
     }
   });
 
-  assert.deepEqual(preview.draft.actions.buttons, ["squat", "walk", "feed", "ball", "spin", "splits"]);
-  assert.deepEqual(preview.draft.actions.assets, ["yawn"]);
+  assert.deepEqual(preview.draft.actions.enabled, ["squat", "walk", "feed", "ball", "spin", "splits", "yawn"]);
   assert.deepEqual(preview.draft.features.enable, ["autoStart", "windowRoam"]);
   assert.deepEqual(preview.draft.features.disable, []);
   assert.deepEqual(Object.keys(preview.stagedVideos), ["squat", "walk", "feed", "ball", "spin", "splits", "yawn"]);
@@ -312,7 +331,7 @@ test("devtools preview supports selected advanced actions and feature overrides"
   assert.equal(preview.processCommands.some((command) => command.action === "splits"), true);
 });
 
-test("devtools preview stages only effective advanced action buttons", () => {
+test("devtools preview rejects action selections that omit system required actions", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");
@@ -329,24 +348,14 @@ test("devtools preview stages only effective advanced action buttons", () => {
     stagingRoot,
     idFactory: () => "preview-only-squat"
   });
-  const preview = workflow.buildNewVariantPreview({
+  assert.throws(() => workflow.buildNewVariantPreview({
     scope: "custom",
-    tier: "basic",
     species: "cat",
     platforms: ["win32"],
     date: "2026-07-06",
-    advanced: {
-      actionButtons: ["squat"],
-      actionAssets: []
-    },
-    actionVideos: {
-      squat: path.join(manualDir, "squat.mp4")
-    }
-  });
-
-  assert.deepEqual(Object.keys(preview.stagedVideos), ["squat"]);
-  assert.equal(fs.readFileSync(path.join(stagingRoot, "preview-only-squat", "source", "squat.mp4"), "utf8"), "squat");
-  assert.deepEqual(preview.processCommands.map((command) => command.action), ["squat"]);
+    advanced: { enabledActions: ["squat"] },
+    actionVideos: { squat: path.join(manualDir, "squat.mp4") }
+  }), /missing required action/);
 });
 
 test("devtools preview rejects missing required basic action videos", () => {
@@ -575,7 +584,7 @@ test("devtools metadata maintenance processes newly enabled action videos before
     idFactory: () => "metadata-action-preview",
     runCommand: async () => {
       const metadataDuringProcessing = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
-      assert.deepEqual(metadataDuringProcessing.variants.pettest01.actions.buttons, ["squat", "walk", "feed", "ball"]);
+      assert.deepEqual(metadataDuringProcessing.variants.pettest01.actions.enabled, ["squat", "walk", "feed", "ball"]);
     }
   });
   const preview = workflow.buildMetadataEditPreview({
@@ -584,7 +593,7 @@ test("devtools metadata maintenance processes newly enabled action videos before
     loopModes: { spin: { mode: "auto" } },
     fields: {
       version: "1.1",
-      actions: { buttons: ["squat", "walk", "feed", "ball", "spin"], assets: [] }
+      actions: { enabled: ["squat", "walk", "feed", "ball", "spin"] }
     }
   });
 
@@ -607,7 +616,7 @@ test("devtools metadata maintenance processes newly enabled action videos before
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
 
   assert.equal(metadata.variants.pettest01.version, "1.1");
-  assert.deepEqual(metadata.variants.pettest01.actions.buttons, ["squat", "walk", "feed", "ball", "spin"]);
+  assert.deepEqual(metadata.variants.pettest01.actions.enabled, ["squat", "walk", "feed", "ball", "spin"]);
   assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
     "addAction:running",
     "addAction:done",
@@ -660,7 +669,7 @@ test("devtools maintenance deletes action metadata and blocks required actions",
   const animationsRoot = path.join(tempDir, "animations");
   writeMaintenanceMetadata(metadataFile);
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
-  metadata.variants.pet2601.actions.buttons.push("spin");
+  metadata.variants.pet2601.actions = { enabled: ["squat", "walk", "feed", "ball", "spin"] };
   metadata.variants.pet2601.actionLabelOverrides = { spin: "旋转" };
   metadata.variants.pet2601.actionStatEffects = { spin: { health: 1 } };
   fs.writeFileSync(metadataFile, JSON.stringify(metadata, null, 2), "utf8");
@@ -675,7 +684,7 @@ test("devtools maintenance deletes action metadata and blocks required actions",
   assert.equal(blocked.canDelete, false);
   assert.match(blocked.reason, /必需动作/);
   assert.equal(preview.canDelete, true, preview.reason);
-  assert.equal(after.actions.buttons.includes("spin"), false);
+  assert.equal(after.actions.enabled.includes("spin"), false);
   assert.equal(after.actionLabelOverrides, undefined);
   assert.equal(after.actionStatEffects, undefined);
 });

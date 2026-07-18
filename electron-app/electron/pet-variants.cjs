@@ -2,15 +2,15 @@ const crypto = require("crypto");
 const path = require("path");
 const {
   ACTION_POOL,
+  DEFAULT_FEATURES,
   FEATURE_POOL,
   NOTES_POOL,
   PET_SPECIES_PROFILES,
-  TIER_PROFILES,
   getActionPool,
   getFeaturePool,
   getNotesPool,
+  getRequiredActionKeys,
   getSpeciesProfiles,
-  getTierProfiles
 } = require("./pet-catalog.cjs");
 
 const PET_VARIANT_CONFIG_FILE = "pet_variant.json";
@@ -19,7 +19,6 @@ const DEFAULT_PET_VARIANT = "pet2601";
 const DEFAULT_PET_CHANNEL = "release";
 const DEFAULT_PET_PLATFORM = "win32";
 const DEFAULT_PET_SCOPE = "custom";
-const DEFAULT_PET_TIER = "basic";
 const DEFAULT_PET_SPECIES = "cat";
 const MAC_USER_DATA_PARENT = "Chongban 1.0";
 const SWITCHABLE_VARIANTS = Object.freeze(["pet2601", "pet2602"]);
@@ -28,13 +27,7 @@ const INSTALLER_GUID_NAMESPACE = "6d0c98fd-153d-40cf-9738-77c241c1e064";
 const PET_VARIANT_NAMESPACE_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const PET_VARIANT_ID_PATTERN = /^pet\d{4}$/;
 const TEST_PET_VARIANT_ID_PATTERN = /^pettest\d{2}$/;
-const PET_ACTION_ORDER = Object.freeze(TIER_PROFILES.basic.actionButtons.slice());
-
-const PET_ACTIONS = Object.freeze(Object.fromEntries(
-  Object.entries(ACTION_POOL)
-    .filter(([, action]) => action.id)
-    .map(([key, action]) => [key, Object.freeze({ id: action.id, asset: action.asset })])
-));
+const PET_ACTION_ORDER = Object.freeze(getRequiredActionKeys());
 
 const RAW_PET_VARIANT_METADATA = require("./pet-variant-metadata.json");
 
@@ -64,7 +57,7 @@ function deepFreeze(value) {
 
 function normalizeVariantMetadata(metadata) {
   return {
-    schemaVersion: metadata.schemaVersion || 2,
+    schemaVersion: metadata.schemaVersion || 3,
     variants: metadata.variants || metadata
   };
 }
@@ -143,12 +136,6 @@ function assertKnownSpecies(species) {
   }
 }
 
-function assertKnownTier(tier) {
-  if (!Object.prototype.hasOwnProperty.call(TIER_PROFILES, tier)) {
-    throw new Error(`Unknown tier: ${tier}. Available tiers: ${Object.keys(TIER_PROFILES).join(", ")}`);
-  }
-}
-
 function assertKnownScope(scope) {
   if (!Object.prototype.hasOwnProperty.call(NOTES_POOL, scope)) {
     throw new Error(`Unknown scope: ${scope}. Available scopes: ${Object.keys(NOTES_POOL).join(", ")}`);
@@ -169,62 +156,56 @@ function uniqueList(values) {
   return Array.from(new Set(values));
 }
 
-function getDefaultNotes(scope, tier) {
+function getDefaultNotes(scope) {
   assertKnownScope(scope);
-  assertKnownTier(tier);
-  return NOTES_POOL[scope][tier];
+  return NOTES_POOL[scope];
 }
 
 function normalizeActionConfig(rawProfile = {}, variantId = "") {
-  const tier = rawProfile.tier || DEFAULT_PET_TIER;
-  assertKnownTier(tier);
-  const tierProfile = TIER_PROFILES[tier];
   const rawActions = rawProfile.actions || {};
   if (!rawActions || typeof rawActions !== "object" || Array.isArray(rawActions)) {
     throw new Error(`Pet variant ${variantId} actions must be an object.`);
   }
 
-  const buttons = normalizeStringArray(
-    rawActions.buttons === undefined ? tierProfile.actionButtons : rawActions.buttons,
-    "actions.buttons",
+  const legacyActions = normalizeStringArray(rawActions.buttons, "actions.buttons", variantId)
+    .concat(normalizeStringArray(rawActions.assets, "actions.assets", variantId));
+  const enabled = uniqueList(normalizeStringArray(
+    rawActions.enabled === undefined ? (legacyActions.length > 0 ? legacyActions : getRequiredActionKeys()) : rawActions.enabled,
+    "actions.enabled",
     variantId
-  );
-  const assets = normalizeStringArray(
-    rawActions.assets === undefined ? tierProfile.actionAssets : rawActions.assets,
-    "actions.assets",
-    variantId
-  );
-
-  for (const action of buttons) {
-    assertActionHasState(action, variantId);
-  }
-  for (const action of assets) {
+  ));
+  for (const action of enabled) {
     assertKnownAction(action, variantId);
   }
+  const missingRequired = getRequiredActionKeys().filter((action) => !enabled.includes(action));
+  if (missingRequired.length > 0) {
+    throw new Error(`Pet variant ${variantId} is missing required action(s): ${missingRequired.join(", ")}.`);
+  }
+
+  const buttons = enabled.filter((action) => ACTION_POOL[action].presentation.hoverButton && ACTION_POOL[action].id);
+  const assets = enabled.filter((action) => !buttons.includes(action));
 
   return {
-    buttons: uniqueList(buttons),
-    assets: uniqueList(assets)
+    enabled,
+    buttons,
+    assets
   };
 }
 
 function normalizeFeatureConfig(rawProfile = {}, variantId = "") {
-  const tier = rawProfile.tier || DEFAULT_PET_TIER;
-  assertKnownTier(tier);
-  const tierFeatures = TIER_PROFILES[tier].features || {};
   const rawFeatures = rawProfile.features || {};
   if (!rawFeatures || typeof rawFeatures !== "object" || Array.isArray(rawFeatures)) {
     throw new Error(`Pet variant ${variantId} features must be an object.`);
   }
 
   const enabled = normalizeStringArray(
-    rawFeatures.enable === undefined ? tierFeatures.enable : [],
-    "tier.features.enable",
+    rawFeatures.enable === undefined ? DEFAULT_FEATURES : [],
+    "default features.enable",
     variantId
   );
   const disabled = normalizeStringArray(
-    rawFeatures.disable === undefined ? tierFeatures.disable : [],
-    "tier.features.disable",
+    [],
+    "default features.disable",
     variantId
   );
   const explicitEnable = normalizeStringArray(rawFeatures.enable, "features.enable", variantId);
@@ -378,15 +359,13 @@ function resolvePetVariantProfile(rawProfile) {
   assertPetVariantIdMatchesDate(id, rawProfile.date);
 
   const scope = rawProfile.scope || DEFAULT_PET_SCOPE;
-  const tier = rawProfile.tier || DEFAULT_PET_TIER;
   const species = rawProfile.species || DEFAULT_PET_SPECIES;
   assertKnownScope(scope);
-  assertKnownTier(tier);
   assertKnownSpecies(species);
   assertPetVariantIdMatchesScope(id, scope);
 
-  const actionConfig = normalizeActionConfig({ ...rawProfile, tier }, id);
-  const features = normalizeFeatureConfig({ ...rawProfile, tier }, id);
+  const actionConfig = normalizeActionConfig(rawProfile, id);
+  const features = normalizeFeatureConfig(rawProfile, id);
   const actionLabelOverrides = normalizeActionLabelOverrides(rawProfile, id);
   const actionStatEffects = normalizeActionStatEffects(rawProfile, id);
   const version = rawProfile.version || rawProfile.deliveryVersion || createDefaultVersion({ metadata: PET_VARIANT_METADATA, scope });
@@ -398,9 +377,8 @@ function resolvePetVariantProfile(rawProfile) {
     id,
     date: rawProfile.date || null,
     scope,
-    tier,
     species,
-    notes: rawProfile.notes || getDefaultNotes(scope, tier),
+    notes: rawProfile.notes || getDefaultNotes(scope),
     baseVariant: rawProfile.baseVariant || PET_SPECIES_PROFILES[species].baseVariant,
     platforms: normalizePlatforms(rawProfile),
     deliveryPathSegments: deliveryPathSegments.slice(),
@@ -409,6 +387,7 @@ function resolvePetVariantProfile(rawProfile) {
     assetPrefix,
     animationPrefix: assetPrefix,
     soundPrefix: rawProfile.soundPrefix || null,
+    enabledActions: actionConfig.enabled.slice(),
     actions: actionConfig.buttons.slice(),
     actionButtons: actionConfig.buttons.slice(),
     actionAssets: actionConfig.assets.slice(),
@@ -500,12 +479,17 @@ function normalizePetChannel(value) {
 }
 
 function getPetActions() {
-  return clonePlainObject(PET_ACTIONS);
+  return clonePlainObject(Object.fromEntries(
+    Object.entries(ACTION_POOL)
+      .filter(([, action]) => action.id)
+      .map(([key, action]) => [key, { id: action.id, asset: action.asset }])
+  ));
 }
 
 function getPetActionIds() {
-  return Object.keys(PET_ACTIONS).reduce((result, key) => {
-    result[key] = PET_ACTIONS[key].id;
+  const actions = getPetActions();
+  return Object.keys(actions).reduce((result, key) => {
+    result[key] = actions[key].id;
     return result;
   }, {});
 }
@@ -584,9 +568,7 @@ function getPetPlatformFeatures(config = {}) {
 
 function getVariantAnimationFolders(value) {
   const profile = getPetVariantProfile(value);
-  const assets = (profile.actionButtons || profile.actions || PET_ACTION_ORDER)
-    .map((key) => ACTION_POOL[key].asset)
-    .concat((profile.actionAssets || profile.extraAnimationAssets || []).map((key) => ACTION_POOL[key].asset));
+  const assets = (profile.enabledActions || PET_ACTION_ORDER).map((key) => ACTION_POOL[key].asset);
   return assets.map((asset) => `${profile.animationPrefix}_${asset}`);
 }
 
@@ -725,7 +707,6 @@ function createPetVariantMetadataDraft({
   id,
   metadata = PET_VARIANT_METADATA,
   scope = DEFAULT_PET_SCOPE,
-  tier = DEFAULT_PET_TIER,
   version = null,
   scale = 1.1,
   platform = DEFAULT_PET_PLATFORM,
@@ -737,7 +718,6 @@ function createPetVariantMetadataDraft({
 }) {
   assertKnownSpecies(species);
   assertKnownScope(scope);
-  assertKnownTier(tier);
   if (!isValidVariantDate(date)) {
     throw new Error(`Invalid variant date: ${date}. Use YYYY-MM-DD.`);
   }
@@ -752,25 +732,21 @@ function createPetVariantMetadataDraft({
     throw new Error(`Variant namespace token already exists: ${variantId}`);
   }
 
-  const tierProfile = TIER_PROFILES[tier];
+  const actionConfig = normalizeActionConfig({ actions: actions || { enabled: getRequiredActionKeys() } }, variantId);
   const draft = {
     id: variantId,
     date,
     scope,
-    tier,
     species,
-    notes: notes || getDefaultNotes(scope, tier),
+    notes: notes || getDefaultNotes(scope),
     version: version || createDefaultVersion({ metadata, scope }),
     scale: Number(scale),
     platforms: Array.isArray(platforms) && platforms.length > 0 ? platforms.slice() : [platform],
     assetPrefix: assetPrefix || variantId,
-    actions: actions || {
-      buttons: tierProfile.actionButtons.slice(),
-      assets: tierProfile.actionAssets.slice()
-    },
+    actions: { enabled: actionConfig.enabled.slice() },
     features: features || {
-      enable: (tierProfile.features.enable || []).slice(),
-      disable: (tierProfile.features.disable || []).slice()
+      enable: DEFAULT_FEATURES.slice(),
+      disable: []
     }
   };
 
@@ -786,7 +762,6 @@ module.exports = {
   DEFAULT_PET_CHANNEL,
   DEFAULT_PET_PLATFORM,
   DEFAULT_PET_SCOPE,
-  DEFAULT_PET_TIER,
   DEFAULT_PET_SPECIES,
   MAC_USER_DATA_PARENT,
   SWITCHABLE_VARIANTS,
@@ -808,7 +783,6 @@ module.exports = {
   getPetActionOrder,
   getActionPool,
   getFeaturePool,
-  getTierProfiles,
   getSpeciesProfiles,
   getNotesPool,
   getPetVariantMetadata,

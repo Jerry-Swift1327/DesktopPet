@@ -7,8 +7,7 @@ const {
   getActionPool,
   getFeaturePool,
   getNotesPool,
-  getSpeciesProfiles,
-  getTierProfiles
+  getSpeciesProfiles
 } = require("../electron/pet-catalog.cjs");
 
 const ROOT = path.join(__dirname, "..");
@@ -109,6 +108,7 @@ function createRendererHarness(options = {}) {
       ...variant,
       profile: {
         ...variant,
+        enabledActions: variant.actions.concat(variant.actionAssets),
         actionButtons: variant.actions,
         actionAssets: variant.actionAssets
       },
@@ -122,8 +122,8 @@ function createRendererHarness(options = {}) {
   const api = {
     getCatalogOptions: () => Promise.resolve({
       species: getSpeciesProfiles(),
-      tiers: getTierProfiles(),
       actions: getActionPool(),
+      requiredActions: ["squat", "walk", "feed", "ball"],
       features: getFeaturePool(),
       notes: getNotesPool()
     }),
@@ -144,6 +144,8 @@ function createRendererHarness(options = {}) {
     runRenameAssets: () => Promise.resolve({}),
     buildMetadataEditPreview: () => Promise.resolve({}),
     applyMetadataEdit: () => Promise.resolve({}),
+    buildActionRegistrationPreview: () => Promise.resolve({ previewId: "register-preview" }),
+    applyActionRegistration: () => Promise.resolve({ actionKey: "tailWag", stateId: "petTailWag", registered: true }),
     getActionFramePool: ({ action }) => Promise.resolve(options.framePool || {
       action,
       hasProcessedFrames: false,
@@ -273,7 +275,8 @@ test("devtools pet catalog exposes compact filters, colored list, details, and g
   const renderPetCatalogBody = appSource.match(/function renderPetCatalog\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
 
   assert.match(renderPetCatalogBody, /class="form-grid catalog-filters"/);
-  assert.match(renderPetCatalogBody, /renderCatalogFilter\("scope",[\s\S]*data-catalog-filter="date"[\s\S]*renderCatalogFilter\("species",[\s\S]*renderCatalogFilter\("tier"/);
+  assert.match(renderPetCatalogBody, /renderCatalogFilter\("scope",[\s\S]*data-catalog-filter="date"[\s\S]*renderCatalogFilter\("species"/);
+  assert.doesNotMatch(renderPetCatalogBody, /renderCatalogFilter\("tier"/);
   assert.match(renderPetCatalogBody, /data-catalog-filter/);
   assert.match(renderPetCatalogBody, /data-catalog-id/);
   assert.match(renderPetCatalogBody, /class="catalog-row \$\{catalogToneClass\(variant\.id\)\}/);
@@ -460,6 +463,17 @@ test("devtools maintenance metadata uses selectable controls and reset action", 
   assert.doesNotMatch(appSource, /data-build-rename-preview|data-run-rename-assets|批量导入动作源视频/);
 });
 
+test("devtools renders independent action registration panels on new and maintenance pages", () => {
+  const renderNewVariantBody = appSource.match(/function renderNewVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const renderMaintainVariantBody = appSource.match(/function renderMaintainVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  const registrationBody = appSource.match(/function renderActionRegistrationPanel\(context\) \{([\s\S]*?)\n\}/)?.[1] || "";
+
+  assert.match(renderNewVariantBody, /renderActionRegistrationPanel\("newVariant"\)/);
+  assert.match(renderMaintainVariantBody, /renderActionRegistrationPanel\("maintainVariant"\)/);
+  assert.match(registrationBody, /播放一次[\s\S]*指定分钟[\s\S]*持续循环/);
+  assert.match(registrationBody, /data-action-registration-field="actionKey"[\s\S]*data-action-registration-field="label"/);
+});
+
 test("devtools maintenance renders newly enabled actions as source video cards", async () => {
   const harness = createRendererHarness();
   await flushRendererPromises();
@@ -467,7 +481,7 @@ test("devtools maintenance renders newly enabled actions as source video cards",
   await harness.loadMaintainDetails("pet2601");
 
   assert.deepEqual(harness.state.maintain.details.profile.actionAssets, []);
-  harness.state.maintain.metadataFields.actionButtons.push("spin");
+  harness.state.maintain.metadataFields.enabledActions.push("spin");
   const html = harness.renderMaintainVariant();
 
   assert.match(html, /新增动作源视频/);

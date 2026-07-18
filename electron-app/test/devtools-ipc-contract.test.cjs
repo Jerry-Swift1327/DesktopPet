@@ -21,6 +21,8 @@ const invokeContracts = [
   ["runRenameAssets", "devtools:runRenameAssets"],
   ["buildMetadataEditPreview", "devtools:buildMetadataEditPreview"],
   ["applyMetadataEdit", "devtools:applyMetadataEdit"],
+  ["buildActionRegistrationPreview", "devtools:buildActionRegistrationPreview"],
+  ["applyActionRegistration", "devtools:applyActionRegistration"],
   ["getActionFramePool", "devtools:getActionFramePool"],
   ["buildGenerateFramePoolPreview", "devtools:buildGenerateFramePoolPreview"],
   ["generateFramePool", "devtools:generateFramePool"],

@@ -8,9 +8,10 @@
 | --- | --- |
 | `main.cjs` | 主进程核心逻辑，负责菜单、拖拽、贴靠、行走、状态机薄包装、surface 缩放薄包装和自启动；宠物窗口对象已委托 `windows/pet-window-controller.cjs` |
 | `preload.cjs` | 安全暴露 IPC API 给渲染层 |
-| `pet-variant-metadata.json` | V2 宠物变体元数据 |
-| `pet-catalog.cjs` | 动作池、功能池、tier profile 和 notes pool |
-| `pet-variants.cjs` | 将 V2 元数据和 catalog 展开为动作 ID、渠道配置、运行时配置和打包 profile |
+| `pet-action-registry.json` | 全局动作注册表，包含 stateId、展示、播放、移动和资源处理语义 |
+| `pet-variant-metadata.json` | V3 宠物变体元数据，通过 `actions.enabled` 启用全局动作 |
+| `pet-catalog.cjs` | 加载动作注册表，并提供功能池、必需动作和 notes pool |
+| `pet-variants.cjs` | 将 V3 元数据和 catalog 展开为动作 ID、渠道配置、运行时配置和打包 profile |
 | `walk-clock.cjs` | 行走循环暂停/恢复计时 |
 | `window-surfaces.ps1` | Windows 窗口候选列表探测 |
 | `window-from-point.ps1` | 根据屏幕点查找窗口 |
@@ -18,7 +19,8 @@
 | `core/logger.cjs` | 日志模块，提供文件日志和行走诊断日志 |
 | `core/runtime-config.cjs` | 运行时配置，负责变体配置读取和用户数据目录定位 |
 | `core/preferences-store.cjs` | 偏好存储，统一管理 autoStart/windowRoam/eyeTracking/scale 偏好 |
-| `pet/pet-states.cjs` | 宠物状态定义，含 buildPetState 工厂和 sharedGreetings |
+| `pet/action-registry.cjs` | 动作注册表校验、stateId 派生、注册预览和原子写入 |
+| `pet/pet-states.cjs` | 从统一动作注册表派生宠物状态，含 buildPetState 工厂和 sharedGreetings |
 | `pet/asset-loader.cjs` | 宠物资源加载，含帧列表、元数据、图标路径 |
 | `pet/pet-stats-rules.cjs` | pet stats 纯规则模块（clamp/normalize/daily decay/natural tick/action stats 规则），不依赖 electron/fs/Date.now/Math.random/中文文案 |
 | `pet/pet-stats-store.cjs` | pet stats 读写边界模块（base64 编码/解码、文件读写、legacy fallback），工厂形式注入 fs/log |
@@ -41,7 +43,7 @@
 | `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏与窗口表面共用的固定透明跑道；`walkTrackX` 在 walk 状态统一表示可见中心 X） |
 | `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
 | `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），walk 普通落点在解除拖拽暂停前按最终可见中心恢复固定跑道，工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |
-| `behavior/state-controller.cjs` | 状态控制器（状态切换、one-shot 动作结算、起点复位、静默归位），工厂形式注入依赖，持有 pendingActionStatsState，不直接接触窗口/IPC/bubble |
+| `behavior/state-controller.cjs` | 状态控制器（状态切换、one-shot/定时动作结算、起点复位、静默归位），工厂形式注入依赖，不直接接触窗口/IPC/bubble |
 | `behavior/window-roam-controller.cjs` | 窗口漫游控制器（最近/锁定目标选取、附着、轮询） |
 | `behavior/eye-tracking-controller.cjs` | 眼球追踪控制器（光标追踪、轮询） |
 | `platform/auto-start.cjs` | 开机自启平台能力适配器（注册表读写、运行态，业务偏好状态由 preferencesStore 统一管理） |
@@ -113,7 +115,7 @@
 
 ## 变体修改流程
 
-新增或修改宠物变体时，优先使用 `../scripts/variant-cli.cjs` 的 `variant:bootstrap` 流程或修改 `pet-variant-metadata.json`。动作 ID、功能池、tier 和 notes 规则维护在 `pet-catalog.cjs`；`pet-variants.cjs` 只维护派生规则、渠道配置和打包 profile 展开逻辑。
+新增或修改宠物变体时，优先使用 `../scripts/variant-cli.cjs` 的 `variant:bootstrap` 流程或 DevTools。全局动作定义保存在 `pet-action-registry.json`，普通原地动作通过 DevTools 注册；`pet-catalog.cjs` 加载动作与功能规则，`pet-variants.cjs` 维护 V3 metadata、渠道配置和打包 profile 派生。
 
 功能开关中 `windowDocking` 表示拖拽释放后的窗口吸附能力；`windowRoam` 只有在 `windowDocking` 同时启用且平台支持时才会暴露。新的 yawn 资源如需用最后一帧定格为睡眠阶段，可在动作元数据中声明 `freezeLastFrame: true`；未声明时仍沿用 `tailLoopStart` 尾段循环。
 
@@ -126,7 +128,7 @@
 - `../build-installer-win.ps1`。
 - `../build-installer-mac.cjs`，如果变体支持 macOS。
 - `../test/pet-variants.test.cjs`。
-- 新增动作类型时，同步 `pet/pet-states.cjs`、`main.cjs` 中的 one-shot/stats 接线和对应测试。
+- 普通原地动作不需要修改运行时代码；移动类或功能专属动作仍需同步状态控制器、主进程接线和对应测试。
 - `../../docs/PROJECT_MAP.md`。
 
 ## 验证

@@ -23,8 +23,7 @@
     "variant:check": "node scripts/variant-cli.cjs check",
     "variant:rename-assets": "node scripts/variant-cli.cjs rename-assets",
     "variant:gallery": "node scripts/variant-cli.cjs gallery",
-    "variant:species": "node scripts/variant-cli.cjs species",
-    "variant:tiers": "node scripts/variant-cli.cjs tiers"
+    "variant:species": "node scripts/variant-cli.cjs species"
   },
   "devDependencies": {
     "electron": "^37.0.0",

@@ -8,11 +8,13 @@ function createHarness({ initialState = "petSquat", targetState = "petFeed" } = 
   let selectedState = initialState;
   let walkDirection = -1;
   const calls = [];
+  let scheduledTimer = null;
   const anchor = { x: 320, y: 760 };
   const states = [
     { id: "petSquat", moving: false },
     { id: "petFeed", moving: false, oneShot: true },
-    { id: "petWalk", moving: true }
+    { id: "petWalk", moving: true },
+    { id: "petTailWag", moving: false, playback: { mode: "timed", durationMinutes: 2, completeTo: "petSquat" } }
   ];
   const controller = createStateController({
     sendPetState: () => calls.push({ type: "sendState" }),
@@ -78,7 +80,14 @@ function createHarness({ initialState = "petSquat", targetState = "petFeed" } = 
     STATE_HISS: "petHiss",
     TABBY_IDLE_STATES: new Set(),
     ONE_SHOT_STATES: new Set(["petFeed"]),
-    states
+    states,
+    setTimeoutFn: (callback, delay) => {
+      scheduledTimer = { callback, delay };
+      return scheduledTimer;
+    },
+    clearTimeoutFn: (timer) => {
+      if (scheduledTimer === timer) scheduledTimer = null;
+    }
   });
 
   return {
@@ -86,6 +95,9 @@ function createHarness({ initialState = "petSquat", targetState = "petFeed" } = 
     calls,
     get activeState() {
       return activeState;
+    },
+    get scheduledTimer() {
+      return scheduledTimer;
     },
     targetState
   };
@@ -111,6 +123,17 @@ test("non-moving state changes keep the previous rendered frame grounded until t
     [{ type: "ground", state: "petFeed", direction: -1 }]
   );
   assert.equal(harness.controller.completeVisualStateCommit("petFeed"), false);
+});
+
+test("timed playback returns to its configured completion state after the active duration", () => {
+  const harness = createHarness({ targetState: "petTailWag" });
+
+  harness.controller.setState("petTailWag");
+
+  assert.equal(harness.activeState, "petTailWag");
+  assert.equal(harness.scheduledTimer.delay, 2 * 60 * 1000);
+  harness.scheduledTimer.callback();
+  assert.equal(harness.activeState, "petSquat");
 });
 
 test("moving state changes delay walk alignment until the first moving frame is reported", () => {

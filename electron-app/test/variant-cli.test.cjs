@@ -45,7 +45,7 @@ function writeSourceVideos(sourceDir, actions) {
   }
 }
 
-test("variant CLI creates V2 metadata with generated pet-year sequence id fields", () => {
+test("variant CLI creates V3 metadata with generated pet-year sequence id fields", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");
@@ -53,15 +53,16 @@ test("variant CLI creates V2 metadata with generated pet-year sequence id fields
   writeMetadata(metadataFile);
 
   const draft = createVariant(
-    { species: "cat", tier: "advanced", date: "2026-06-30" },
+    { species: "cat", date: "2026-06-30" },
     { metadataFile, animationsRoot }
   );
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
 
   assert.equal(draft.id, "pet2601");
   assert.equal(draft.species, "cat");
-  assert.equal(draft.tier, "advanced");
-  assert.equal(draft.notes, "客户定制-高级");
+  assert.equal(Object.hasOwn(draft, "tier"), false);
+  assert.equal(draft.notes, "客户定制");
+  assert.deepEqual(draft.actions.enabled, ["squat", "walk", "feed", "ball"]);
   assert.equal(metadata.variants.pet2601.species, "cat");
   assert.equal(Object.hasOwn(metadata.variants.pet2601, "breed"), false);
   assert.throws(
@@ -114,9 +115,16 @@ test("variant CLI copies existing variant videos into preserved action directori
   const tempDir = createTempDir();
   const sourceDir = path.join(tempDir, "downloads");
   const animationsRoot = path.join(tempDir, "animations");
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  writeMetadata(metadataFile, {
+    pet2601: {
+      id: "pet2601", species: "dog", scope: "internal", date: "2026-05-08", version: "1.1", assetPrefix: "dog",
+      actions: { enabled: ["squat", "walk", "feed", "ball"] }
+    }
+  });
   writeSourceVideos(sourceDir, ["squat", "walk", "feed", "ball"]);
 
-  renameAssets({ id: "pet2601", from: sourceDir }, { animationsRoot });
+  renameAssets({ id: "pet2601", from: sourceDir }, { metadataFile, animationsRoot });
 
   for (const action of ["squat", "walk", "feed", "ball"]) {
     assert.equal(
@@ -185,7 +193,7 @@ test("variant CLI rename-assets includes extra action assets", () => {
   assert.equal(fs.readFileSync(path.join(animationsRoot, "pettest01_yawn", "pettest01_yawn.mp4"), "utf8"), "yawn");
 });
 
-test("variant CLI list output uses V2 columns", () => {
+test("variant CLI list output uses V3 columns without tier", () => {
   const output = formatList([
     getVariantSummary("pet2601"),
     getVariantSummary("pet2604")
@@ -193,10 +201,10 @@ test("variant CLI list output uses V2 columns", () => {
   const lines = output.split(/\r?\n/);
 
   assert.equal(output.includes("\t"), false);
-  assert.match(lines[0], /^id +notes +species +tier +date +scope +platforms +version$/);
-  assert.match(lines[1], /^-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+$/);
-  assert.match(output, /pet2601 +内部使用-基础 +dog +basic +2026-05-08 +internal +win32,darwin +1\.1/);
-  assert.match(output, /pet2604 +客户定制-基础 +dog +basic +2026-06-06 +custom +darwin +1\.0/);
+  assert.match(lines[0], /^id +notes +species +date +scope +platforms +version$/);
+  assert.match(lines[1], /^-+ +-+ +-+ +-+ +-+ +-+ +-+$/);
+  assert.match(output, /pet2601 +内部使用-高级 +dog +2026-05-08 +internal +win32,darwin +1\.1/);
+  assert.match(output, /pet2604 +客户定制-基础 +dog +2026-06-06 +custom +darwin +1\.0/);
 });
 
 test("variant CLI resolves canonical pet ids only", () => {
@@ -323,7 +331,7 @@ test("bootstrap supports per-action loop mode arguments", () => {
   assert.equal(byAction.walk.includes("--use-full-range"), false);
 });
 
-test("bootstrap apply writes V2 metadata and copies videos when processing is skipped", () => {
+test("bootstrap apply writes V3 metadata and copies videos when processing is skipped", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");
@@ -344,6 +352,7 @@ test("bootstrap apply writes V2 metadata and copies videos when processing is sk
   });
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
 
+  assert.equal(metadata.schemaVersion, 3);
   assert.equal(metadata.variants.pet2601.species, "dog");
   assert.equal(metadata.variants.pet2601.version, "1.1");
   assert.equal(fs.existsSync(path.join(animationsRoot, "pet2601_squat", "pet2601_squat.mp4")), true);
@@ -571,13 +580,12 @@ test("metadata edit preview diffs structured fields and apply writes the patch",
 
   assert.equal(preview.id, "pettest01");
   assert.equal(preview.canApply, true);
-  assert.deepEqual(preview.diff.map((entry) => entry.field), ["species", "notes", "actions.buttons", "actions.assets"]);
+  assert.deepEqual(preview.diff.map((entry) => entry.field), ["species", "notes", "actions.enabled"]);
 
   applyMetadataEdit(preview, { metadataFile });
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
   assert.equal(metadata.variants.pettest01.species, "dog");
-  assert.deepEqual(metadata.variants.pettest01.actions.buttons, ["squat", "walk", "feed", "ball", "lie"]);
-  assert.deepEqual(metadata.variants.pettest01.actions.assets, ["yawn"]);
+  assert.deepEqual(metadata.variants.pettest01.actions.enabled, ["squat", "walk", "feed", "ball", "lie", "yawn"]);
 });
 
 test("metadata edit preview blocks action lists that reference missing resources", () => {
@@ -821,7 +829,7 @@ test("source action names resolve from exact or prefixed mp4 names", () => {
   assert.equal(resolveSourceActionName("client_frolic.mp4"), null);
 });
 
-test("gallery generation reads V2 profile data and writes local index", () => {
+test("gallery generation reads legacy profile data and writes local index", () => {
   const tempDir = createTempDir();
   const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
   const animationsRoot = path.join(tempDir, "animations");

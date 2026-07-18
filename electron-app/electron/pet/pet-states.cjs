@@ -1,6 +1,7 @@
 // 宠物状态定义，含状态工厂和资源路径计算
 
 const path = require("path");
+const { ACTION_POOL } = require("../pet-catalog.cjs");
 
 // 共享问候语，所有状态默认使用
 const sharedGreetings = [
@@ -58,7 +59,7 @@ function getActionMetadataPath(action, assetsRoot, animationPrefix) {
 }
 
 // 单个宠物状态工厂，folder/metadata 由资源路径函数计算
-function buildPetState({ id, label, action, assetsRoot, animationPrefix, frameMs = 30, loopStart = 0, loopEnd = 0, defaultFacing = "left", moving = false, frameSequence = null, greetings = sharedGreetings }) {
+function buildPetState({ id, label, action, assetsRoot, animationPrefix, frameMs = 30, loopStart = 0, loopEnd = 0, defaultFacing = "left", moving = false, frameSequence = null, playback = null, greetings = sharedGreetings }) {
   const state = {
     id,
     label,
@@ -69,6 +70,7 @@ function buildPetState({ id, label, action, assetsRoot, animationPrefix, frameMs
     loopEnd,
     defaultFacing,
     moving,
+    playback: playback || { mode: "continuous", completeTo: "squat", interruptible: true },
     greetings
   };
   if (frameSequence) {
@@ -77,34 +79,22 @@ function buildPetState({ id, label, action, assetsRoot, animationPrefix, frameMs
   return state;
 }
 
-// 宠物动作定义：顺序、中文标签及特殊属性（moving 仅 walk 为 true，frameSequence 仅 feed 有）
-const PET_ACTION_DEFS = [
-  { action: "squat", label: "蹲坐", moving: false },
-  { action: "walk", label: "闲逛", moving: true },
-  { action: "feed", label: "喂食", moving: false, frameSequence: { repeatRangeStart: 0, repeatRangeEnd: 999, repeatCount: 2 } },
-  { action: "ball", label: "玩耍", moving: false },
-  { action: "lie", label: "趴下", moving: false },
-  { action: "spin", label: "转圈", moving: false },
-  { action: "lick", label: "舔爪", moving: false },
-  { action: "belly", label: "翻肚", moving: false },
-  { action: "stretch", label: "伸展", moving: false },
-  { action: "splits", label: "劈叉", moving: false },
-  { action: "shake", label: "抖身", moving: false },
-  { action: "yawn", label: "打哈欠", moving: false },
-  { action: "sleep", label: "睡觉", moving: false },
-  { action: "hiss", label: "哈气", moving: false }
-];
-
-// 根据 actionIds 映射构建完整 states 数组，顺序与原 main.cjs 一致
-function buildPetStates(actionIds, assetsRoot, animationPrefix, greetings = sharedGreetings, labelOverrides = {}) {
-  return PET_ACTION_DEFS.map(def => buildPetState({
-    id: actionIds[def.action],
-    label: labelOverrides[def.action] || def.label,
-    action: def.action,
+// 从统一动作注册表派生运行时状态，避免动作定义与动作池重复维护。
+function buildPetStates(actionIds, assetsRoot, animationPrefix, greetings = sharedGreetings, labelOverrides = {}, actionPool = ACTION_POOL) {
+  return Object.entries(actionPool)
+    .filter(([action]) => actionIds[action])
+    .map(([action, definition]) => buildPetState({
+    id: actionIds[action],
+    label: labelOverrides[action] || definition.label,
+    action,
     assetsRoot,
     animationPrefix,
-    moving: def.moving,
-    frameSequence: def.frameSequence || null,
+    moving: definition.motion?.mode === "walk",
+    frameSequence: definition.frameSequence || null,
+    playback: {
+      ...definition.playback,
+      completeTo: actionIds[definition.playback?.completeTo] || actionIds.squat
+    },
     greetings
   }));
 }

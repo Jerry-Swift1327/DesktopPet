@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "actions": {
+    "squat": {
+      "stateId": "petSquat",
+      "asset": "squat",
+      "label": "蹲坐",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "continuous", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": true,
+      "system": true
+    },
+    "walk": {
+      "stateId": "petWalk",
+      "asset": "walk",
+      "label": "闲逛",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "walk" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": true,
+      "system": true
+    },
+    "feed": {
+      "stateId": "petFeed",
+      "asset": "feed",
+      "label": "喂食",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "frameSequence": { "repeatRangeStart": 0, "repeatRangeEnd": 999, "repeatCount": 2 },
+      "requiredForVariant": true,
+      "system": true
+    },
+    "ball": {
+      "stateId": "petBall",
+      "asset": "ball",
+      "label": "玩耍",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": true,
+      "system": true
+    },
+    "lie": {
+      "stateId": "petLie",
+      "asset": "lie",
+      "label": "趴下",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "continuous", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "nearSquat" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "spin": {
+      "stateId": "petSpin",
+      "asset": "spin",
+      "label": "转圈",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "lick": {
+      "stateId": "petLick",
+      "asset": "lick",
+      "label": "舔爪",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "nearSquat" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "belly": {
+      "stateId": "petBelly",
+      "asset": "belly",
+      "label": "翻肚",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "stretch": {
+      "stateId": "petStretch",
+      "asset": "stretch",
+      "label": "伸展",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "splits": {
+      "stateId": "petSplits",
+      "asset": "splits",
+      "label": "劈叉",
+      "presentation": { "hoverButton": true },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "shake": {
+      "stateId": "petShake",
+      "asset": "shake",
+      "label": "抖身",
+      "presentation": { "hoverButton": false },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "nearSquat" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "yawn": {
+      "stateId": "petYawn",
+      "asset": "yawn",
+      "label": "打哈欠",
+      "presentation": { "hoverButton": false },
+      "playback": { "mode": "continuous", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "nearSquat" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "sleep": {
+      "stateId": "petSleep",
+      "asset": "sleep",
+      "label": "睡觉",
+      "presentation": { "hoverButton": false },
+      "playback": { "mode": "continuous", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "grounded" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "hiss": {
+      "stateId": "petHiss",
+      "asset": "hiss",
+      "label": "哈气",
+      "presentation": { "hoverButton": false },
+      "playback": { "mode": "once", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "nearSquat" },
+      "requiredForVariant": false,
+      "system": true
+    },
+    "look": {
+      "stateId": null,
+      "asset": "look",
+      "label": "视线追踪",
+      "presentation": { "hoverButton": false },
+      "playback": { "mode": "continuous", "completeTo": "squat", "interruptible": true },
+      "motion": { "mode": "stationary" },
+      "processing": { "preset": "direction64" },
+      "requiredForVariant": false,
+      "system": true
+    }
+  }
+}

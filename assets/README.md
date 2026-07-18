@@ -47,9 +47,9 @@
 
 ## 修改注意
 
-- 新增定制宠物变体时，优先用 `npm.cmd run variant:bootstrap -- --scope custom --species cat --tier basic --date YYYY-MM-DD --source <source-dir>` 生成 `pet<yy><seq>` ID、写入 V2 元数据并处理动作资源。
+- 新增定制宠物变体时，优先用 `npm.cmd run variant:bootstrap -- --scope custom --species cat --date YYYY-MM-DD --source <source-dir>` 生成 `pet<yy><seq>` ID、写入 V3 元数据并处理动作资源。
 - 从外部目录手动复制已存在变体的源视频时，仍可使用 `npm.cmd run variant:rename-assets -- --id <id> --from <source-dir>` 统一重命名为 `<assetPrefix>_<action>.mp4`。
-- 新增动作类型时，需要先注册动作池，再同步 Electron 状态、渲染层动作按钮和相关测试；bootstrap 会拒绝未知动作。
+- 普通原地动作通过 DevTools 注册到统一动作池；系统会派生 `petXxx` 状态并支持单次、指定分钟或持续循环。移动类和功能专属动作仍需单独设计运行逻辑。
 - 替换动作视频后，检查 `loop.json`、manifest 和正式 `transparent_frames` 是否一致。
 - 不要把 `raw_frames`、`processed_frames`、`_replacement_work` 或质量预览输出当作运行时必需资源；`raw_frames` 默认保留但仍是本地中间产物。
 - `processed_frames` 和 `raw_frames` 已加入 `.gitignore`，不应提交到仓库。

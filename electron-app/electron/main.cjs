@@ -15,6 +15,7 @@ const {
   DEFAULT_PET_VARIANT,
   DEFAULT_PET_CHANNEL,
   SWITCHABLE_VARIANTS,
+  getActionPool,
   getPetActionIds,
   buildPetRuntimeConfig,
   getPetUserDataFolder,
@@ -273,6 +274,7 @@ const preferencesStore = createPreferencesStore({
 });
 
 const petActionIds = getPetActionIds();
+const petActionPool = getActionPool();
 const petAnimationPrefix = petRuntimeConfig.animationPrefix;
 
 // 资源加载：帧列表、元数据、图标路径、眼球追踪帧
@@ -320,7 +322,9 @@ const STATE_HISS = petActionIds.hiss;
 const HOVER_PANEL_HEIGHT = petRuntimeConfig.channelConfig.hoverPanelHeight;
 const DEFAULT_PET_SCALE = petRuntimeConfig.defaultScale;
 const DEFAULT_STATE = STATE_SQUAT;
-const ONE_SHOT_STATES = new Set([STATE_WALK, STATE_FEED, STATE_BALL, STATE_SPIN, STATE_LICK, STATE_BELLY, STATE_STRETCH, STATE_SPLITS, STATE_SHAKE, STATE_HISS]);
+const ONE_SHOT_STATES = new Set(Object.values(petActionPool)
+  .filter((action) => action.id && action.playback?.mode === "once")
+  .map((action) => action.id));
 const TABBY_IDLE_STATES = new Set([STATE_YAWN, STATE_SLEEP, STATE_HISS]);
 
 // STATE_* 常量映射，传给 rules 模块做相等比较（rules 不依赖 petActionIds）
@@ -347,7 +351,8 @@ const states = buildPetStates(
   "animations",
   petAnimationPrefix,
   sharedGreetings,
-  petRuntimeConfig.actionLabelOverrides
+  petRuntimeConfig.actionLabelOverrides,
+  petActionPool
 );
 
 const statMessages = {
@@ -2351,6 +2356,7 @@ function buildPetConfig() {
         loopEnd: Math.min(Math.max(0, loopEnd), maxFrame),
         defaultFacing: state.defaultFacing,
         moving: state.moving,
+        playback: state.playback,
         oneShot: ONE_SHOT_STATES.has(state.id),
         returnState: ONE_SHOT_STATES.has(state.id) ? DEFAULT_STATE : state.id,
         greetings: state.greetings,
@@ -3932,6 +3938,12 @@ function handleHoverAction(_event, state) {
     return;
   }
   if (!states.some((item) => item.id === state)) {
+    return;
+  }
+  const selected = getState(state);
+  if (activeState === state && (selected.playback?.mode === "continuous" || selected.playback?.mode === "timed")) {
+    setState(DEFAULT_STATE);
+    hideHoverPanel();
     return;
   }
   setState(state);
