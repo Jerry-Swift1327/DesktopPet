@@ -29,8 +29,6 @@
       "features": {
         "enable": [
           "autoStart",
-          "windowDocking",
-          "windowRoam",
           "customization"
         ],
         "disable": []
