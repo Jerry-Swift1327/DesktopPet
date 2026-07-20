@@ -21,6 +21,8 @@ function createDragController(context) {
     isScreenPoint,
     isCustomizationVisible,
     materializeTaskbarWalkRunway,
+    isPetWindowLayoutPending = () => false,
+    whenPetWindowLayoutSettled = (callback) => callback({ completed: true }),
     recordUserOperation,
     addInteractionPause,
     clearHoverIntent,
@@ -52,6 +54,7 @@ function createDragController(context) {
   let dragTimer = null;
   let dragState = null;
   let lastDragSample = null;
+  let dragStartToken = 0;
 
   function sendDragState(isDragging) {
     const petWindow = getPetWindow();
@@ -121,17 +124,10 @@ function createDragController(context) {
     dragTimer = setInterval(updateDragPosition, 16);
   }
 
-  function handleDragStart(_event, point) {
+  function beginDrag(point, token) {
     const petWindow = getPetWindow();
-    if (!petWindow || petWindow.isDestroyed() || !isScreenPoint(point)) {
+    if (token !== dragStartToken || !petWindow || petWindow.isDestroyed()) {
       return;
-    }
-    if (isCustomizationVisible()) {
-      return;
-    }
-
-    if (getTaskbarWalkRunway()) {
-      materializeTaskbarWalkRunway({ stateId: getActiveState(), direction: getWalkDirection() });
     }
     const bounds = petWindow.getBounds();
     recordUserOperation();
@@ -158,7 +154,29 @@ function createDragController(context) {
     startDragTimer();
   }
 
+  function handleDragStart(_event, point) {
+    const petWindow = getPetWindow();
+    if (!petWindow || petWindow.isDestroyed() || !isScreenPoint(point) || isCustomizationVisible()) {
+      return;
+    }
+
+    const token = ++dragStartToken;
+    if (getTaskbarWalkRunway()) {
+      materializeTaskbarWalkRunway({ stateId: getActiveState(), direction: getWalkDirection() });
+      if (isPetWindowLayoutPending()) {
+        whenPetWindowLayoutSettled((result) => {
+          if (result?.completed) {
+            beginDrag(point, token);
+          }
+        });
+        return;
+      }
+    }
+    beginDrag(point, token);
+  }
+
   function handleDragEnd() {
+    dragStartToken += 1;
     const petWindow = getPetWindow();
     if (dragState && petWindow && !petWindow.isDestroyed()) {
       if (getWindowDockInProgress()) {

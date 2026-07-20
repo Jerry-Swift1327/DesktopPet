@@ -113,6 +113,13 @@ test("renderer wires the frame cache before pet-window, gates state changes, and
   assert.match(petWindowSource, /createPetFrameCache/);
   assert.match(petWindowSource, /ensureFrameReady/);
   assert.match(petWindowSource, /commitStateChange/);
+  assert.match(petWindowSource, /renderFrame\(\{ waitForPaint: true \}\)/);
+  assert.match(petWindowSource, /statePaintReady = false/);
+  assert.match(petWindowSource, /!isDragging && !isInteractionPaused && statePaintReady/);
+  assert.match(petWindowSource, /window\.addEventListener\("resize", applyPendingRunwayLayout\)/);
+  assert.match(petWindowSource, /confirmRunwayLayout\(token, "prepared"\)/);
+  assert.match(petWindowSource, /confirmRunwayLayout\(token, "painted"\)/);
+  assert.match(petWindowSource, /window\.requestAnimationFrame\(\(\) => \{\s*window\.requestAnimationFrame/);
   assert.doesNotMatch(petWindowSource, /predictScaleSummary/);
   assert.doesNotMatch(petWindowSource, /applyScale\(predictedScale\)/);
 });

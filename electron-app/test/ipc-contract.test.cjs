@@ -68,7 +68,8 @@ test("preload send channel 在 register-ipc-handlers.cjs 中有对应 ipcMain.on
     "pet:reset-position", "pet:reset-scale", "pet:hide-menu",
     "pet:show", "pet:hide", "pet:quit",
     "pet:show-customization", "pet:hide-customization",
-    "pet:drag-start", "pet:drag-end", "pet:adjust-scale"
+    "pet:drag-start", "pet:drag-end", "pet:adjust-scale",
+    "pet:runway-layout-ready"
   ];
   assert.deepEqual([...new Set(sendChannels)].sort(), [...expected].sort(),
     `preload send channel 提取应匹配 ${expected.length} 个`);
@@ -87,6 +88,9 @@ test("preload onXxx 监听方法返回 unsubscribe 函数", () => {
     { method: "onPauseStateChanged", channel: "pet:pause-state-changed" },
     { method: "onEyeTrackingLook", channel: "pet:eye-tracking-look" },
     { method: "onScaleChanged", channel: "pet:scale-changed" },
+    { method: "onRunwayLayoutPrepare", channel: "pet:runway-layout-prepare" },
+    { method: "onRunwayLayoutCommit", channel: "pet:runway-layout-commit" },
+    { method: "onRunwayLayoutCancel", channel: "pet:runway-layout-cancel" },
     { method: "onStatsChanged", channel: "pet:stats-changed" },
     { method: "onMenuData", channel: "pet:menu-data" },
     { method: "onHoverData", channel: "pet:hover-data" },
@@ -124,7 +128,8 @@ test("高风险 channel 名称在 preload.cjs 和 register-ipc-handlers.cjs 中�
     "pet:drag-end",
     "pet:rendered-frame",
     "pet:set-state",
-    "pet:complete-one-shot"
+    "pet:complete-one-shot",
+    "pet:runway-layout-ready"
   ];
 
   for (const channel of highRiskChannels) {
@@ -149,7 +154,10 @@ test("main -> renderer 事件推送 channel 在 preload 中有监听", () => {
     "pet:stats-changed",
     "pet:menu-data",
     "pet:hover-data",
-    "pet:bubble-data"
+    "pet:bubble-data",
+    "pet:runway-layout-prepare",
+    "pet:runway-layout-commit",
+    "pet:runway-layout-cancel"
   ];
   assert.deepEqual(uniquePushChannels.sort(), [...expected].sort(),
     `main->renderer 事件推送 channel 提取应匹配 ${expected.length} 个`);

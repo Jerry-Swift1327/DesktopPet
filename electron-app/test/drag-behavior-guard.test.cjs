@@ -89,6 +89,10 @@ function extractFunctionBody(source, funcName) {
   return source.slice(bodyStart, i - 1);
 }
 
+function getDragStartFlowBody() {
+  return `${extractFunctionBody(dragSource, "handleDragStart")}\n${extractFunctionBody(dragSource, "beginDrag")}`;
+}
+
 // 1. 拖拽运行态迁入 drag-controller，main.cjs 不再直接声明
 test("drag-controller 保留 dragTimer 运行态变量", () => {
   assert.match(dragSource, /let dragTimer = null\s*;/);
@@ -162,91 +166,91 @@ test("clearDragState 调用 sendDragState(false)", () => {
 
 // 5. handleDragStart 护栏
 test("handleDragStart 校验 isScreenPoint(point)", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /isScreenPoint\(point\)/);
 });
 
 test("handleDragStart 校验 isCustomizationVisible()", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /isCustomizationVisible\(\)/);
 });
 
 test("handleDragStart 调用 materializeTaskbarWalkRunway", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /materializeTaskbarWalkRunway/);
 });
 
 test("handleDragStart 调用 recordUserOperation()", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /recordUserOperation\(\)/);
 });
 
 test("handleDragStart 调用 clearDragState({ notify: false })", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /clearDragState\(\{\s*notify:\s*false\s*\}\)/);
 });
 
 test("handleDragStart 调用 addInteractionPause(\"drag\")", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /addInteractionPause\("drag"\)/);
 });
 
 test("handleDragStart 调用 clearHoverIntent()", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /clearHoverIntent\(\)/);
 });
 
 test("handleDragStart 调用 hideStartupBubble({ force: true })", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /hideStartupBubble\(\{\s*force:\s*true\s*\}\)/);
 });
 
 test("handleDragStart 调用 hidePetMenu()", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /hidePetMenu\(\)/);
 });
 
 test("handleDragStart 调用 hideHoverPanel()", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /hideHoverPanel\(\)/);
 });
 
 test("handleDragStart 调用 hideCustomizationPanel()", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /hideCustomizationPanel\(\)/);
 });
 
 test("handleDragStart 初始化 dragState 对象", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /dragState\s*=\s*\{/);
 });
 
 test("handleDragStart 同步 lastDragSample = dragState.lastSample", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /lastDragSample\s*=\s*dragState\.lastSample/);
 });
 
 test("handleDragStart 调用 sendDragState(true)", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /sendDragState\(true\)/);
 });
 
 test("handleDragStart 调用 startDragTimer()", () => {
-  const body = extractFunctionBody(dragSource, "handleDragStart");
+  const body = getDragStartFlowBody();
   assert.ok(body, "handleDragStart 函数体应能被提取");
   assert.match(body, /startDragTimer\(\)/);
 });

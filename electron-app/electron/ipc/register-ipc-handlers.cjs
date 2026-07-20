@@ -13,7 +13,7 @@ function registerIpcHandlers(context) {
   ipcMain.handle("pet:advance-walk-step", handlers.advanceWalkStep);
   ipcMain.handle("pet:get-contact-qrcode", handlers.getContactQrCode);
 
-  // on handlers (26 个)
+  // on handlers (27 个)
   ipcMain.on("pet:show-menu", handlers.showMenu);
   ipcMain.on("pet:resize-menu", handlers.resizeMenu);
   ipcMain.on("pet:menu-panel-enter", handlers.menuPanelEnter);
@@ -40,6 +40,7 @@ function registerIpcHandlers(context) {
   ipcMain.on("pet:adjust-scale", handlers.adjustScale);
   ipcMain.on("pet:drag-start", handlers.dragStart);
   ipcMain.on("pet:drag-end", handlers.dragEnd);
+  ipcMain.on("pet:runway-layout-ready", handlers.runwayLayoutReady);
 }
 
 module.exports = { registerIpcHandlers };

@@ -44,7 +44,7 @@
 
 - 宠物帧来自主进程返回的 `config.states[].frames`。
 - 行走状态通过 `advanceWalkStep` 让主进程推进固定透明跑道内的 `spriteOffsetX`；任务栏和窗口表面均不在普通逐帧步进中移动原生宠物窗口。
-- 拖拽、缩放、状态切换或 surface 变化前，主进程会把跑道内位置实体化为普通宠物窗口 bounds；walk 拖拽释放时按最终可见中心原子恢复跑道，避免把窗口左边界误作行走中心造成横向跳变。渲染层继续只消费返回的 scale 与 sprite offset。
+- 拖拽、缩放、状态切换或 surface 变化前，主进程通过布局事务把跑道内位置实体化为普通宠物窗口 bounds；renderer 先登记目标 scale，在目标 viewport 应用 sprite 布局并经过绘制帧后确认，避免原生窗口 resize 暂时显示旧动作帧。walk 拖拽释放时继续按最终可见中心恢复跑道，避免把窗口左边界误作行走中心造成横向跳变。
 - `loopStart`、`loopEnd`、`frameSequence` 会影响播放帧序列。
 - yawn 动作元数据可声明 `freezeLastFrame: true`，渲染层会在最后一帧定格并把它视为睡眠阶段；未声明时仍按 `tailLoopStart` 尾段循环。
 - 一次性动作完成后，渲染层会调用 `completeOneShot` 通知主进程恢复默认状态。

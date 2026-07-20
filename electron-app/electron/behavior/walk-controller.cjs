@@ -350,6 +350,14 @@ function createWalkController(context) {
       setLastWalkScaleApplyAt(nowForScale);
     }
     setLastWalkSurfaceSignature(nextSurfaceSignature);
+    if (isInteractionPaused()) {
+      const result = {
+        ...buildWalkStepResult(),
+        paused: true
+      };
+      logWalkStepDiagnostic(stepStartedAt, result, `reason=layout-paused pauseReasons=${Array.from(getInteractionPauseReasons()).join(",")}`);
+      return result;
+    }
     // window surface 的 groundY 不依赖可见区间（无 darwinBottomDock），用 state 级 stable bottom
     // 计算 groundedY 可避免逐帧 bottom 抖动。
     const groundedY = getGroundedWindowYForSurface(activeSurface, getActiveState(), getWalkDirection());

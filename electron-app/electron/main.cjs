@@ -36,6 +36,7 @@ const { sharedGreetings, buildPetStates } = require("./pet/pet-states.cjs");
 const { createOverlayWindow } = require("./windows/overlay-window.cjs");
 // 宠物主窗口生命周期与位置包装控制器，持有 petWindow 运行态
 const { createPetWindowController } = require("./windows/pet-window-controller.cjs");
+const { createPetWindowLayoutTransaction } = require("./windows/pet-window-layout-transaction.cjs");
 // 气泡窗口控制器，管理启动气泡的创建、显示、隐藏和定位
 const { createBubbleController } = require("./windows/bubble-controller.cjs");
  // 自定义面板控制器，管理联系作者面板的创建、显示、隐藏和定位
@@ -517,7 +518,7 @@ const surfaceScaleController = createSurfaceScaleController({
   refreshCustomizationAnchorAfterScale: (...args) => refreshCustomizationAnchorAfterScale(...args),
   repositionStartupBubbleWindow: (...args) => repositionStartupBubbleWindow(...args),
   // 通知回调（封装 safeSend 的 "pet:scale-changed" 通知）
-  sendScaleChanged: (summary) => safeSend(getPetWindow(), "pet:scale-changed", summary),
+  sendScaleChanged: sendPetScaleChanged,
   // 偏好持久化
   preferencesStore,
   // 窗口与运行态访问器（实时读写 main.cjs 状态，避免快照）
@@ -1336,6 +1337,8 @@ const dragController = createDragController({
   isScreenPoint,
   isCustomizationVisible,
   materializeTaskbarWalkRunway,
+  isPetWindowLayoutPending: () => Boolean(petWindowLayoutTransaction.getPending()),
+  whenPetWindowLayoutSettled: (callback) => petWindowLayoutTransaction.whenSettled(callback),
   recordUserOperation,
   addInteractionPause,
   clearHoverIntent,
@@ -1470,6 +1473,24 @@ const petWindowController = createPetWindowController({
   VISIBLE_SIDE_GAP,
   VISIBLE_TOP_GAP,
   VISIBLE_BOTTOM_GAP
+});
+
+const petWindowLayoutTransaction = createPetWindowLayoutTransaction({
+  sendPrepare: (payload) => safeSend(getPetWindow(), "pet:runway-layout-prepare", payload),
+  sendCommit: (payload) => safeSend(getPetWindow(), "pet:runway-layout-commit", payload),
+  sendCancel: (payload) => safeSend(getPetWindow(), "pet:runway-layout-cancel", payload),
+  applyBounds: applyPetWindowLayoutBounds,
+  onPendingChange: (pending) => {
+    if (pending) {
+      addInteractionPause("runway-layout");
+    } else {
+      removeInteractionPause("runway-layout");
+    }
+  },
+  onSettled: () => {
+    sendScaleState();
+    updatePetWindowMousePassthrough();
+  }
 });
 
 const autoStartController = createAutoStartController({
@@ -2137,6 +2158,13 @@ function buildScaleSummary() {
 
 function sendScaleState() {
   return surfaceScaleController.sendScaleState();
+}
+
+function sendPetScaleChanged(summary) {
+  if (petWindowLayoutTransaction.getPending()) {
+    return false;
+  }
+  return safeSend(getPetWindow(), "pet:scale-changed", summary);
 }
 
 function writePetStats() {
@@ -3310,6 +3338,40 @@ function buildTaskbarRunwayLayout(centerX, y, direction = walkDirection, surface
   };
 }
 
+function applyPetWindowLayoutBounds(layout, { reason = "", trigger = "" } = {}) {
+  const win = getPetWindow();
+  const nextBounds = layout?.bounds;
+  if (!win || win.isDestroyed() || !nextBounds) {
+    return false;
+  }
+  const bounds = win.getBounds();
+  if (bounds.x !== nextBounds.x
+    || bounds.y !== nextBounds.y
+    || bounds.width !== nextBounds.width
+    || bounds.height !== nextBounds.height) {
+    win.setBounds(nextBounds, false);
+  }
+  if (reason) {
+    logWalkDiagnostic(`runway-layout reason=${reason} trigger=${trigger} bounds=${nextBounds.x},${nextBounds.y},${nextBounds.width},${nextBounds.height}`);
+  }
+  return true;
+}
+
+function preparePetWindowLayout(bounds, reason) {
+  return petWindowLayoutTransaction.prepare({
+    layout: {
+      bounds: {
+        x: Math.round(bounds.x),
+        y: Math.round(bounds.y),
+        width: Math.round(bounds.width),
+        height: Math.round(bounds.height)
+      }
+    },
+    scale: buildScaleSummary(),
+    reason
+  });
+}
+
 function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
   if (!layout || !getPetWindow() || getPetWindow().isDestroyed()) {
     return null;
@@ -3339,18 +3401,12 @@ function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
     || bounds.width !== nextRunway.windowWidth
     || bounds.height !== nextRunway.windowHeight;
   if (boundsChanged) {
-    getPetWindow().setBounds({
+    preparePetWindowLayout({
       x: nextRunway.windowX,
       y: nextRunway.windowY,
       width: nextRunway.windowWidth,
       height: nextRunway.windowHeight
-    }, false);
-    if (reason) {
-      logWalkDiagnostic(`runway-recenter reason=${reason} windowX=${nextRunway.windowX} spriteOffsetX=${nextRunway.spriteOffsetX}`);
-    }
-  }
-  if (boundsChanged) {
-    sendScaleState();
+    }, reason || "runway");
   }
   updatePetWindowMousePassthrough();
   return nextRunway;
@@ -3472,7 +3528,7 @@ function applyPetWindowHitRegion(rect) {
 
 function updatePetWindowMousePassthrough() {
   setPetWindowMousePassthrough(false);
-  if (!isWalkRunwayActive() || dragController.getDragState()) {
+  if (petWindowLayoutTransaction.getPending() || !isWalkRunwayActive() || dragController.getDragState()) {
     clearPetWindowHitRegion();
     return;
   }
@@ -3499,9 +3555,15 @@ function materializeTaskbarWalkRunway({ stateId = activeState, direction = walkD
   taskbarWalkRunway = null;
   walkTrackX = null;
   setPetWindowMousePassthrough(false);
-  getPetWindow().setBounds(nextBounds, false);
   clearPetWindowHitRegion();
-  if (notifyScale) {
+  const bounds = getPetWindow().getBounds();
+  const boundsChanged = bounds.x !== nextBounds.x
+    || bounds.y !== nextBounds.y
+    || bounds.width !== nextBounds.width
+    || bounds.height !== nextBounds.height;
+  if (boundsChanged) {
+    preparePetWindowLayout(nextBounds, "runway-materialize");
+  } else if (notifyScale) {
     sendScaleState();
   }
   return true;
@@ -3523,14 +3585,21 @@ function materializeTaskbarWalkRunwayForState(stateId, direction = getDefaultDir
   taskbarWalkRunway = null;
   walkTrackX = null;
   setPetWindowMousePassthrough(false);
-  getPetWindow().setBounds({
+  const nextBounds = {
     x: next.x,
     y: next.y,
     width: getPetWindowWidth(),
     height: getPetWindowHeight()
-  }, false);
+  };
   clearPetWindowHitRegion();
-  if (notifyScale) {
+  const bounds = getPetWindow().getBounds();
+  const boundsChanged = bounds.x !== nextBounds.x
+    || bounds.y !== nextBounds.y
+    || bounds.width !== nextBounds.width
+    || bounds.height !== nextBounds.height;
+  if (boundsChanged) {
+    preparePetWindowLayout(nextBounds, "runway-materialize-state");
+  } else if (notifyScale) {
     sendScaleState();
   }
   return true;
@@ -4018,6 +4087,14 @@ function handleDragEnd() {
   return dragController.handleDragEnd();
 }
 
+function handleRunwayLayoutReady(event, token, phase) {
+  const win = getPetWindow();
+  if (!win || win.isDestroyed() || event.sender !== win.webContents) {
+    return;
+  }
+  petWindowLayoutTransaction.confirm(token, phase);
+}
+
 registerIpcHandlers({
   ipcMain,
   handlers: {
@@ -4056,6 +4133,7 @@ registerIpcHandlers({
     hideCustomization: hideCustomizationPanel,
     adjustScale: handleAdjustScale,
     dragStart: handleDragStart,
-    dragEnd: handleDragEnd
+    dragEnd: handleDragEnd,
+    runwayLayoutReady: handleRunwayLayoutReady
   }
 });

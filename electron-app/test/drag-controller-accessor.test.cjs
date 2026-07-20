@@ -71,6 +71,8 @@ test("controller context 解构包含必要依赖", () => {
     "isScreenPoint",
     "isCustomizationVisible",
     "materializeTaskbarWalkRunway",
+    "isPetWindowLayoutPending",
+    "whenPetWindowLayoutSettled",
     "recordUserOperation",
     "addInteractionPause",
     "clearHoverIntent",
@@ -166,6 +168,82 @@ test("register-ipc-handlers 的 pet:drag-start/pet:drag-end 契约不变", () =>
 test("main.cjs handlers 映射不变", () => {
   assert.match(mainStripped, /dragStart:\s*handleDragStart\s*,/);
   assert.match(mainStripped, /dragEnd:\s*handleDragEnd\b/);
+});
+
+test("walk drag waits for runway materialization before reading window bounds", () => {
+  const originalSetInterval = global.setInterval;
+  const originalClearInterval = global.clearInterval;
+  let settleLayout = null;
+  let runway = { windowWidth: 900 };
+  let layoutPending = false;
+  let intervalStarted = false;
+  const sentDragStates = [];
+  const petWindow = {
+    isDestroyed: () => false,
+    getBounds: () => ({ x: 100, y: 120, width: 180, height: 180 })
+  };
+
+  global.setInterval = () => {
+    intervalStarted = true;
+    return { fake: true };
+  };
+  global.clearInterval = () => {};
+
+  try {
+    const controller = createDragController({
+      safeSend: (_win, _channel, value) => sentDragStates.push(value),
+      removeInteractionPause: () => {},
+      clampPetWindowPosition: (x, y) => ({ x, y }),
+      setPetWindowPosition: () => {},
+      syncWalkTrackX: () => {},
+      getLastWindowSurfaceAsyncRefreshAt: () => Date.now(),
+      refreshWindowSurfaceCandidatesAsync: () => {},
+      getCursorScreenPoint: () => ({ x: 118, y: 130 }),
+      isScreenPoint: (point) => Number.isFinite(point?.screenX) && Number.isFinite(point?.screenY),
+      isCustomizationVisible: () => false,
+      materializeTaskbarWalkRunway: () => {
+        runway = null;
+        layoutPending = true;
+      },
+      isPetWindowLayoutPending: () => layoutPending,
+      whenPetWindowLayoutSettled: (callback) => { settleLayout = callback; },
+      recordUserOperation: () => {},
+      addInteractionPause: () => {},
+      clearHoverIntent: () => {},
+      hideStartupBubble: () => {},
+      hidePetMenu: () => {},
+      hideHoverPanel: () => {},
+      hideCustomizationPanel: () => {},
+      setIsPointerOverHoverPanel: () => {},
+      log: () => {},
+      logWalkDiagnostic: () => {},
+      isInteractionPaused: () => false,
+      getInteractionPauseSummary: () => "",
+      dockPetAfterDrag: () => {},
+      settlePetInPlaceAfterDrag: () => {},
+      getPetWindow: () => petWindow,
+      getActiveState: () => "petWalk",
+      getWalkDirection: () => -1,
+      getCurrentSurface: () => ({ type: "window" }),
+      getTaskbarWalkRunway: () => runway,
+      getWindowDockInProgress: () => false,
+      setWindowDockInProgress: () => {},
+      isWindowDockingEnabled: () => true,
+      WINDOW_SURFACE_DRAG_REFRESH_MIN_MS: 260
+    });
+
+    controller.handleDragStart(null, { screenX: 112, screenY: 124 });
+    assert.deepEqual(sentDragStates, []);
+    assert.equal(intervalStarted, false);
+
+    layoutPending = false;
+    settleLayout({ completed: true });
+    assert.deepEqual(sentDragStates, [true]);
+    assert.equal(intervalStarted, true);
+  } finally {
+    global.setInterval = originalSetInterval;
+    global.clearInterval = originalClearInterval;
+  }
 });
 
 test("drag end settles in place without starting dock flow when window docking is disabled", () => {

@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("desktopPet", {
   wakeSleepingPet: () => ipcRenderer.send("pet:wake-sleeping-pet"),
   completeOneShot: (state) => ipcRenderer.send("pet:complete-one-shot", state),
   advanceWalkStep: (frameStep, elapsedMs) => ipcRenderer.invoke("pet:advance-walk-step", frameStep, elapsedMs),
+  confirmRunwayLayout: (token, phase) => ipcRenderer.send("pet:runway-layout-ready", token, phase),
   rendererDiagnostic: (message) => ipcRenderer.send("pet:renderer-diagnostic", message),
   resetPosition: () => ipcRenderer.send("pet:reset-position"),
   resetScale: () => ipcRenderer.send("pet:reset-scale"),
@@ -64,6 +65,21 @@ contextBridge.exposeInMainWorld("desktopPet", {
     const listener = (_event, scale) => callback(scale);
     ipcRenderer.on("pet:scale-changed", listener);
     return () => ipcRenderer.removeListener("pet:scale-changed", listener);
+  },
+  onRunwayLayoutPrepare: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:runway-layout-prepare", listener);
+    return () => ipcRenderer.removeListener("pet:runway-layout-prepare", listener);
+  },
+  onRunwayLayoutCommit: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:runway-layout-commit", listener);
+    return () => ipcRenderer.removeListener("pet:runway-layout-commit", listener);
+  },
+  onRunwayLayoutCancel: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:runway-layout-cancel", listener);
+    return () => ipcRenderer.removeListener("pet:runway-layout-cancel", listener);
   },
   onStatsChanged: (callback) => {
     const listener = (_event, stats) => callback(stats);

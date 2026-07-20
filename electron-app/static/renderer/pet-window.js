@@ -26,6 +26,8 @@ async function renderPetWindow() {
   let lastTickAt = performance.now();
   let lastAnimationSkipLogAt = 0;
   let stateChangeToken = 0;
+  let statePaintReady = true;
+  let pendingRunwayLayout = null;
   const decodedStates = new Set();
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
@@ -213,6 +215,37 @@ async function renderPetWindow() {
     img.style.width = layout.imageWidth;
     img.style.height = layout.imageHeight;
   }
+
+  function viewportMatchesScale(targetScale) {
+    const expectedWidth = Math.round(Number(targetScale?.windowWidth) || 0);
+    const expectedHeight = Math.round(Number(targetScale?.windowHeight) || 0);
+    return expectedWidth > 0
+      && expectedHeight > 0
+      && Math.abs(window.innerWidth - expectedWidth) <= 1
+      && Math.abs(window.innerHeight - expectedHeight) <= 1;
+  }
+
+  function applyPendingRunwayLayout() {
+    const pending = pendingRunwayLayout;
+    if (!pending || pending.paintScheduled || !viewportMatchesScale(pending.scale)) {
+      return false;
+    }
+    applyScale(pending.scale);
+    pending.paintScheduled = true;
+    const token = pending.token;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!pendingRunwayLayout || pendingRunwayLayout.token !== token) {
+          return;
+        }
+        pendingRunwayLayout.paintConfirmed = true;
+        window.desktopPet.confirmRunwayLayout(token, "painted");
+      });
+    });
+    return true;
+  }
+
+  window.addEventListener("resize", applyPendingRunwayLayout);
 
   app.addEventListener("mousedown", (event) => {
     if (event.button !== 0 || !event.target.closest(".pet-sprite")) {
@@ -472,11 +505,12 @@ async function renderPetWindow() {
     lastRenderedFrameSentAt = 0;
     lastRenderedFrameDirection = direction;
     sleepStageFrameReported = false;
+    statePaintReady = false;
     img.style.willChange = nextState?.moving ? "transform" : "";
     if (nextState?.moving) {
       decodeStateFrames(nextState);
     }
-    renderFrame();
+    renderFrame({ waitForPaint: true });
     restartAnimationTimer();
   }
 
@@ -502,7 +536,7 @@ async function renderPetWindow() {
     });
   }
 
-  function renderFrame() {
+  function renderFrame({ waitForPaint = false } = {}) {
     const state = getState();
     if (!state || state.frames.length === 0) {
       return;
@@ -533,11 +567,24 @@ async function renderPetWindow() {
         lastRenderedFrameSentAt = now;
         lastRenderedFrameDirection = direction;
         sleepStageFrameReported = sleeping;
-        window.desktopPet.updateRenderedFrame({
+        const renderedInfo = {
           state: state.id,
           frameIndex,
           direction
-        });
+        };
+        if (waitForPaint) {
+          const reportEpoch = animationEpoch;
+          window.requestAnimationFrame(() => {
+            setTimeout(() => {
+              if (reportEpoch === animationEpoch) {
+                statePaintReady = true;
+                window.desktopPet.updateRenderedFrame(renderedInfo);
+              }
+            }, 0);
+          });
+        } else {
+          window.desktopPet.updateRenderedFrame(renderedInfo);
+        }
       }
     }
     if (!sleeping) {
@@ -577,7 +624,7 @@ async function renderPetWindow() {
     if (tickAccumulator >= frameMs) {
       const elapsedMs = Math.max(1, tickAccumulator);
       tickAccumulator = 0;
-      if (!isDragging && !isInteractionPaused) {
+      if (!isDragging && !isInteractionPaused && statePaintReady) {
         if (state?.moving && !decodedStates.has(state.id)) {
           await decodeStateFrames(state);
           if (currentEpoch !== animationEpoch) {
@@ -604,7 +651,7 @@ async function renderPetWindow() {
               if (result && result.state === activeState && Number.isFinite(result.direction)) {
                 frameStep = nextFrameStep;
                 direction = result.direction;
-                if (result.scale) {
+                if (result.scale && !pendingRunwayLayout) {
                   applyScale(result.scale);
                 }
                 renderFrame();
@@ -690,7 +737,52 @@ async function renderPetWindow() {
   });
 
   window.desktopPet.onScaleChanged((nextScale) => {
+    if (pendingRunwayLayout) {
+      if (pendingRunwayLayout.paintConfirmed) {
+        pendingRunwayLayout = null;
+        applyScale(nextScale);
+      } else {
+        pendingRunwayLayout.scale = nextScale || pendingRunwayLayout.scale;
+        applyPendingRunwayLayout();
+      }
+      return;
+    }
     applyScale(nextScale);
+  });
+
+  window.desktopPet.onRunwayLayoutPrepare((payload) => {
+    const token = Number(payload?.token);
+    if (!Number.isInteger(token) || token <= 0 || !payload?.scale) {
+      return;
+    }
+    if (pendingRunwayLayout && token < pendingRunwayLayout.token) {
+      return;
+    }
+    pendingRunwayLayout = {
+      token,
+      scale: payload.scale,
+      paintScheduled: false,
+      paintConfirmed: false
+    };
+    window.desktopPet.confirmRunwayLayout(token, "prepared");
+  });
+
+  window.desktopPet.onRunwayLayoutCommit((payload) => {
+    if (Number(payload?.token) !== pendingRunwayLayout?.token) {
+      return;
+    }
+    pendingRunwayLayout.scale = payload.scale || pendingRunwayLayout.scale;
+    applyPendingRunwayLayout();
+  });
+
+  window.desktopPet.onRunwayLayoutCancel((payload) => {
+    if (Number(payload?.token) !== pendingRunwayLayout?.token) {
+      return;
+    }
+    pendingRunwayLayout = null;
+    if (payload?.scale) {
+      applyScale(payload.scale);
+    }
   });
 
   applyScale(scale);

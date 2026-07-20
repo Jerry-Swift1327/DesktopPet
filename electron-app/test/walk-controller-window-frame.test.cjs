@@ -7,7 +7,8 @@ function createWindowWalkHarness({
   initialCenterX = 180,
   initialDirection = 1,
   centerLimits = { left: 140, right: 220 },
-  walkStep = 10
+  walkStep = 10,
+  pauseAfterScale = false
 } = {}) {
   const bounds = { x: 60, y: 90, width: 360, height: 180 };
   let walkTrackX = initialCenterX;
@@ -19,6 +20,7 @@ function createWindowWalkHarness({
   let walkMirrorCooldownSteps = 0;
   let walkLeftEdgeStuckSteps = 0;
   let walkRightEdgeStuckSteps = 0;
+  let interactionPaused = false;
   const runwayCalls = [];
   const surface = {
     type: "window",
@@ -30,7 +32,7 @@ function createWindowWalkHarness({
 
   const controller = createWalkController({
     clearWalkLoopTimer: () => {},
-    isInteractionPaused: () => false,
+    isInteractionPaused: () => interactionPaused,
     resetWalkRuntime: () => {},
     alignWalkLoopToSurface: () => {},
     pauseWalkLoopClock: () => {},
@@ -72,7 +74,10 @@ function createWindowWalkHarness({
     updatePetWindowMousePassthrough: () => {},
     logWalkStepDiagnostic: () => {},
     buildWalkStepResult: () => ({ state: "petWalk", moving: true, direction: walkDirection }),
-    applySurfaceScale: () => true,
+    applySurfaceScale: () => {
+      interactionPaused = pauseAfterScale;
+      return true;
+    },
     resetToTaskbarSurface: () => surface,
     getGroundedWindowYForSurface: () => bounds.y,
     getPetWindow: () => ({
@@ -148,6 +153,15 @@ test("walk initializes a missing track from the visible center before its first 
 
   assert.equal(harness.runwayCalls[0].centerX, 130);
   assert.equal(harness.getTrackX(), 130);
+});
+
+test("walk does not advance the sprite when surface scaling starts a layout transaction", () => {
+  const harness = createWindowWalkHarness({ pauseAfterScale: true });
+
+  const result = harness.controller.advanceWalkStep(0, 80);
+
+  assert.equal(result.paused, true);
+  assert.deepEqual(harness.runwayCalls, []);
 });
 
 test("window-surface walk mirrors inside the runway without moving the BrowserWindow", () => {
