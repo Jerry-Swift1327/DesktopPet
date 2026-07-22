@@ -1487,7 +1487,10 @@ const petWindowLayoutTransaction = createPetWindowLayoutTransaction({
       removeInteractionPause("runway-layout");
     }
   },
-  onSettled: () => {
+  onSettled: (result) => {
+    if (!result?.completed) {
+      restorePetWindowLayoutState(result?.layout?.rollbackState);
+    }
     sendScaleState();
     updatePetWindowMousePassthrough();
   }
@@ -3357,7 +3360,24 @@ function applyPetWindowLayoutBounds(layout, { reason = "", trigger = "" } = {}) 
   return true;
 }
 
-function preparePetWindowLayout(bounds, reason) {
+function capturePetWindowLayoutState() {
+  return {
+    taskbarWalkRunway: taskbarWalkRunway ? { ...taskbarWalkRunway } : null,
+    walkTrackX
+  };
+}
+
+function restorePetWindowLayoutState(state) {
+  if (!state || typeof state !== "object") {
+    return false;
+  }
+  taskbarWalkRunway = state.taskbarWalkRunway ? { ...state.taskbarWalkRunway } : null;
+  walkTrackX = Number.isFinite(state.walkTrackX) ? state.walkTrackX : null;
+  return true;
+}
+
+function preparePetWindowLayout(bounds, reason, rollbackState = null) {
+  const pendingRollbackState = petWindowLayoutTransaction.getPending()?.layout?.rollbackState;
   return petWindowLayoutTransaction.prepare({
     layout: {
       bounds: {
@@ -3365,7 +3385,8 @@ function preparePetWindowLayout(bounds, reason) {
         y: Math.round(bounds.y),
         width: Math.round(bounds.width),
         height: Math.round(bounds.height)
-      }
+      },
+      rollbackState: pendingRollbackState || rollbackState || capturePetWindowLayoutState()
     },
     scale: buildScaleSummary(),
     reason
@@ -3377,6 +3398,7 @@ function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
     return null;
   }
   const bounds = getPetWindow().getBounds();
+  const rollbackState = capturePetWindowLayoutState();
   const nextRunway = {
     surfaceType: layout.surfaceType,
     surfaceSignature: layout.surfaceSignature,
@@ -3406,7 +3428,7 @@ function applyTaskbarRunwayLayout(layout, { force = false, reason = "" } = {}) {
       y: nextRunway.windowY,
       width: nextRunway.windowWidth,
       height: nextRunway.windowHeight
-    }, reason || "runway");
+    }, reason || "runway", rollbackState);
   }
   updatePetWindowMousePassthrough();
   return nextRunway;
@@ -3546,6 +3568,7 @@ function materializeTaskbarWalkRunway({ stateId = activeState, direction = walkD
     clearPetWindowHitRegion();
     return false;
   }
+  const rollbackState = capturePetWindowLayoutState();
   const nextBounds = {
     x: Math.round(spriteLeft - getSpriteLocalXForWindowWidth(getPetWindowWidth())),
     y: Math.round(taskbarWalkRunway.windowY),
@@ -3562,7 +3585,7 @@ function materializeTaskbarWalkRunway({ stateId = activeState, direction = walkD
     || bounds.width !== nextBounds.width
     || bounds.height !== nextBounds.height;
   if (boundsChanged) {
-    preparePetWindowLayout(nextBounds, "runway-materialize");
+    preparePetWindowLayout(nextBounds, "runway-materialize", rollbackState);
   } else if (notifyScale) {
     sendScaleState();
   }
@@ -3577,6 +3600,7 @@ function materializeTaskbarWalkRunwayForState(stateId, direction = getDefaultDir
   if (!currentVisualRect) {
     return materializeTaskbarWalkRunway({ stateId: activeState, direction: walkDirection, notifyScale });
   }
+  const rollbackState = capturePetWindowLayoutState();
   const surface = getCurrentSurface();
   const centerX = currentVisualRect.x + Math.round(currentVisualRect.width / 2);
   const groundedY = getGroundedWindowYForSurface(surface, stateId, direction);
@@ -3598,7 +3622,7 @@ function materializeTaskbarWalkRunwayForState(stateId, direction = getDefaultDir
     || bounds.width !== nextBounds.width
     || bounds.height !== nextBounds.height;
   if (boundsChanged) {
-    preparePetWindowLayout(nextBounds, "runway-materialize-state");
+    preparePetWindowLayout(nextBounds, "runway-materialize-state", rollbackState);
   } else if (notifyScale) {
     sendScaleState();
   }

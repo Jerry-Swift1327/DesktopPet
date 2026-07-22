@@ -40,7 +40,7 @@
 | `windows/menu-controller.cjs` | 菜单窗口控制器（创建、显示、隐藏、定位、可见性） |
 | `windows/hover-controller.cjs` | 悬停面板控制器（创建、显示、隐藏、轮询、可见性） |
 | `windows/customization-controller.cjs` | 自定义面板控制器（创建、显示、隐藏、定位） |
-| `windows/pet-window-layout-transaction.cjs` | walk 跑道窗口布局事务（renderer prepare、原生 bounds commit、painted 确认与超时收敛） |
+| `windows/pet-window-layout-transaction.cjs` | walk 跑道窗口布局事务（renderer 透明预绘制、原生 bounds commit、目标布局 painted 确认；预绘制超时取消） |
 | `behavior/walk-controller.cjs` | 行走控制器（行走循环、步进、任务栏与窗口表面共用的固定透明跑道；`walkTrackX` 在 walk 状态统一表示可见中心 X） |
 | `behavior/dock-controller.cjs` | 贴靠控制器（拖拽后贴靠、窗口表面轮询、回退） |
 | `behavior/drag-controller.cjs` | 拖拽控制器（拖拽运行态、拖拽开始/更新/结束流程），walk 拖拽在跑道实体化事务完成后才读取 bounds 并启动跟随，普通落点在解除拖拽暂停前按最终可见中心恢复固定跑道，工厂形式注入依赖，持有 dragTimer/dragState/lastDragSample，不直接接触窗口/IPC/bubble |

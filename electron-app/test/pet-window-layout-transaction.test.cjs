@@ -100,6 +100,23 @@ test("paint timeout clears renderer pending state and releases the transaction",
   assert.equal(harness.settled.at(-1).trigger, "paint-timeout");
 });
 
+test("prepare timeout cancels without moving the native window", () => {
+  const harness = createHarness();
+  const token = harness.transaction.prepare({
+    layout: { bounds: { x: 10, y: 20, width: 900, height: 180 } },
+    scale: { id: 5 }
+  });
+
+  [...harness.timers.values()][0]();
+
+  assert.deepEqual(harness.nativeCommits, []);
+  assert.deepEqual(harness.rendererCommits, []);
+  assert.deepEqual(harness.cancels.at(-1), { token, reason: "prepare-timeout" });
+  assert.equal(harness.transaction.getPending(), null);
+  assert.equal(harness.settled.at(-1).completed, false);
+  assert.equal(harness.settled.at(-1).trigger, "prepare-timeout");
+});
+
 test("main routes both runway expansion and materialization through the layout transaction", () => {
   const mainSource = fs.readFileSync(path.join(__dirname, "..", "electron", "main.cjs"), "utf8");
   const applyStart = mainSource.indexOf("function applyTaskbarRunwayLayout(");
@@ -116,4 +133,6 @@ test("main routes both runway expansion and materialization through the layout t
   assert.doesNotMatch(materializeBody, /\.setBounds\(/);
   assert.match(mainSource, /sendScaleChanged:\s*sendPetScaleChanged/);
   assert.match(mainSource, /function sendPetScaleChanged\([^]*?petWindowLayoutTransaction\.getPending\(\)/);
+  assert.match(mainSource, /rollbackState:\s*pendingRollbackState \|\| rollbackState \|\| capturePetWindowLayoutState\(\)/);
+  assert.match(mainSource, /if \(!result\?\.completed\) \{\s*restorePetWindowLayoutState\(result\?\.layout\?\.rollbackState\)/);
 });

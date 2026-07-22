@@ -79,7 +79,11 @@ function createPetWindowLayoutTransaction(options = {}) {
       return false;
     }
     if (pending.phase === "preparing") {
-      return commitBounds(pending, "prepare-timeout");
+      sendCancel({
+        token: pending.token,
+        reason: "prepare-timeout"
+      });
+      return settle(pending, false, "prepare-timeout");
     }
     sendCancel({
       token: pending.token,

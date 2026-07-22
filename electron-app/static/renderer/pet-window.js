@@ -28,6 +28,8 @@ async function renderPetWindow() {
   let stateChangeToken = 0;
   let statePaintReady = true;
   let pendingRunwayLayout = null;
+  let runwayLayoutRollbackScale = null;
+  let latestRunwayLayoutToken = 0;
   const decodedStates = new Set();
   const decodingStates = new Map();
   const MOVING_FRAME_REPORT_INTERVAL_MS = 50;
@@ -225,6 +227,31 @@ async function renderPetWindow() {
       && Math.abs(window.innerHeight - expectedHeight) <= 1;
   }
 
+  function setRunwayLayoutSpriteHidden(hidden) {
+    spriteHost.style.visibility = hidden ? "hidden" : "";
+  }
+
+  function prepareRunwayLayoutPaint() {
+    const pending = pendingRunwayLayout;
+    if (!pending || pending.preparePaintScheduled) {
+      return false;
+    }
+    pending.preparePaintScheduled = true;
+    const token = pending.token;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!pendingRunwayLayout
+          || pendingRunwayLayout.token !== token
+          || pendingRunwayLayout.preparePaintConfirmed) {
+          return;
+        }
+        pendingRunwayLayout.preparePaintConfirmed = true;
+        window.desktopPet.confirmRunwayLayout(token, "prepared");
+      });
+    });
+    return true;
+  }
+
   function applyPendingRunwayLayout() {
     const pending = pendingRunwayLayout;
     if (!pending || pending.paintScheduled || !viewportMatchesScale(pending.scale)) {
@@ -232,6 +259,7 @@ async function renderPetWindow() {
     }
     applyScale(pending.scale);
     pending.paintScheduled = true;
+    setRunwayLayoutSpriteHidden(false);
     const token = pending.token;
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -740,7 +768,9 @@ async function renderPetWindow() {
     if (pendingRunwayLayout) {
       if (pendingRunwayLayout.paintConfirmed) {
         pendingRunwayLayout = null;
+        runwayLayoutRollbackScale = null;
         applyScale(nextScale);
+        setRunwayLayoutSpriteHidden(false);
       } else {
         pendingRunwayLayout.scale = nextScale || pendingRunwayLayout.scale;
         applyPendingRunwayLayout();
@@ -748,6 +778,8 @@ async function renderPetWindow() {
       return;
     }
     applyScale(nextScale);
+    runwayLayoutRollbackScale = null;
+    setRunwayLayoutSpriteHidden(false);
   });
 
   window.desktopPet.onRunwayLayoutPrepare((payload) => {
@@ -755,16 +787,21 @@ async function renderPetWindow() {
     if (!Number.isInteger(token) || token <= 0 || !payload?.scale) {
       return;
     }
-    if (pendingRunwayLayout && token < pendingRunwayLayout.token) {
+    if (token < latestRunwayLayoutToken) {
       return;
     }
+    latestRunwayLayoutToken = token;
+    runwayLayoutRollbackScale = runwayLayoutRollbackScale || scale;
     pendingRunwayLayout = {
       token,
       scale: payload.scale,
+      preparePaintScheduled: false,
+      preparePaintConfirmed: false,
       paintScheduled: false,
       paintConfirmed: false
     };
-    window.desktopPet.confirmRunwayLayout(token, "prepared");
+    setRunwayLayoutSpriteHidden(true);
+    prepareRunwayLayoutPaint();
   });
 
   window.desktopPet.onRunwayLayoutCommit((payload) => {
@@ -779,10 +816,17 @@ async function renderPetWindow() {
     if (Number(payload?.token) !== pendingRunwayLayout?.token) {
       return;
     }
-    pendingRunwayLayout = null;
-    if (payload?.scale) {
-      applyScale(payload.scale);
+    if (payload?.reason === "superseded") {
+      pendingRunwayLayout = null;
+      return;
     }
+    const nextScale = payload?.reason === "paint-timeout"
+      ? (payload.scale || pendingRunwayLayout.scale)
+      : (runwayLayoutRollbackScale || scale);
+    pendingRunwayLayout = null;
+    runwayLayoutRollbackScale = null;
+    applyScale(nextScale);
+    setRunwayLayoutSpriteHidden(false);
   });
 
   applyScale(scale);

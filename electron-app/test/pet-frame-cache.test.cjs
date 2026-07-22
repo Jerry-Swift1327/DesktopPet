@@ -120,6 +120,24 @@ test("renderer wires the frame cache before pet-window, gates state changes, and
   assert.match(petWindowSource, /confirmRunwayLayout\(token, "prepared"\)/);
   assert.match(petWindowSource, /confirmRunwayLayout\(token, "painted"\)/);
   assert.match(petWindowSource, /window\.requestAnimationFrame\(\(\) => \{\s*window\.requestAnimationFrame/);
+
+  const prepareStart = petWindowSource.indexOf("function prepareRunwayLayoutPaint()");
+  const prepareEnd = petWindowSource.indexOf("function applyPendingRunwayLayout()", prepareStart);
+  const prepareBody = petWindowSource.slice(prepareStart, prepareEnd);
+  assert.ok(prepareStart >= 0);
+  assert.match(prepareBody, /window\.requestAnimationFrame\(\(\) => \{\s*window\.requestAnimationFrame/);
+  assert.ok(prepareBody.indexOf("window.requestAnimationFrame") < prepareBody.indexOf('confirmRunwayLayout(token, "prepared")'));
+
+  const prepareListenerStart = petWindowSource.indexOf("window.desktopPet.onRunwayLayoutPrepare");
+  const commitListenerStart = petWindowSource.indexOf("window.desktopPet.onRunwayLayoutCommit", prepareListenerStart);
+  const prepareListenerBody = petWindowSource.slice(prepareListenerStart, commitListenerStart);
+  assert.ok(prepareListenerBody.indexOf("setRunwayLayoutSpriteHidden(true)") < prepareListenerBody.indexOf("prepareRunwayLayoutPaint()"));
+
+  const applyStart = petWindowSource.indexOf("function applyPendingRunwayLayout()");
+  const applyEnd = petWindowSource.indexOf('window.addEventListener("resize"', applyStart);
+  const applyBody = petWindowSource.slice(applyStart, applyEnd);
+  assert.ok(applyBody.indexOf("applyScale(pending.scale)") < applyBody.indexOf("setRunwayLayoutSpriteHidden(false)"));
+  assert.ok(applyBody.indexOf("setRunwayLayoutSpriteHidden(false)") < applyBody.indexOf('confirmRunwayLayout(token, "painted")'));
   assert.doesNotMatch(petWindowSource, /predictScaleSummary/);
   assert.doesNotMatch(petWindowSource, /applyScale\(predictedScale\)/);
 });

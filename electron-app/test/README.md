@@ -27,7 +27,7 @@ node --test "test/**/*.test.cjs"
 | `dock-controller-accessor.test.cjs` | dock-controller 访问器、windowRoam 双状态源清除、`windowDocking` 关闭时不启动窗口表面轮询与 main.cjs 薄包装接线结构断言 | `../electron/behavior/dock-controller.cjs`、`../electron/main.cjs` |
 | `ipc-contract.test.cjs` | IPC 契约一致性结构断言（preload invoke/send/onXxx、register-ipc-handlers.cjs 注册模块、renderer 调用、高风险 channel 名称、main→renderer 事件推送） | `../electron/preload.cjs`、`../electron/main.cjs`、`../electron/ipc/register-ipc-handlers.cjs`、`../static/renderer/**` |
 | `pet-frame-cache.test.cjs` | 宠物帧缓存、首帧解码门禁、失败降级、响应式缩放布局、状态首帧绘制屏障、跑道 viewport painted 确认和 moving walk 帧提交顺序 | `../static/renderer/pet-frame-cache.js`、`../static/renderer/pet-window.js`、`../static/index.html` |
-| `pet-window-layout-transaction.test.cjs` | walk 跑道布局事务：prepared/painted 两阶段确认、旧 token 失效、绘制超时收敛、展开与实体化均不直接修改 BrowserWindow bounds | `../electron/windows/pet-window-layout-transaction.cjs`、`../electron/main.cjs` |
+| `pet-window-layout-transaction.test.cjs` | walk 跑道布局事务：透明预绘制与目标 painted 两阶段确认、旧 token 失效、预绘制超时取消、运行态回滚、展开与实体化均不直接修改 BrowserWindow bounds | `../electron/windows/pet-window-layout-transaction.cjs`、`../electron/main.cjs` |
 | `state-visual-commit.test.cjs` | 状态切换视觉提交事务（旧帧贴地保持、目标首帧上报后落地/启动行走） | `../electron/behavior/state-controller.cjs`、`../electron/main.cjs` |
 | `contact-qrcode.test.cjs` | 联系二维码查找辅助模块结构断言（开发/打包路径构造、Downloads fallback、文件存在/不存在、读取异常跳过、返回结构） | `../electron/ipc/contact-qrcode.cjs` |
 | `devtools-ipc-contract.test.cjs` | devtools 维护中心 IPC/preload 结构契约（列出宠物、详情、检查、图鉴、单个/批量动作替换、动作删除、元数据编辑、删除测试宠物） | `../devtools/main.cjs`、`../devtools/preload.cjs` |
