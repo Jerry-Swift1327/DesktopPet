@@ -197,7 +197,7 @@ function createRendererHarness(options = {}) {
     Promise
   };
 
-  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, loadMaintainDetails, generateCatalogGallery, buildReplacePreview, buildMetadataPreview, applyMetadataEdit, renderMaintainVariant, renderRuntimeFrameReselect, appNode, sidebarNode, workspaceNode: document.querySelector(".workspace"), documentNode: document };`, context, {
+  vm.runInNewContext(`${appSource}\nglobalThis.__rendererHarness = { state, switchView, loadCatalogDetails, loadMaintainDetails, generateCatalogGallery, buildReplacePreview, buildMetadataPreview, applyMetadataEdit, renderMaintainVariant, renderRuntimeFrameReselect, isScrollNearBottom, appNode, sidebarNode, workspaceNode: document.querySelector(".workspace"), documentNode: document };`, context, {
     filename: "devtools/renderer/app.js"
   });
   return context.__rendererHarness;
@@ -472,6 +472,39 @@ test("devtools renderer exposes explicit frame range selection controls", () => 
   assert.match(appSource, /available\.filter\(\(index\) => index >= start && index <= end\)/);
 });
 
+test("devtools frame selection fills summary and range rows while grouping markers below available indexes", () => {
+  const summaryBlock = cssBlock(".summary-grid.frame-selection-summary");
+  const rangeBlock = cssBlock(".frame-range-controls");
+  const rangeInputBlock = cssBlock(".frame-range-controls input");
+  const rangeButtonBlock = cssBlock(".frame-range-controls > button");
+  const legendBlock = cssBlock(".frame-selection-legend");
+  const harness = createRendererHarness();
+
+  harness.state.maintain.framePool = {
+    hasProcessedFrames: true,
+    processedFrames: [{ index: 0, name: "frame_000.png", url: "frame_000.png" }],
+    runtimeFrames: [{ index: 0, name: "frame_000.png", url: "frame_000.png" }],
+    selectedSourceFrames: [0],
+    freezeLastFrame: false,
+    protected: false
+  };
+  harness.state.maintain.reselectSelection = [0];
+
+  const framePanel = harness.renderRuntimeFrameReselect();
+  const metadata = framePanel.match(/<div class="frame-range-meta">([\s\S]*?)<\/div>\s*<\/div>/)?.[1] || "";
+  assert.match(summaryBlock, /grid-template-columns\s*:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)\s*;/);
+  assert.match(summaryBlock, /gap\s*:\s*12px\s*;/);
+  assert.match(rangeBlock, /grid-template-columns\s*:\s*minmax\(90px,\s*1fr\)\s+minmax\(90px,\s*1fr\)\s+minmax\(110px,\s*1\.05fr\)\s+minmax\(160px,\s*1\.5fr\)\s+minmax\(162px,\s*1\.7fr\)\s*;/);
+  assert.match(rangeBlock, /gap\s*:\s*12px\s*;/);
+  assert.match(rangeInputBlock, /width\s*:\s*100%\s*;/);
+  assert.match(rangeInputBlock, /max-width\s*:\s*none\s*;/);
+  assert.doesNotMatch(rangeInputBlock, /field-sizing\s*:/);
+  assert.match(rangeButtonBlock, /width\s*:\s*100%\s*;/);
+  assert.match(legendBlock, /justify-content\s*:\s*space-between\s*;/);
+  assert.match(metadata, /class="frame-range-bounds">可用索引 0–0<\/span>[\s\S]*class="frame-selection-legend"/);
+  assert.doesNotMatch(framePanel, /<\/div>\s*<div class="frame-selection-legend">/);
+});
+
 test("devtools renderer exposes one operations page with runtime, build, and output controls", () => {
   assert.match(appSource, /\{ view: "operations", label: "运行与打包" \}/);
   assert.match(appSource, /function renderOperations\(\)/);
@@ -480,6 +513,24 @@ test("devtools renderer exposes one operations page with runtime, build, and out
   assert.match(appSource, /data-run-windows-build/);
   assert.match(appSource, /data-open-build-output>打开产物目录/);
   assert.doesNotMatch(appSource, /data-open-build-output[^>]*>[^<]*C:\\/);
+});
+
+test("devtools operation logs use fixed scrollable viewports and follow output only near the bottom", async () => {
+  const operationLogBlock = cssBlock(".log.operation-log");
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  await harness.switchView("operations");
+
+  assert.match(operationLogBlock, /flex\s*:\s*0\s+0\s+240px\s*;/);
+  assert.match(operationLogBlock, /height\s*:\s*240px\s*;/);
+  assert.match(operationLogBlock, /max-height\s*:\s*240px\s*;/);
+  assert.match(operationLogBlock, /scrollbar-gutter\s*:\s*stable\s*;/);
+  assert.match(harness.appNode.innerHTML, /data-scroll-key="operation-log-runtime"/);
+  assert.match(harness.appNode.innerHTML, /data-scroll-key="operation-log-build"/);
+  assert.equal(harness.isScrollNearBottom({ scrollHeight: 1000, clientHeight: 240, scrollTop: 760 }), true);
+  assert.equal(harness.isScrollNearBottom({ scrollHeight: 1000, clientHeight: 240, scrollTop: 740 }), true);
+  assert.equal(harness.isScrollNearBottom({ scrollHeight: 1000, clientHeight: 240, scrollTop: 700 }), false);
+  assert.match(appSource, /node\.scrollTop\s*=\s*item\.stickToBottom\s*\?\s*node\.scrollHeight\s*:\s*item\.scrollTop/);
 });
 
 test("devtools renders independent action registration panels on new and maintenance pages", () => {

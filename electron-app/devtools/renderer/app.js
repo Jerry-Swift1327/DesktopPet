@@ -609,13 +609,23 @@ function readVisibleAnchor(node) {
   return best;
 }
 
+function isScrollNearBottom(node, threshold = 24) {
+  const distanceFromBottom = Number(node.scrollHeight) - Number(node.clientHeight) - Number(node.scrollTop);
+  return Number.isFinite(distanceFromBottom) && distanceFromBottom <= threshold;
+}
+
 function readScrollSnapshot() {
-  return getScrollContainers().map((node) => ({
-    key: scrollContainerKey(node),
-    scrollTop: node.scrollTop,
-    scrollLeft: node.scrollLeft,
-    anchor: readVisibleAnchor(node)
-  })).filter((item) => item.key);
+  return getScrollContainers().map((node) => {
+    const key = scrollContainerKey(node);
+    const isOperationLog = key.startsWith("operation-log-");
+    return {
+      key,
+      scrollTop: node.scrollTop,
+      scrollLeft: node.scrollLeft,
+      stickToBottom: isOperationLog && isScrollNearBottom(node),
+      anchor: readVisibleAnchor(node)
+    };
+  }).filter((item) => item.key);
 }
 
 function restoreScrollSnapshot(snapshot) {
@@ -624,7 +634,7 @@ function restoreScrollSnapshot(snapshot) {
       ? document.querySelector(".workspace")
       : appNode.querySelector(`.${item.key}`) || appNode.querySelector(`[data-scroll-key="${item.key}"]`);
     if (node) {
-      node.scrollTop = item.scrollTop;
+      node.scrollTop = item.stickToBottom ? node.scrollHeight : item.scrollTop;
       node.scrollLeft = item.scrollLeft;
       if (item.anchor && typeof node.querySelectorAll === "function" && typeof node.getBoundingClientRect === "function") {
         const anchors = Array.from(node.querySelectorAll("[data-scroll-anchor], .panel"));
@@ -1503,7 +1513,7 @@ function renderRuntimeFrameReselect() {
     </div>
     ${pool?.protected ? `<p class="warning">${escapeHtml(pool.protectedReason)}</p>` : ""}
     ${!pool?.hasProcessedFrames ? `<p class="muted">完整素材池不可用。请先在“素材池管理”中生成 processed_frames；当前运行帧仅供只读确认。</p>` : ""}
-    ${pool ? `<div class="summary-grid summary-grid-compact frame-pool-summary">
+    ${pool ? `<div class="summary-grid frame-selection-summary">
       <div><span>当前运行帧</span><strong>${pool.runtimeFrames.length}</strong></div>
       <div><span>已选素材帧</span><strong>${selectionSummary.count}</strong></div>
       <div><span>首帧索引</span><strong>${selectionSummary.first ?? "-"}</strong></div>
@@ -1520,9 +1530,12 @@ function renderRuntimeFrameReselect() {
       </label>
       <button type="button" data-apply-frame-range${disabled ? " disabled" : ""}>应用范围</button>
       <button type="button" data-restore-runtime-frames${disabled ? " disabled" : ""}>恢复当前运行帧</button>
-      <span class="frame-range-bounds">可用索引 ${minimumIndex}–${maximumIndex}</span>
+      <div class="frame-range-meta">
+        <span class="frame-range-bounds">可用索引 ${minimumIndex}–${maximumIndex}</span>
+        <div class="frame-selection-legend"><span class="current-marker">当前运行帧</span><span class="selected-marker">本次选择</span></div>
+      </div>
     </div>${state.maintain.frameRangeError ? `<p class="danger frame-range-error">${escapeHtml(state.maintain.frameRangeError)}</p>` : ""}` : ""}
-    ${pool?.hasProcessedFrames ? `<div class="frame-selection-legend"><span class="current-marker">当前运行帧</span><span class="selected-marker">本次选择</span></div><div class="frame-pool-grid" data-scroll-key="frame-pool-grid">${pool.processedFrames.map((frame, index) => `<article class="frame-pool-card${current.has(frame.index) ? " is-current" : ""}${selected.has(frame.index) ? " is-selected" : ""}">
+    ${pool?.hasProcessedFrames ? `<div class="frame-pool-grid" data-scroll-key="frame-pool-grid">${pool.processedFrames.map((frame, index) => `<article class="frame-pool-card${current.has(frame.index) ? " is-current" : ""}${selected.has(frame.index) ? " is-selected" : ""}">
       <button type="button" class="frame-preview-button" data-open-frame-lightbox="${index}" aria-label="放大 ${escapeHtml(frame.name)}"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"></button>
       <label><input type="checkbox" data-source-frame="${frame.index}"${selected.has(frame.index) ? " checked" : ""}${disabled ? " disabled" : ""}><span>${escapeHtml(frame.name)}</span></label>
     </article>`).join("")}</div>` : `<div class="frame-pool-grid runtime-readonly-grid" data-scroll-key="frame-pool-grid">${(pool?.runtimeFrames || []).map((frame, index) => `<article class="frame-pool-card is-current"><button type="button" class="frame-preview-button" data-open-frame-lightbox="${index}" aria-label="放大 ${escapeHtml(frame.name)}"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"></button><span>${escapeHtml(frame.name)}</span></article>`).join("")}</div>`}
@@ -1665,8 +1678,8 @@ function operationChannelLabel(channel) {
   return channel === "installer" ? "installer（安装渠道）" : "release（便携渠道）";
 }
 
-function renderOperationLog(logs) {
-  return `<pre class="log operation-log">${logs.length ? logs.map(escapeHtml).join("\n") : "尚无日志"}</pre>`;
+function renderOperationLog(kind, logs) {
+  return `<pre class="log operation-log" data-scroll-key="operation-log-${escapeHtml(kind)}">${logs.length ? logs.map(escapeHtml).join("\n") : "尚无日志"}</pre>`;
 }
 
 function renderOperations() {
@@ -1718,7 +1731,7 @@ function renderOperations() {
           <button type="button" class="primary" data-start-local-pet${runtimeActive || !variant ? " disabled" : ""}>启动宠物</button>
           <button type="button" data-stop-local-pet${runtimeActive ? "" : " disabled"}>停止运行</button>
         </div>
-        ${renderOperationLog(operation.runtimeLogs)}
+        ${renderOperationLog("runtime", operation.runtimeLogs)}
       </section>
 
       <section class="panel operation-panel">
@@ -1733,7 +1746,7 @@ function renderOperations() {
           <button type="button" class="primary" data-run-windows-build${buildRunning || !buildAvailable || !windowsSupported ? " disabled" : ""}>开始打包</button>
           ${operation.canOpenBuildOutput ? `<button type="button" class="output-link" data-open-build-output>打开产物目录</button>` : ""}
         </div>
-        ${renderOperationLog(operation.buildLogs)}
+        ${renderOperationLog("build", operation.buildLogs)}
       </section>
     </div>
   </div>`;

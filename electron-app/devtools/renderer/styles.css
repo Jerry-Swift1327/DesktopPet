@@ -344,25 +344,58 @@ select:focus {
   margin-top: 14px;
 }
 
+.summary-grid.frame-selection-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.summary-grid.frame-selection-summary > div {
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.frame-selection-summary span,
+.frame-selection-summary strong {
+  white-space: nowrap;
+}
+
 .frame-selection-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 14px;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 8px;
   color: #475569;
   font-size: 12px;
 }
 
 .frame-range-controls {
   display: grid;
-  grid-template-columns: minmax(110px, 150px) minmax(110px, 150px) max-content max-content minmax(120px, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) minmax(110px, 1.05fr) minmax(160px, 1.5fr) minmax(162px, 1.7fr);
+  gap: 12px;
   align-items: end;
   margin-top: 14px;
 }
 
+.frame-range-controls input {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.frame-range-controls > button {
+  width: 100%;
+}
+
+.frame-range-meta {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  align-self: end;
+  gap: 8px;
+}
+
 .frame-range-bounds {
-  align-self: center;
   color: #64748b;
   font-size: 12px;
 }
@@ -1261,8 +1294,12 @@ button.output-link:hover:not(:disabled) {
   color: #075985;
 }
 
-.operation-log {
+.log.operation-log {
+  flex: 0 0 240px;
+  height: 240px;
   min-height: 240px;
+  max-height: 240px;
+  scrollbar-gutter: stable;
 }
 
 .execution-panel {
@@ -1511,6 +1548,14 @@ button.output-link:hover:not(:disabled) {
   .operation-target-grid,
   .operation-summary {
     grid-template-columns: 1fr;
+  }
+
+  .summary-grid.frame-selection-summary {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .summary-grid.frame-selection-summary > div {
+    min-width: 0;
   }
 
   .maintenance-actions {
