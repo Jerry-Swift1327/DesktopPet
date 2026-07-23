@@ -451,6 +451,37 @@
         ],
         "disable": []
       }
+    },
+    "pet2615": {
+      "id": "pet2615",
+      "date": "2026-07-22",
+      "scope": "custom",
+      "species": "cat",
+      "notes": "客户定制",
+      "version": "1.0",
+      "scale": 1.1,
+      "platforms": [
+        "win32"
+      ],
+      "assetPrefix": "pet2615",
+      "actions": {
+        "enabled": [
+          "squat",
+          "walk",
+          "feed",
+          "ball",
+          "spin",
+          "lick",
+          "yawn"
+        ]
+      },
+      "features": {
+        "enable": [
+          "autoStart",
+          "idleYawn"
+        ],
+        "disable": []
+      }
     }
   }
 }
