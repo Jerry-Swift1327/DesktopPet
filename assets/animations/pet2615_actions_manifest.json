@@ -440,19 +440,17 @@
     "stableGround": {
       "enabled": true,
       "applied": true,
-      "targetBottom": 255,
+      "targetBottom": 223,
       "targetPercentile": 90.0,
       "maxShift": 32,
-      "cleanedComponents": 47,
-      "cleanedPixels": 189,
-      "maxCleanedArea": 11,
-      "alignedFrames": 12,
-      "maxAbsShift": 28,
-      "clampedFrames": 119,
-      "warningCount": 1,
-      "warnings": [
-        "vertical shift clamped to avoid clipping"
-      ]
+      "cleanedComponents": 71,
+      "cleanedPixels": 628,
+      "maxCleanedArea": 46,
+      "alignedFrames": 0,
+      "maxAbsShift": 0,
+      "clampedFrames": 0,
+      "warningCount": 0,
+      "warnings": []
     },
     "brightColorForegroundProtection": true,
     "trimGroundAlphaMode": "processed-auto",
