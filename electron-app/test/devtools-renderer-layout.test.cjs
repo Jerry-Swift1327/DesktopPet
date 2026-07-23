@@ -463,6 +463,25 @@ test("devtools maintenance metadata uses selectable controls and reset action", 
   assert.doesNotMatch(appSource, /data-build-rename-preview|data-run-rename-assets|批量导入动作源视频/);
 });
 
+test("devtools renderer exposes explicit frame range selection controls", () => {
+  assert.match(appSource, /data-frame-range="start"/);
+  assert.match(appSource, /data-frame-range="end"/);
+  assert.match(appSource, /data-apply-frame-range/);
+  assert.match(appSource, /data-restore-runtime-frames/);
+  assert.match(appSource, /function applyFrameRangeSelection\(\)/);
+  assert.match(appSource, /available\.filter\(\(index\) => index >= start && index <= end\)/);
+});
+
+test("devtools renderer exposes one operations page with runtime, build, and output controls", () => {
+  assert.match(appSource, /\{ view: "operations", label: "运行与打包" \}/);
+  assert.match(appSource, /function renderOperations\(\)/);
+  assert.match(appSource, /data-start-local-pet/);
+  assert.match(appSource, /data-stop-local-pet/);
+  assert.match(appSource, /data-run-windows-build/);
+  assert.match(appSource, /data-open-build-output>打开产物目录/);
+  assert.doesNotMatch(appSource, /data-open-build-output[^>]*>[^<]*C:\\/);
+});
+
 test("devtools renders independent action registration panels on new and maintenance pages", () => {
   const renderNewVariantBody = appSource.match(/function renderNewVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
   const renderMaintainVariantBody = appSource.match(/function renderMaintainVariant\(\) \{([\s\S]*?)\n\}/)?.[1] || "";

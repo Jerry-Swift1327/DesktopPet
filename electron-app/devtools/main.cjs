@@ -3,13 +3,19 @@ const fs = require("fs");
 const { pathToFileURL } = require("url");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { createVariantWorkflow } = require("./services/variant-workflow.cjs");
+const { createRuntimeBuildWorkflow } = require("./services/runtime-build-workflow.cjs");
 
 const indexFile = path.join(__dirname, "index.html");
 const indexUrl = pathToFileURL(indexFile).toString();
 const appIconPath = path.resolve(__dirname, "..", "..", "app_icon.ico");
 const workflow = createVariantWorkflow();
+const runtimeBuildWorkflow = createRuntimeBuildWorkflow({
+  listVariants: () => workflow.listVariants()
+});
 let mainWindow = null;
 let activeRun = null;
+let closePromptPending = false;
+let allowWindowClose = false;
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -21,6 +27,13 @@ function assertDevtoolsSender(event) {
   if (!event.senderFrame || event.senderFrame.url !== indexUrl) {
     throw new Error("未授权的 devtools IPC 来源。");
   }
+}
+
+function operationHooks() {
+  return {
+    onStatus: (payload) => sendToRenderer("devtools:operationStatus", payload),
+    onLog: (payload) => sendToRenderer("devtools:operationLog", payload)
+  };
 }
 
 function loadDevtoolsWindow() {
@@ -52,23 +65,51 @@ function createWindow() {
   });
 
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.on("close", (event) => {
-    if (!activeRun) {
+  mainWindow.on("close", async (event) => {
+    if (allowWindowClose) return;
+    if (activeRun) {
+      event.preventDefault();
+      sendToRenderer("devtools:taskLog", {
+        stage: "window",
+        stream: "info",
+        message: "DevTools 任务仍在执行，任务结束后再关闭窗口。"
+      });
+      dialog.showMessageBox(mainWindow, {
+        type: "info",
+        buttons: ["确定"],
+        title: "任务执行中",
+        message: "DevTools 任务仍在执行。",
+        detail: "打包和资源写入任务不可强制取消，请等待任务结束。"
+      }).catch(() => {});
+      return;
+    }
+    const runtimeStatus = runtimeBuildWorkflow.getStatus().runtime.status;
+    if (!["starting", "running", "stopping"].includes(runtimeStatus)) return;
+    if (closePromptPending) {
+      event.preventDefault();
       return;
     }
     event.preventDefault();
-    sendToRenderer("devtools:taskLog", {
-      stage: "window",
-      stream: "info",
-      message: "宠物变体生成仍在执行，任务结束后再关闭窗口。"
-    });
-    dialog.showMessageBox(mainWindow, {
-      type: "info",
-      buttons: ["确定"],
-      title: "生成进行中",
-      message: "宠物变体生成仍在执行。",
-      detail: "请等任务结束后再关闭 devtools 窗口。"
-    }).catch(() => {});
+    closePromptPending = true;
+    try {
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: "question",
+        buttons: ["停止宠物并关闭", "取消"],
+        defaultId: 0,
+        cancelId: 1,
+        title: "本地宠物仍在运行",
+        message: "是否停止本地宠物并关闭 DevTools？"
+      });
+      if (result.response === 0) {
+        await runtimeBuildWorkflow.stopRuntime(operationHooks());
+        allowWindowClose = true;
+        mainWindow?.close();
+      }
+    } catch (error) {
+      sendToRenderer("devtools:operationLog", { kind: "runtime", stream: "error", message: error.message });
+    } finally {
+      closePromptPending = false;
+    }
   });
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -189,6 +230,45 @@ ipcMain.handle("devtools:runReplaceAction", async (event, previewId) => {
   } finally {
     activeRun = null;
   }
+});
+
+ipcMain.handle("devtools:getOperationCapabilities", (event) => {
+  assertDevtoolsSender(event);
+  return runtimeBuildWorkflow.getCapabilities();
+});
+
+ipcMain.handle("devtools:getOperationStatus", (event) => {
+  assertDevtoolsSender(event);
+  return runtimeBuildWorkflow.getStatus();
+});
+
+ipcMain.handle("devtools:startLocalPet", (event, payload) => {
+  assertDevtoolsSender(event);
+  return runtimeBuildWorkflow.startRuntime(payload || {}, operationHooks());
+});
+
+ipcMain.handle("devtools:stopLocalPet", (event) => {
+  assertDevtoolsSender(event);
+  return runtimeBuildWorkflow.stopRuntime(operationHooks());
+});
+
+ipcMain.handle("devtools:runWindowsBuild", async (event, payload) => {
+  assertDevtoolsSender(event);
+  if (activeRun) throw new Error("已有 DevTools 任务正在执行。");
+  activeRun = runtimeBuildWorkflow.runWindowsBuild(payload || {}, operationHooks());
+  try {
+    return await activeRun;
+  } finally {
+    activeRun = null;
+  }
+});
+
+ipcMain.handle("devtools:openBuildOutput", async (event) => {
+  assertDevtoolsSender(event);
+  const outputDir = runtimeBuildWorkflow.getLastSuccessfulBuildOutput();
+  const errorMessage = await shell.openPath(outputDir);
+  if (errorMessage) throw new Error(errorMessage);
+  return { opened: true };
 });
 
 ipcMain.handle("devtools:buildReplaceActionsPreview", (event, payload) => {

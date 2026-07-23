@@ -13,7 +13,7 @@ npm.cmd run devtools
 
 ## 当前范围
 
-当前窗口支持新增宠物、宠物库、维护宠物和删除宠物。宠物库覆盖 `variant:list/show/query/check/gallery` 的可视化查询、检查和本地图鉴生成；新增宠物复用 `variant:bootstrap`；维护宠物包含批量动作资源替换、素材池生成、运行帧重选，以及带新增动作视频处理的结构化元数据编辑；删除能力只允许 `scope: "test"` 的 `pettest<seq>` 测试宠物。打包控制仍不在这个窗口中提供。
+当前窗口支持新增宠物、宠物库、维护宠物、运行与打包和删除宠物。宠物库覆盖 `variant:list/show/query/check/gallery` 的可视化查询、检查和本地图鉴生成；新增宠物复用 `variant:bootstrap`；维护宠物包含批量动作资源替换、素材池生成、运行帧重选，以及带新增动作视频处理的结构化元数据编辑；“运行与打包”按变体和渠道启动开发态宠物或调用 Windows 打包脚本；删除能力只允许 `scope: "test"` 的 `pettest<seq>` 测试宠物。
 
 ## 新增宠物流程
 
@@ -45,10 +45,18 @@ npm.cmd run devtools
 7. 修改信息前可点击“取消修改并清空记录”恢复当前宠物元数据草稿，并清空新增动作视频选择、diff 和执行记录。
 8. 动作卡片中的“删除资源”会先预览动作目录、manifest 条目和动作级元数据变更，确认后同步删除资源目录、manifest 条目、`actions` 声明、`actionLabelOverrides` 与 `actionStatEffects`。四个系统必需动作、仍被功能依赖的动作以及被其他变体共用的动作资源禁止删除。
 9. “素材池管理”使用动作目录内标准 `<actionName>.mp4` 仅生成 `processed_frames`，不上传或替换视频，也不改 `transparent_frames`、`loop.json` 和 manifest。
-10. “重新选择运行帧”可浏览带 `frame_000` 索引的素材池、放大查看、任意多选，并在预览后按索引升序重建 `transparent_frames`，同步写入 `loop.json` 和 manifest。缺少素材池时只读展示当前运行帧。
+10. “重新选择运行帧”可浏览带 `frame_000` 索引的素材池、放大查看、任意多选，也可填写 Start/End 后点击“应用范围”替换为闭区间选择；“恢复当前运行帧”可撤销尚未写入的选择。按住 Shift 点击两个复选框可批量勾选或取消区间。生成预览后按索引升序重建 `transparent_frames`，同步写入 `loop.json` 和 manifest。缺少素材池时只读展示当前运行帧。
 11. `yawn` 动作卡片提供“末帧休眠（5 分钟）”选项；开启时保留现有运行逻辑：末帧冻结，5 分钟后切换到 `walk`。使用 `direction64` 或 `tailLoopStart` 的专属动作在替换、素材池和运行帧维护中均为只读。
 
 所有导航页分别记忆滚动锚点和焦点，按钮、下拉框、复选框、任务进度与日志更新后保持当前位置；切换页面后再次返回会恢复该页面上次位置。
+
+## 运行与打包
+
+1. 选择宠物变体和 `release` 或 `installer` 渠道。同一组目标同时用于本地启动和 Windows 打包。
+2. “启动宠物”以 `PET_VARIANT`、`PET_CHANNEL` 环境变量执行 `npm.cmd start`；DevTools 管理一个本地宠物进程并提供“停止运行”。关闭 DevTools 时如宠物仍运行，会先确认并停止宠物。
+3. `release` 打包固定调用 `build-electron-win.ps1`，`installer` 固定调用 `build-installer-win.ps1`。渲染层不能传入任意命令、脚本路径或 PowerShell 参数。
+4. 打包只允许元数据中声明支持 `win32` 的宠物。打包期间不能取消或关闭 DevTools，避免安装脚本的临时配置恢复流程被中断。
+5. 打包成功后显示“打开产物目录”，主进程只打开本次成功任务派生出的 `deliverables/<scope>/<id>/<channel>` 目录，不接受渲染层提供文件系统路径。
 
 ## 删除宠物
 

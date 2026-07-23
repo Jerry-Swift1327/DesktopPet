@@ -9,6 +9,12 @@ const preloadSource = fs.readFileSync(path.join(ROOT, "devtools", "preload.cjs")
 
 const invokeContracts = [
   ["listVariants", "devtools:listVariants"],
+  ["getOperationCapabilities", "devtools:getOperationCapabilities"],
+  ["getOperationStatus", "devtools:getOperationStatus"],
+  ["startLocalPet", "devtools:startLocalPet"],
+  ["stopLocalPet", "devtools:stopLocalPet"],
+  ["runWindowsBuild", "devtools:runWindowsBuild"],
+  ["openBuildOutput", "devtools:openBuildOutput"],
   ["getVariantDetails", "devtools:getVariantDetails"],
   ["checkVariant", "devtools:checkVariant"],
   ["generateGallery", "devtools:generateGallery"],
@@ -57,4 +63,11 @@ test("devtools main registers maintenance IPC handlers and task stages", () => {
       `main should register ${channel}`
     );
   }
+});
+
+test("devtools preload subscribes to operation status and log events", () => {
+  assert.match(preloadSource, /onOperationLog:[\s\S]*devtools:operationLog/);
+  assert.match(preloadSource, /onOperationStatus:[\s\S]*devtools:operationStatus/);
+  assert.match(mainSource, /sendToRenderer\("devtools:operationLog"/);
+  assert.match(mainSource, /sendToRenderer\("devtools:operationStatus"/);
 });

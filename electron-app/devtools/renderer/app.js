@@ -79,6 +79,7 @@ const navItems = [
   { view: "newVariant", label: "新增宠物" },
   { view: "petCatalog", label: "宠物库" },
   { view: "maintainVariant", label: "维护宠物" },
+  { view: "operations", label: "运行与打包" },
   { view: "deleteVariant", label: "删除宠物" }
 ];
 
@@ -183,7 +184,10 @@ const state = {
     reselectFreezeLastFrame: false,
     frameLightboxIndex: null,
     lastFrameSelectionIndex: null,
-    pendingFrameSelectionShift: false
+    pendingFrameSelectionShift: false,
+    frameRangeStart: "",
+    frameRangeEnd: "",
+    frameRangeError: ""
   },
   actionRegistration: {
     newVariant: createActionRegistrationState(),
@@ -194,6 +198,17 @@ const state = {
     preview: null,
     pending: false,
     confirmText: ""
+  },
+  operations: {
+    capabilities: null,
+    selectedId: "",
+    channel: "release",
+    runtime: { status: "idle", pid: null, variant: null, channel: null, exitCode: null },
+    build: { status: "idle", pid: null, variant: null, channel: null, exitCode: null },
+    runtimeLogs: [],
+    buildLogs: [],
+    canOpenBuildOutput: false,
+    error: ""
   }
 };
 
@@ -296,6 +311,7 @@ function busy() {
     || state.maintain.framePoolPending
     || state.maintain.framePoolBuildPending
     || state.maintain.reselectPending
+    || state.operations.build.status === "running"
     || Object.values(state.actionRegistration).some((item) => item.pending)
     || state.deleteVariant.pending;
 }
@@ -1422,6 +1438,42 @@ function frameSelectionSummary(selection) {
   };
 }
 
+function syncFrameRangeFromSelection(selection = state.maintain.reselectSelection) {
+  const summary = frameSelectionSummary(selection);
+  state.maintain.frameRangeStart = summary.first === null ? "" : String(summary.first);
+  state.maintain.frameRangeEnd = summary.last === null ? "" : String(summary.last);
+  state.maintain.frameRangeError = "";
+}
+
+function applyFrameRangeSelection() {
+  const startText = String(state.maintain.frameRangeStart).trim();
+  const endText = String(state.maintain.frameRangeEnd).trim();
+  const start = Number(startText);
+  const end = Number(endText);
+  if (!/^\d+$/.test(startText) || !/^\d+$/.test(endText) || !Number.isInteger(start) || !Number.isInteger(end)) {
+    state.maintain.frameRangeError = "Start 和 End 必须是非负整数。";
+    renderPreservingScroll();
+    return;
+  }
+  if (start > end) {
+    state.maintain.frameRangeError = "Start 不能大于 End。";
+    renderPreservingScroll();
+    return;
+  }
+  const available = (state.maintain.framePool?.processedFrames || []).map((frame) => frame.index);
+  const minimum = available[0];
+  const maximum = available[available.length - 1];
+  if (minimum === undefined || start < minimum || end > maximum) {
+    state.maintain.frameRangeError = `范围必须位于 ${minimum ?? "-"} 到 ${maximum ?? "-"} 之间。`;
+    renderPreservingScroll();
+    return;
+  }
+  state.maintain.reselectSelection = available.filter((index) => index >= start && index <= end);
+  state.maintain.frameRangeError = "";
+  state.maintain.reselectPreview = null;
+  renderPreservingScroll();
+}
+
 function frameLightboxFrames() {
   const pool = state.maintain.framePool;
   return pool?.hasProcessedFrames ? pool.processedFrames : pool?.runtimeFrames || [];
@@ -1433,6 +1485,9 @@ function renderRuntimeFrameReselect() {
   const current = new Set(pool?.selectedSourceFrames || []);
   const selectionSummary = frameSelectionSummary(selected);
   const disabled = busy() || !pool?.hasProcessedFrames || pool?.protected;
+  const availableIndexes = pool?.processedFrames?.map((frame) => frame.index) || [];
+  const minimumIndex = availableIndexes[0];
+  const maximumIndex = availableIndexes[availableIndexes.length - 1];
   return `<section class="panel" data-scroll-anchor="runtime-frame-reselect">
     <div class="panel-header">
       <div>
@@ -1456,6 +1511,17 @@ function renderRuntimeFrameReselect() {
       <div><span>索引断点</span><strong>${selectionSummary.gapCount}</strong></div>
       <div><span>末帧休眠</span><strong>${pool.freezeLastFrame ? "开启" : "关闭"}</strong></div>
     </div>` : ""}
+    ${pool?.hasProcessedFrames ? `<div class="frame-range-controls">
+      <label>Start
+        <input type="number" min="${minimumIndex}" max="${maximumIndex}" step="1" inputmode="numeric" data-frame-range="start" data-focus-key="frame-range-start" value="${escapeHtml(state.maintain.frameRangeStart)}"${disabled ? " disabled" : ""}>
+      </label>
+      <label>End
+        <input type="number" min="${minimumIndex}" max="${maximumIndex}" step="1" inputmode="numeric" data-frame-range="end" data-focus-key="frame-range-end" value="${escapeHtml(state.maintain.frameRangeEnd)}"${disabled ? " disabled" : ""}>
+      </label>
+      <button type="button" data-apply-frame-range${disabled ? " disabled" : ""}>应用范围</button>
+      <button type="button" data-restore-runtime-frames${disabled ? " disabled" : ""}>恢复当前运行帧</button>
+      <span class="frame-range-bounds">可用索引 ${minimumIndex}–${maximumIndex}</span>
+    </div>${state.maintain.frameRangeError ? `<p class="danger frame-range-error">${escapeHtml(state.maintain.frameRangeError)}</p>` : ""}` : ""}
     ${pool?.hasProcessedFrames ? `<div class="frame-selection-legend"><span class="current-marker">当前运行帧</span><span class="selected-marker">本次选择</span></div><div class="frame-pool-grid" data-scroll-key="frame-pool-grid">${pool.processedFrames.map((frame, index) => `<article class="frame-pool-card${current.has(frame.index) ? " is-current" : ""}${selected.has(frame.index) ? " is-selected" : ""}">
       <button type="button" class="frame-preview-button" data-open-frame-lightbox="${index}" aria-label="放大 ${escapeHtml(frame.name)}"><img src="${escapeHtml(frame.url)}" alt="${escapeHtml(frame.name)}" loading="lazy"></button>
       <label><input type="checkbox" data-source-frame="${frame.index}"${selected.has(frame.index) ? " checked" : ""}${disabled ? " disabled" : ""}><span>${escapeHtml(frame.name)}</span></label>
@@ -1579,6 +1645,100 @@ function renderVariantDetails(details) {
   </section>`;
 }
 
+function operationStatusLabel(status) {
+  return ({
+    idle: "空闲",
+    starting: "启动中",
+    running: "运行中",
+    stopping: "停止中",
+    exited: "已退出",
+    succeeded: "已完成",
+    failed: "失败"
+  })[status] || status || "未知";
+}
+
+function selectedOperationVariant() {
+  return state.variants.find((variant) => variant.id === state.operations.selectedId) || null;
+}
+
+function operationChannelLabel(channel) {
+  return channel === "installer" ? "installer（安装渠道）" : "release（便携渠道）";
+}
+
+function renderOperationLog(logs) {
+  return `<pre class="log operation-log">${logs.length ? logs.map(escapeHtml).join("\n") : "尚无日志"}</pre>`;
+}
+
+function renderOperations() {
+  const operation = state.operations;
+  const variant = selectedOperationVariant();
+  const runtimeActive = ["starting", "running", "stopping"].includes(operation.runtime.status);
+  const buildRunning = operation.build.status === "running";
+  const targetDisabled = runtimeActive || buildRunning || state.variantsPending;
+  const windowsSupported = Boolean(variant?.platforms?.includes("win32"));
+  const buildAvailable = operation.capabilities?.build?.available !== false;
+  const channelOptions = (operation.capabilities?.channels || ["release", "installer"])
+    .map((channel) => `<option value="${escapeHtml(channel)}"${operation.channel === channel ? " selected" : ""}>${escapeHtml(operationChannelLabel(channel))}</option>`)
+    .join("");
+  const buildScript = operation.channel === "installer" ? "build-installer-win.ps1" : "build-electron-win.ps1";
+  return `<div class="operations-page">
+    <section class="panel operation-target-panel">
+      <div class="panel-header">
+        <div>
+          <h1>运行与打包</h1>
+          <p class="muted">选择同一组宠物变体和渠道，用于本地运行或生成 Windows 产物。</p>
+        </div>
+        <button type="button" data-refresh-operation-variants${targetDisabled ? " disabled" : ""}>刷新宠物列表</button>
+      </div>
+      <div class="form-grid operation-target-grid">
+        <label>宠物变体
+          <select data-operation-variant${targetDisabled ? " disabled" : ""}>${renderVariantOptions(operation.selectedId)}</select>
+        </label>
+        <label>渠道
+          <select data-operation-channel${targetDisabled ? " disabled" : ""}>${channelOptions}</select>
+        </label>
+      </div>
+      <div class="summary-grid operation-summary">
+        <div><span>宠物 ID</span><strong>${escapeHtml(variant?.id || "-")}</strong></div>
+        <div><span>范围</span><strong>${escapeHtml(variant?.scope || "-")}</strong></div>
+        <div><span>Windows 打包</span><strong>${windowsSupported ? "支持" : "不支持"}</strong></div>
+        <div><span>当前渠道</span><strong>${escapeHtml(operation.channel)}</strong></div>
+      </div>
+      ${operation.error ? `<p class="danger operation-error">${escapeHtml(operation.error)}</p>` : ""}
+    </section>
+
+    <div class="operations-grid">
+      <section class="panel operation-panel">
+        <div class="panel-header">
+          <div><h2>本地启动</h2><p class="muted">使用当前目标启动开发态桌面宠物。</p></div>
+          <span class="operation-status ${escapeHtml(operation.runtime.status)}">${escapeHtml(operationStatusLabel(operation.runtime.status))}</span>
+        </div>
+        <div class="operation-command"><code>npm.cmd start</code></div>
+        <div class="button-row operation-actions">
+          <button type="button" class="primary" data-start-local-pet${runtimeActive || !variant ? " disabled" : ""}>启动宠物</button>
+          <button type="button" data-stop-local-pet${runtimeActive ? "" : " disabled"}>停止运行</button>
+        </div>
+        ${renderOperationLog(operation.runtimeLogs)}
+      </section>
+
+      <section class="panel operation-panel">
+        <div class="panel-header">
+          <div><h2>Windows 打包</h2><p class="muted">打包期间不可取消，完成前请保持 DevTools 打开。</p></div>
+          <span class="operation-status ${escapeHtml(operation.build.status)}">${escapeHtml(operationStatusLabel(operation.build.status))}</span>
+        </div>
+        <div class="operation-command"><code>${escapeHtml(buildScript)} -PetVariant ${escapeHtml(variant?.id || "-")}</code></div>
+        ${!buildAvailable ? `<p class="warning">当前平台不支持 Windows 打包。</p>` : ""}
+        ${variant && !windowsSupported ? `<p class="warning">当前宠物变体未声明 win32 平台支持。</p>` : ""}
+        <div class="button-row operation-actions">
+          <button type="button" class="primary" data-run-windows-build${buildRunning || !buildAvailable || !windowsSupported ? " disabled" : ""}>开始打包</button>
+          ${operation.canOpenBuildOutput ? `<button type="button" class="output-link" data-open-build-output>打开产物目录</button>` : ""}
+        </div>
+        ${renderOperationLog(operation.buildLogs)}
+      </section>
+    </div>
+  </div>`;
+}
+
 function renderDeleteVariant() {
   const preview = state.deleteVariant.preview;
   const selected = state.deleteVariant.selectedId;
@@ -1643,6 +1803,7 @@ const viewRenderers = {
   newVariant: renderNewVariant,
   petCatalog: renderPetCatalog,
   maintainVariant: renderMaintainVariant,
+  operations: renderOperations,
   deleteVariant: renderDeleteVariant
 };
 
@@ -1713,6 +1874,9 @@ async function refreshVariants(options = {}) {
     if (!state.maintain.selectedId && state.variants.length > 0) {
       state.maintain.selectedId = state.variants[0].id;
     }
+    if (!state.operations.selectedId && state.variants.length > 0) {
+      state.operations.selectedId = state.variants[0].id;
+    }
     const testVariants = state.variants.filter((variant) => variant.scope === "test");
     if (!state.deleteVariant.selectedId && testVariants.length > 0) {
       state.deleteVariant.selectedId = testVariants[0].id;
@@ -1761,6 +1925,7 @@ async function loadActionFramePool(action, options = {}) {
   try {
     state.maintain.framePool = await api.getActionFramePool({ id: state.maintain.selectedId, action });
     state.maintain.reselectSelection = state.maintain.framePool.selectedSourceFrames.slice();
+    syncFrameRangeFromSelection();
     state.maintain.reselectFreezeLastFrame = state.maintain.framePool.freezeLastFrame;
     state.maintain.framePoolPreview = null;
     state.maintain.reselectPreview = null;
@@ -1875,7 +2040,7 @@ async function switchView(view) {
   state.logs = [];
   state.stages = {};
   render();
-  if (view === "maintainVariant" || view === "deleteVariant" || view === "petCatalog") {
+  if (view === "maintainVariant" || view === "deleteVariant" || view === "petCatalog" || view === "operations") {
     await refreshVariants();
     if (view === "maintainVariant" && state.maintain.selectedId) {
       await loadMaintainDetails(state.maintain.selectedId);
@@ -1966,6 +2131,62 @@ async function buildActionRegistrationPreview(context) {
     registration.error = error.message;
   } finally {
     registration.pending = false;
+    renderPreservingScroll();
+  }
+}
+
+function operationPayload() {
+  return { variant: state.operations.selectedId, channel: state.operations.channel };
+}
+
+async function startLocalPet() {
+  state.operations.error = "";
+  state.operations.runtimeLogs = [];
+  state.operations.runtime = { ...state.operations.runtime, status: "starting", variant: state.operations.selectedId, channel: state.operations.channel };
+  renderPreservingScroll();
+  try {
+    state.operations.runtime = { ...state.operations.runtime, ...await api.startLocalPet(operationPayload()) };
+  } catch (error) {
+    state.operations.error = error.message;
+    state.operations.runtime = { ...state.operations.runtime, status: "failed" };
+  }
+  renderPreservingScroll();
+}
+
+async function stopLocalPet() {
+  state.operations.error = "";
+  try {
+    await api.stopLocalPet();
+  } catch (error) {
+    state.operations.error = error.message;
+  }
+  renderPreservingScroll();
+}
+
+async function runWindowsBuild() {
+  const variant = state.operations.selectedId;
+  const channel = state.operations.channel;
+  if (!window.confirm(`确认开始打包 ${variant} 的 ${channel} 渠道吗？旧产物可能被替换。`)) return;
+  state.operations.error = "";
+  state.operations.buildLogs = [];
+  state.operations.canOpenBuildOutput = false;
+  state.operations.build = { ...state.operations.build, status: "running", variant, channel, exitCode: null };
+  renderPreservingScroll();
+  try {
+    await api.runWindowsBuild({ variant, channel });
+  } catch (error) {
+    state.operations.error = error.message;
+    state.operations.build = { ...state.operations.build, status: "failed" };
+  }
+  renderPreservingScroll();
+}
+
+async function openBuildOutput() {
+  state.operations.error = "";
+  try {
+    await api.openBuildOutput();
+  } catch (error) {
+    state.operations.error = error.message;
     renderPreservingScroll();
   }
 }
@@ -2278,6 +2499,12 @@ appNode.addEventListener("toggle", (event) => {
 }, true);
 
 appNode.addEventListener("input", (event) => {
+  if (event.target.dataset.frameRange === "start" || event.target.dataset.frameRange === "end") {
+    const field = event.target.dataset.frameRange === "start" ? "frameRangeStart" : "frameRangeEnd";
+    state.maintain[field] = event.target.value;
+    state.maintain.frameRangeError = "";
+    return;
+  }
   const registrationContext = event.target.dataset.actionRegistrationContext;
   const registrationField = event.target.dataset.actionRegistrationField;
   if (registrationContext && registrationField && state.actionRegistration[registrationContext]) {
@@ -2349,7 +2576,17 @@ appNode.addEventListener("change", async (event) => {
   const registrationContext = event.target.dataset.actionRegistrationContext;
   const registrationMode = event.target.dataset.actionRegistrationMode;
 
-  if (registrationContext && registrationMode && state.actionRegistration[registrationContext]) {
+  if (event.target.dataset.operationVariant !== undefined) {
+    state.operations.selectedId = event.target.value;
+    state.operations.canOpenBuildOutput = false;
+    state.operations.error = "";
+    renderPreservingScroll();
+  } else if (event.target.dataset.operationChannel !== undefined) {
+    state.operations.channel = event.target.value;
+    state.operations.canOpenBuildOutput = false;
+    state.operations.error = "";
+    renderPreservingScroll();
+  } else if (registrationContext && registrationMode && state.actionRegistration[registrationContext]) {
     state.actionRegistration[registrationContext].playbackMode = registrationMode;
     state.actionRegistration[registrationContext].preview = null;
     state.actionRegistration[registrationContext].error = "";
@@ -2460,6 +2697,7 @@ appNode.addEventListener("change", async (event) => {
     state.maintain.pendingFrameSelectionShift = false;
     state.maintain.lastFrameSelectionIndex = index;
     state.maintain.reselectSelection = Array.from(selection).sort((left, right) => left - right);
+    syncFrameRangeFromSelection();
     state.maintain.reselectPreview = null;
     renderPreservingScroll();
   } else if (event.target.dataset.reselectFreezeLastFrame !== undefined) {
@@ -2577,16 +2815,35 @@ appNode.addEventListener("click", async (event) => {
     await runFramePool(event.target.dataset.runFramePool);
   } else if (event.target.dataset.selectAllFrames !== undefined) {
     state.maintain.reselectSelection = (state.maintain.framePool?.processedFrames || []).map((frame) => frame.index);
+    syncFrameRangeFromSelection();
     state.maintain.reselectPreview = null;
     renderPreservingScroll();
   } else if (event.target.dataset.clearFrameSelection !== undefined) {
     state.maintain.reselectSelection = [];
+    syncFrameRangeFromSelection();
+    state.maintain.reselectPreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.applyFrameRange !== undefined) {
+    applyFrameRangeSelection();
+  } else if (event.target.dataset.restoreRuntimeFrames !== undefined) {
+    state.maintain.reselectSelection = state.maintain.framePool?.selectedSourceFrames?.slice() || [];
+    syncFrameRangeFromSelection();
     state.maintain.reselectPreview = null;
     renderPreservingScroll();
   } else if (event.target.dataset.buildReselectPreview !== undefined) {
     await buildReselectPreview();
   } else if (event.target.dataset.runReselect) {
     await runReselect(event.target.dataset.runReselect);
+  } else if (event.target.dataset.refreshOperationVariants !== undefined) {
+    await refreshVariants({ preserveScroll: true });
+  } else if (event.target.dataset.startLocalPet !== undefined) {
+    await startLocalPet();
+  } else if (event.target.dataset.stopLocalPet !== undefined) {
+    await stopLocalPet();
+  } else if (event.target.dataset.runWindowsBuild !== undefined) {
+    await runWindowsBuild();
+  } else if (event.target.dataset.openBuildOutput !== undefined) {
+    await openBuildOutput();
   } else if (openFrameControl) {
     state.maintain.frameLightboxIndex = Number(openFrameControl.dataset.openFrameLightbox);
     renderPreservingScroll();
@@ -2645,8 +2902,34 @@ if (api) {
     render();
   });
 
+  api.onOperationStatus?.((event) => {
+    if (event.kind === "runtime" || event.kind === "build") {
+      state.operations[event.kind] = { ...state.operations[event.kind], ...event };
+    }
+    if (event.kind === "build" && event.canOpenBuildOutput) {
+      state.operations.canOpenBuildOutput = true;
+    }
+    if (event.error) state.operations.error = event.error;
+    renderPreservingScroll();
+  });
+
+  api.onOperationLog?.((event) => {
+    const target = event.kind === "build" ? state.operations.buildLogs : state.operations.runtimeLogs;
+    target.push(`[${streamLabel(event.stream || "info")}] ${String(event.message || "").trim()}`);
+    renderPreservingScroll();
+  });
+
   api.getCatalogOptions().then(async (options) => {
     state.options = options;
+    if (api.getOperationCapabilities) {
+      state.operations.capabilities = await api.getOperationCapabilities();
+    }
+    if (api.getOperationStatus) {
+      const operationStatus = await api.getOperationStatus();
+      state.operations.runtime = { ...state.operations.runtime, ...operationStatus.runtime };
+      state.operations.build = { ...state.operations.build, ...operationStatus.build };
+      state.operations.canOpenBuildOutput = Boolean(operationStatus.canOpenBuildOutput);
+    }
     render();
     await refreshVariants();
   }).catch((error) => {

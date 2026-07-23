@@ -76,6 +76,8 @@ IPC 注册已抽分到 `electron-app/electron/ipc/` 目录：所有 `ipcMain.han
 
 全局动作定义集中在 `electron-app/electron/pet-action-registry.json`，普通原地动作可由 DevTools 注册；动作记录包含 stateId、悬浮面板展示、播放方式、移动方式和资源处理预设。变体人工维护数据集中在 `pet-variant-metadata.json`，V3 通过 `actions.enabled` 引用全局动作，不再使用 tier。`pet-catalog.cjs` 负责加载动作、功能和 notes 规则，`pet-variants.cjs` 展开运行时与打包 profile。`windowDocking` 是拖拽释放后吸附窗口的独立 feature；`windowRoam` 只有在 `windowDocking` 和平台能力同时可用时才暴露。真实 `id` 使用 `pet<yy><seq>`，现有变体通过 `assetPrefix` 继续读取旧资源目录和 manifest，Windows 打包路径为 `deliverables/<scope>/<id>/<channel>`。
 
+DevTools 的运行与打包能力由独立 service 管理，不进入正式应用主进程。渲染层只提交已选变体和渠道；service 从变体元数据校验目标，将 `release`、`installer` 映射到固定 Windows 脚本，并通过结构化参数启动子进程。开发态宠物使用 `PET_VARIANT`、`PET_CHANNEL` 环境变量运行。最近一次成功打包的输出目录保留在 DevTools 主进程内，打开目录的 IPC 不接收渲染层路径。
+
 | 变体 | species | 范围 | 资源前缀 | 默认缩放 | 平台 | 自启动 | 窗口漫游 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `pet2601` | dog | internal | `dog` | `1.1` | Windows、macOS | Windows 支持 | Windows 支持 |
