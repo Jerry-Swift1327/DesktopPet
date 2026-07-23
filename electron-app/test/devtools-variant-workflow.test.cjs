@@ -165,7 +165,8 @@ test("devtools preview stages manual videos and reuses bootstrap draft rules", (
       walk: path.join(manualDir, "walk.mp4"),
       feed: path.join(manualDir, "feed.mp4"),
       ball: path.join(manualDir, "ball.mp4")
-    }
+    },
+    detachedArtifactOverrides: { walk: false, feed: true }
   });
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
 
@@ -178,6 +179,9 @@ test("devtools preview stages manual videos and reuses bootstrap draft rules", (
   assert.equal(preview.copied.length, 4);
   assert.equal(preview.processCommands.length, 4);
   assert.equal(preview.processCommands.every((command) => command.args.includes("--use-full-range")), true);
+  const byAction = Object.fromEntries(preview.processCommands.map((command) => [command.action, command.args]));
+  assert.equal(byAction.walk.includes("--no-clean-detached-artifacts"), true);
+  assert.equal(byAction.feed.includes("--clean-detached-artifacts"), true);
 });
 
 test("devtools preview can keep automatic runtime loop selection enabled", () => {
@@ -446,7 +450,8 @@ test("devtools maintenance workflow previews and runs multiple action replacemen
   const preview = workflow.buildReplaceActionsPreview({
     id: "pettest01",
     actionVideos: { walk: walkReplacement, feed: feedReplacement },
-    loopModes: { walk: { mode: "full" }, feed: { mode: "manual", sourceStart: 4, sourceEnd: 18 } }
+    loopModes: { walk: { mode: "full" }, feed: { mode: "manual", sourceStart: 4, sourceEnd: 18 } },
+    detachedArtifactOverrides: { walk: false, feed: true }
   });
   const result = await workflow.runReplaceActions(preview.previewId, {
     onStage: (event) => stages.push(event)
@@ -456,6 +461,8 @@ test("devtools maintenance workflow previews and runs multiple action replacemen
   assert.deepEqual(preview.actions, ["walk", "feed"]);
   assert.equal(preview.commands[0].args.includes("--use-full-range"), true);
   assert.equal(preview.commands[1].args.includes("--source-start"), true);
+  assert.equal(preview.commands[0].args.includes("--no-clean-detached-artifacts"), true);
+  assert.equal(preview.commands[1].args.includes("--clean-detached-artifacts"), true);
   assert.equal(result.replaced, 2);
   assert.deepEqual(stages.map((event) => `${event.stage}:${event.status}`), [
     "replaceAction:running",
@@ -591,6 +598,7 @@ test("devtools metadata maintenance processes newly enabled action videos before
     id: "pettest01",
     actionVideos: { spin: spinVideo },
     loopModes: { spin: { mode: "auto" } },
+    detachedArtifactOverrides: { spin: false },
     fields: {
       version: "1.1",
       actions: { enabled: ["squat", "walk", "feed", "ball", "spin"] }
@@ -611,6 +619,7 @@ test("devtools metadata maintenance processes newly enabled action videos before
   ]);
   assert.equal(preview.actionCommands[0].args.includes("--use-full-range"), false);
   assert.equal(preview.actionCommands[0].args.includes("--source-start"), false);
+  assert.equal(preview.actionCommands[0].args.includes("--no-clean-detached-artifacts"), true);
 
   await workflow.applyMetadataEdit(preview.previewId, { onStage: (event) => stages.push(event) });
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));

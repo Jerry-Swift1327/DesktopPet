@@ -578,6 +578,22 @@ test("devtools action cards expose per-action frame mode controls", () => {
   assert.match(appSource, /loopModes/);
 });
 
+test("devtools action cards expose registry-backed detached artifact overrides", async () => {
+  const harness = createRendererHarness();
+  await flushRendererPromises();
+  const html = harness.appNode.html;
+
+  assert.match(html, /data-clean-detached-artifacts="squat" checked/);
+  assert.match(html, /data-clean-detached-artifacts="walk" checked/);
+  assert.doesNotMatch(html, /data-clean-detached-artifacts="feed" checked/);
+  assert.match(appSource, /data-\$\{dataPrefix\}-clean-detached-artifacts/);
+
+  const checkbox = createEventTarget({ cleanDetachedArtifacts: "walk" });
+  checkbox.checked = false;
+  await harness.appNode.dispatchEvent("change", { target: checkbox });
+  assert.equal(harness.state.form.detachedArtifactOverrides.walk, false);
+});
+
 test("devtools CSS locks global horizontal overflow while enabling dashboard columns", () => {
   assert.match(cssBlock(".shell"), /height\s*:\s*100vh\s*;/);
   assert.match(cssBlock(".nav-item"), /font-weight\s*:\s*700\s*;/);

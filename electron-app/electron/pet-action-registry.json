@@ -17,7 +17,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": true,
       "system": true
@@ -38,7 +45,14 @@
         "mode": "walk"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": true,
       "system": true
@@ -59,7 +73,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": false,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "frameSequence": {
         "repeatRangeStart": 0,
@@ -85,7 +106,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": false,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": true,
       "system": true
@@ -106,7 +134,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "nearSquat"
+        "preset": "nearSquat",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -127,7 +162,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -148,7 +190,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "nearSquat"
+        "preset": "nearSquat",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -169,7 +218,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -190,7 +246,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -211,7 +274,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -232,7 +302,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "nearSquat"
+        "preset": "nearSquat",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": false,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -253,7 +330,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "nearSquat"
+        "preset": "nearSquat",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -274,7 +358,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -295,7 +386,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "nearSquat"
+        "preset": "nearSquat",
+        "stableGround": true,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -316,7 +414,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "direction64"
+        "preset": "direction64",
+        "stableGround": false,
+        "detachedArtifacts": {
+          "enabledByDefault": true,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": true
@@ -337,7 +442,14 @@
         "mode": "stationary"
       },
       "processing": {
-        "preset": "grounded"
+        "preset": "grounded",
+        "stableGround": false,
+        "detachedArtifacts": {
+          "enabledByDefault": false,
+          "maxArea": 256,
+          "maxSpan": 32,
+          "minGap": 0
+        }
       },
       "requiredForVariant": false,
       "system": false

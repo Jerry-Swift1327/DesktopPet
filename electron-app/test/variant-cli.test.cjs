@@ -235,12 +235,18 @@ test("bootstrap dry-run builds a plan without writing metadata", () => {
     { metadataFile, animationsRoot }
   );
   const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
+  const byAction = Object.fromEntries(plan.processCommands.map((command) => [command.action, command.args]));
 
   assert.equal(plan.apply, false);
   assert.equal(plan.draft.id, "pet2601");
   assert.equal(plan.copied.length, 4);
   assert.equal(plan.processCommands[0].args.includes("--trim-ground-alpha-auto"), true);
   assert.equal(plan.processCommands[0].args.includes("--stable-ground"), true);
+  assert.equal(byAction.squat.includes("--clean-detached-artifacts"), true);
+  assert.equal(byAction.walk.includes("--clean-detached-artifacts"), true);
+  assert.equal(byAction.feed.includes("--no-clean-detached-artifacts"), true);
+  assert.equal(byAction.ball.includes("--no-clean-detached-artifacts"), true);
+  assert.equal(byAction.walk.includes("--detached-artifact-max-span"), true);
   assert.equal(plan.processCommands[0].args.includes("--use-full-range"), false);
   assert.deepEqual(metadata.variants, {});
 });
@@ -670,7 +676,8 @@ test("replace action plan builds process_pet_actions replace command with frame 
       id: "pettest01",
       action: "walk",
       video,
-      loopMode: { mode: "manual", sourceStart: 8, sourceEnd: 21 }
+      loopMode: { mode: "manual", sourceStart: 8, sourceEnd: 21 },
+      cleanDetachedArtifacts: false
     },
     { metadataFile, animationsRoot }
   );
@@ -696,6 +703,34 @@ test("replace action plan builds process_pet_actions replace command with frame 
   ]);
   assert.equal(plan.command.args.includes("--use-full-range"), false);
   assert.equal(plan.command.args.includes("--freeze-last-frame"), false);
+  assert.equal(plan.command.args.includes("--no-clean-detached-artifacts"), true);
+  assert.equal(plan.command.args.includes("--clean-detached-artifacts"), false);
+});
+
+test("replace action plan inherits an explicit loop cleanup choice before registry defaults", () => {
+  const tempDir = createTempDir();
+  const metadataFile = path.join(tempDir, "pet-variant-metadata.json");
+  const animationsRoot = path.join(tempDir, "animations");
+  const video = path.join(tempDir, "replacement.mp4");
+  writeMaintenanceMetadata(metadataFile);
+  writeAnimationFolders(animationsRoot, "pettest01", ["squat", "walk", "feed", "ball"]);
+  fs.writeFileSync(video, "video", "utf8");
+  fs.writeFileSync(path.join(animationsRoot, "pettest01_feed", "loop.json"), JSON.stringify({
+    detachedArtifacts: { enabled: true },
+    detachedArtifactMaxArea: 200,
+    detachedArtifactMaxSpan: 24,
+    detachedArtifactMinGap: 1
+  }), "utf8");
+
+  const plan = buildReplaceActionPlan({ id: "pettest01", action: "feed", video }, { metadataFile, animationsRoot });
+  const args = plan.command.args;
+
+  assert.equal(args.includes("--clean-detached-artifacts"), true);
+  assert.deepEqual(args.slice(args.indexOf("--detached-artifact-max-area"), args.indexOf("--detached-artifact-max-area") + 6), [
+    "--detached-artifact-max-area", "200",
+    "--detached-artifact-max-span", "24",
+    "--detached-artifact-min-gap", "1"
+  ]);
 });
 
 test("add action plan uses process semantics without requiring an existing action directory", async () => {

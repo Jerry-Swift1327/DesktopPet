@@ -116,7 +116,7 @@
 
 ## 变体修改流程
 
-新增或修改宠物变体时，优先使用 `../scripts/variant-cli.cjs` 的 `variant:bootstrap` 流程或 DevTools。全局动作定义保存在 `pet-action-registry.json`，普通原地动作通过 DevTools 注册；`pet-catalog.cjs` 加载动作与功能规则，`pet-variants.cjs` 维护 V3 metadata、渠道配置和打包 profile 派生。
+新增或修改宠物变体时，优先使用 `../scripts/variant-cli.cjs` 的 `variant:bootstrap` 流程或 DevTools。全局动作定义保存在 `pet-action-registry.json`，其中 `processing.stableGround` 和 `processing.detachedArtifacts` 维护素材处理默认值；Devtools 可逐动作覆盖离散组件清理开关。普通原地动作通过 DevTools 注册；`pet-catalog.cjs` 加载动作与功能规则，`pet-variants.cjs` 维护 V3 metadata、渠道配置和打包 profile 派生。
 
 功能开关中 `windowDocking` 表示拖拽释放后的窗口吸附能力；`windowRoam` 只有在 `windowDocking` 同时启用且平台支持时才会暴露。新的 yawn 资源如需用最后一帧定格为睡眠阶段，可在动作元数据中声明 `freezeLastFrame: true`；未声明时仍沿用 `tailLoopStart` 尾段循环。
 

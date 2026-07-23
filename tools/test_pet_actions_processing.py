@@ -43,6 +43,7 @@ class PetActionProcessingTests(unittest.TestCase):
         clean_raw: bool = False,
         keep_raw: bool = False,
         freeze_last_frame: bool = False,
+        clean_detached_artifacts: bool | None = None,
     ) -> tuple[bool, dict[str, object]]:
         import process_pet_actions as cli
 
@@ -80,6 +81,7 @@ class PetActionProcessingTests(unittest.TestCase):
                     keep_raw=keep_raw,
                     clean_raw=clean_raw,
                     freeze_last_frame=freeze_last_frame,
+                    clean_detached_artifacts=clean_detached_artifacts,
                 )
                 return (action_dir / "raw_frames" / "frame_000.png").exists(), metadata
             finally:
@@ -113,6 +115,28 @@ class PetActionProcessingTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             with contextlib.redirect_stderr(io.StringIO()):
                 parser.parse_args(["--keep-raw", "--clean-raw"])
+
+    def test_detached_artifact_cli_flags_are_explicit_and_mutually_exclusive(self) -> None:
+        from process_pet_actions import add_common_args
+
+        parser = argparse.ArgumentParser()
+        add_common_args(parser)
+
+        self.assertIsNone(parser.parse_args([]).clean_detached_artifacts)
+        self.assertTrue(parser.parse_args(["--clean-detached-artifacts"]).clean_detached_artifacts)
+        self.assertFalse(parser.parse_args(["--no-clean-detached-artifacts"]).clean_detached_artifacts)
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stderr(io.StringIO()):
+                parser.parse_args(["--clean-detached-artifacts", "--no-clean-detached-artifacts"])
+
+    def test_explicitly_disabled_detached_artifact_cleanup_is_recorded(self) -> None:
+        _raw_frame_exists, metadata = self.run_fake_action_processing(clean_detached_artifacts=False)
+
+        self.assertEqual(metadata["detachedArtifacts"]["enabled"], False)
+        self.assertEqual(metadata["detachedArtifacts"]["applied"], False)
+        self.assertEqual(metadata["detachedArtifactMaxArea"], 256)
+        self.assertEqual(metadata["detachedArtifactMaxSpan"], 32)
+        self.assertEqual(metadata["detachedArtifactMinGap"], 0)
 
     def test_freeze_last_frame_cli_flag_and_existing_metadata_are_preserved(self) -> None:
         from process_pet_actions import add_common_args, preserve_existing_metadata

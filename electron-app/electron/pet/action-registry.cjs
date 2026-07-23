@@ -6,6 +6,12 @@ const ACTION_KEY_PATTERN = /^[a-z]+(?:[A-Z][a-z]+)*$/;
 const PLAYBACK_MODES = new Set(["once", "timed", "continuous"]);
 const PROCESSING_PRESETS = new Set(["grounded", "nearSquat", "direction64"]);
 const MOTION_MODES = new Set(["stationary", "walk"]);
+const DEFAULT_DETACHED_ARTIFACT_PROCESSING = Object.freeze({
+  enabledByDefault: false,
+  maxArea: 256,
+  maxSpan: 32,
+  minGap: 0
+});
 
 function clonePlainObject(value) {
   return JSON.parse(JSON.stringify(value));
@@ -16,6 +22,28 @@ function createStateId(actionKey) {
     throw new Error(`动作标识 ${actionKey} 必须是纯英文字母的小驼峰格式，例如 run 或 tailWag。`);
   }
   return `pet${actionKey[0].toUpperCase()}${actionKey.slice(1)}`;
+}
+
+function normalizeDetachedArtifactProcessing(actionKey, rawValue) {
+  const value = rawValue === undefined ? {} : rawValue;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`动作 ${actionKey} 的 detachedArtifacts 必须是对象。`);
+  }
+  if (value.enabledByDefault !== undefined && typeof value.enabledByDefault !== "boolean") {
+    throw new Error(`动作 ${actionKey} 的 detachedArtifacts.enabledByDefault 必须是布尔值。`);
+  }
+  const result = {
+    enabledByDefault: value.enabledByDefault ?? DEFAULT_DETACHED_ARTIFACT_PROCESSING.enabledByDefault,
+    maxArea: value.maxArea ?? DEFAULT_DETACHED_ARTIFACT_PROCESSING.maxArea,
+    maxSpan: value.maxSpan ?? DEFAULT_DETACHED_ARTIFACT_PROCESSING.maxSpan,
+    minGap: value.minGap ?? DEFAULT_DETACHED_ARTIFACT_PROCESSING.minGap
+  };
+  for (const [field, minimum] of [["maxArea", 1], ["maxSpan", 1], ["minGap", 0]]) {
+    if (!Number.isInteger(result[field]) || result[field] < minimum) {
+      throw new Error(`动作 ${actionKey} 的 detachedArtifacts.${field} 必须是大于等于 ${minimum} 的整数。`);
+    }
+  }
+  return result;
 }
 
 function normalizeActionDefinition(actionKey, rawDefinition = {}) {
@@ -36,7 +64,15 @@ function normalizeActionDefinition(actionKey, rawDefinition = {}) {
     playback.durationMinutes = durationMinutes;
   }
   const motion = { mode: rawDefinition.motion?.mode || "stationary" };
-  const processing = { preset: rawDefinition.processing?.preset || "grounded" };
+  const processingPreset = rawDefinition.processing?.preset || "grounded";
+  if (rawDefinition.processing?.stableGround !== undefined && typeof rawDefinition.processing.stableGround !== "boolean") {
+    throw new Error(`动作 ${actionKey} 的 processing.stableGround 必须是布尔值。`);
+  }
+  const processing = {
+    preset: processingPreset,
+    stableGround: rawDefinition.processing?.stableGround ?? (processingPreset === "grounded" || processingPreset === "nearSquat"),
+    detachedArtifacts: normalizeDetachedArtifactProcessing(actionKey, rawDefinition.processing?.detachedArtifacts)
+  };
 
   if (!label) throw new Error(`动作 ${actionKey} 的 label 不能为空。`);
   if (!PLAYBACK_MODES.has(playback.mode)) throw new Error(`动作 ${actionKey} 的播放方式无效：${playback.mode}`);

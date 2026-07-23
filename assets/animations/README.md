@@ -72,7 +72,7 @@ Devtools 的“素材池管理”只使用动作目录内标准 `<actionName>.mp
 - `pet2613_actions_manifest.json`
 - `pet2614_actions_manifest.json`
 
-manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新；生成阶段启用稳定贴地或主体外离散组件清理时，也会记录 `stableGround`、`detachedArtifacts` 等审计信息。
+manifest 记录动作视频、帧数、循环段和画质配置，可由资源处理脚本写入或更新；生成阶段会按动作注册表默认值和 Devtools 逐动作覆盖处理稳定贴地或主体外离散组件，并记录 `stableGround`、`detachedArtifacts` 等审计信息。明确关闭离散组件清理时也会记录 `detachedArtifacts.enabled: false`，供后续维护继承。
 
 新建且启用 `idleYawn` 的变体会在 bootstrap 处理 yawn 时自动写入 `freezeLastFrame: true`，运行时播放完整个所选帧段后定格最后一帧作为睡眠阶段，并在 5 分钟后切换到 `walk`。Devtools 可通过“末帧休眠（5 分钟）”显式维护普通 yawn 的该字段；带 `tailLoopStart` 的专属尾段循环动作保持只读。
 

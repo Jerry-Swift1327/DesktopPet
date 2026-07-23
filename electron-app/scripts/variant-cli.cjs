@@ -198,6 +198,7 @@ function getVariantDetails(input, options = {}) {
         hasCanonicalVideo: fs.existsSync(path.join(resourcePath, `${path.basename(resourcePath)}.mp4`)),
         freezeLastFrame: playback.freezeLastFrame === true,
         tailLoopStart: Number.isInteger(playback.tailLoopStart) ? playback.tailLoopStart : null,
+        detachedArtifacts: resolveDetachedArtifactProcessing(action, { playback }),
         protectedPlayback: Boolean(playback.directionFrameCount || playback.sourceStartPolicy || Number.isInteger(playback.tailLoopStart))
       };
     })
@@ -486,11 +487,33 @@ function normalizeLoopMode(loopMode = null, options = {}) {
   return { mode: options.useFullRange ? "full" : "auto" };
 }
 
+function resolveDetachedArtifactProcessing(action, options = {}) {
+  const defaults = actionPool[action].processing.detachedArtifacts;
+  const playback = options.playback || {};
+  const existingEnabled = playback.detachedArtifacts?.enabled;
+  const enabled = typeof options.cleanDetachedArtifacts === "boolean"
+    ? options.cleanDetachedArtifacts
+    : (typeof existingEnabled === "boolean" ? existingEnabled : defaults.enabledByDefault);
+  return {
+    enabled,
+    maxArea: Number.isInteger(playback.detachedArtifactMaxArea) ? playback.detachedArtifactMaxArea : defaults.maxArea,
+    maxSpan: Number.isInteger(playback.detachedArtifactMaxSpan) ? playback.detachedArtifactMaxSpan : defaults.maxSpan,
+    minGap: Number.isInteger(playback.detachedArtifactMinGap) ? playback.detachedArtifactMinGap : defaults.minGap
+  };
+}
+
 function appendActionProcessingArgs(processArgs, action, options = {}) {
   const preset = actionPool[action].processPreset;
-  if (preset === "grounded" || preset === "nearSquat") {
+  if (actionPool[action].processing.stableGround) {
     processArgs.push("--stable-ground");
   }
+  const detachedArtifacts = resolveDetachedArtifactProcessing(action, options);
+  processArgs.push(detachedArtifacts.enabled ? "--clean-detached-artifacts" : "--no-clean-detached-artifacts");
+  processArgs.push(
+    "--detached-artifact-max-area", String(detachedArtifacts.maxArea),
+    "--detached-artifact-max-span", String(detachedArtifacts.maxSpan),
+    "--detached-artifact-min-gap", String(detachedArtifacts.minGap)
+  );
   if (preset === "nearSquat" && action !== "squat") {
     processArgs.push("--align-reference-center-x", "--align-reference-bottom");
   } else if (preset === "direction64") {
@@ -576,6 +599,9 @@ function buildBootstrapPlan(args, options = {}) {
     };
   });
   const loopModes = args.loopModes && typeof args.loopModes === "object" ? args.loopModes : {};
+  const detachedArtifactOverrides = args.detachedArtifactOverrides && typeof args.detachedArtifactOverrides === "object"
+    ? args.detachedArtifactOverrides
+    : {};
   const processCommands = actionKeys.map((action) => ({
     action,
     cwd: projectRoot,
@@ -583,7 +609,8 @@ function buildBootstrapPlan(args, options = {}) {
     args: getProcessArgs(draft.assetPrefix, action, {
       useFullRange: Boolean(args["use-full-range"]),
       loopMode: loopModes[action],
-      freezeLastFrame: loopModes[action]?.freezeLastFrame ?? (action === "yawn" && draft.features.enable.includes("idleYawn"))
+      freezeLastFrame: loopModes[action]?.freezeLastFrame ?? (action === "yawn" && draft.features.enable.includes("idleYawn")),
+      cleanDetachedArtifacts: detachedArtifactOverrides[action]
     })
   }));
   const preflightCommands = ["release", "installer"].map((channel) => ({
@@ -1116,7 +1143,12 @@ function buildReplaceActionPlan(payload = {}, options = {}) {
     "128",
     "--trim-ground-alpha-auto"
   ];
-  appendActionProcessingArgs(args, action, { loopMode: payload.loopMode, freezeLastFrame: payload.freezeLastFrame });
+  appendActionProcessingArgs(args, action, {
+    loopMode: payload.loopMode,
+    freezeLastFrame: payload.freezeLastFrame,
+    cleanDetachedArtifacts: payload.cleanDetachedArtifacts,
+    playback: existingPool.playback
+  });
   return {
     kind: "replaceAction",
     id: profile.id,
@@ -1147,7 +1179,11 @@ function buildAddActionPlan(payload = {}, options = {}) {
     throw new Error(`New action video must be an existing .mp4 file: ${video}`);
   }
   const actionName = `${profile.assetPrefix}_${actionPool[action].asset}`;
-  const args = getProcessArgs(profile.assetPrefix, action, { loopMode: payload.loopMode, freezeLastFrame: payload.freezeLastFrame });
+  const args = getProcessArgs(profile.assetPrefix, action, {
+    loopMode: payload.loopMode,
+    freezeLastFrame: payload.freezeLastFrame,
+    cleanDetachedArtifacts: payload.cleanDetachedArtifacts
+  });
   args.splice(6, 0, "--video", video);
   return {
     kind: "addAction",
@@ -1247,19 +1283,7 @@ function buildGenerateFramePoolPlan(payload = {}, options = {}) {
     throw new Error(`Missing canonical action video: ${pool.canonicalVideo}`);
   }
   const args = ["tools\\process_pet_actions.py", "pool", "--action", pool.actionName, "--trim-ground-alpha", "128", "--trim-ground-alpha-auto"];
-  appendActionProcessingArgs(args, pool.action, { loopMode: { mode: "auto" } });
-  if (pool.playback.detachedArtifacts?.enabled === true) {
-    args.push("--clean-detached-artifacts");
-    for (const [field, option] of [
-      ["detachedArtifactMaxArea", "--detached-artifact-max-area"],
-      ["detachedArtifactMaxSpan", "--detached-artifact-max-span"],
-      ["detachedArtifactMinGap", "--detached-artifact-min-gap"]
-    ]) {
-      if (Number.isInteger(pool.playback[field])) {
-        args.push(option, String(pool.playback[field]));
-      }
-    }
-  }
+  appendActionProcessingArgs(args, pool.action, { loopMode: { mode: "auto" }, playback: pool.playback });
   return { kind: "generateFramePool", id: pool.id, action: pool.action, command: { cwd: projectRoot, command: "python", args } };
 }
 

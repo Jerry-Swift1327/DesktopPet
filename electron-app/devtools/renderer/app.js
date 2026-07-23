@@ -100,6 +100,7 @@ function createDefaultForm() {
     date: localDateString(),
     sourceFolder: "",
     actionVideos: {},
+    detachedArtifactOverrides: {},
     autoSelectLoop: false,
     loopModes: {
       yawn: { mode: "full", sourceStart: "", sourceEnd: "", freezeLastFrame: true }
@@ -152,10 +153,12 @@ const state = {
     details: null,
     replacementVideos: {},
     replacementLoopModes: {},
+    replacementDetachedArtifactOverrides: {},
     replacePreview: null,
     replacePending: false,
     newActionVideos: {},
     newActionLoopModes: {},
+    newActionDetachedArtifactOverrides: {},
     metadataFields: {
       species: "",
       version: "",
@@ -432,6 +435,7 @@ function resetMaintainEdits() {
   state.maintain.metadataPreview = null;
   state.maintain.newActionVideos = {};
   state.maintain.newActionLoopModes = {};
+  state.maintain.newActionDetachedArtifactOverrides = {};
   state.logs = [];
   state.stages = {};
   renderPreservingScroll();
@@ -786,6 +790,10 @@ function renderLoopControls(action) {
       <input type="checkbox" data-freeze-last-frame="${escapeHtml(action)}"${value.freezeLastFrame !== false ? " checked" : ""}${disabled}>
       <span>末帧休眠（5 分钟）</span>
     </label>` : ""}
+    <label class="option-check">
+      <input type="checkbox" data-clean-detached-artifacts="${escapeHtml(action)}"${cleanDetachedArtifactsForNewVariant(action) ? " checked" : ""}${disabled}>
+      <span>允许清理离散组件</span>
+    </label>
   </div>`;
 }
 
@@ -1229,12 +1237,36 @@ function maintainLoopModeFor(collectionName, action) {
   return collection[action];
 }
 
+function actionDetachedArtifactDefault(action) {
+  return state.options?.actions?.[action]?.processing?.detachedArtifacts?.enabledByDefault === true;
+}
+
+function cleanDetachedArtifactsForNewVariant(action) {
+  if (Object.prototype.hasOwnProperty.call(state.form.detachedArtifactOverrides, action)) {
+    return state.form.detachedArtifactOverrides[action];
+  }
+  return actionDetachedArtifactDefault(action);
+}
+
+function maintainCleanDetachedArtifacts(collectionName, action) {
+  const collection = state.maintain[collectionName];
+  if (Object.prototype.hasOwnProperty.call(collection, action)) return collection[action];
+  if (collectionName === "replacementDetachedArtifactOverrides") {
+    const resource = state.maintain.details?.resources?.resourceActions?.find((item) => item.action === action);
+    if (typeof resource?.detachedArtifacts?.enabled === "boolean") return resource.detachedArtifacts.enabled;
+  }
+  return actionDetachedArtifactDefault(action);
+}
+
 function renderMaintainCardLoopControls(action, collectionName, dataPrefix) {
   const value = maintainLoopModeFor(collectionName, action);
   const resource = state.maintain.details?.resources?.resourceActions?.find((item) => item.action === action);
   const controlsDisabled = busy() || (collectionName === "replacementLoopModes" && resource?.protectedPlayback);
   const disabled = controlsDisabled ? " disabled" : "";
   const freezeDisabled = busy() || resource?.protectedPlayback;
+  const detachedCollection = collectionName === "replacementLoopModes"
+    ? "replacementDetachedArtifactOverrides"
+    : "newActionDetachedArtifactOverrides";
   return `<div class="loop-controls">
     <label>运行帧
       <select data-${dataPrefix}-loop-mode="${escapeHtml(action)}"${disabled}>
@@ -1251,6 +1283,10 @@ function renderMaintainCardLoopControls(action, collectionName, dataPrefix) {
       <input type="checkbox" data-${dataPrefix}-freeze-last-frame="${escapeHtml(action)}"${value.freezeLastFrame === true ? " checked" : ""}${freezeDisabled ? " disabled" : ""}>
       <span>末帧休眠（5 分钟）</span>
     </label>` : ""}
+    <label class="option-check${resource?.protectedPlayback ? " is-readonly" : ""}">
+      <input type="checkbox" data-${dataPrefix}-clean-detached-artifacts="${escapeHtml(action)}"${maintainCleanDetachedArtifacts(detachedCollection, action) ? " checked" : ""}${freezeDisabled ? " disabled" : ""}>
+      <span>允许清理离散组件</span>
+    </label>
   </div>`;
 }
 
@@ -1969,6 +2005,8 @@ function buildMetadataPayload() {
       .map((action) => [action, state.maintain.newActionVideos[action]])),
     loopModes: Object.fromEntries(newActions
       .map((action) => [action, maintainLoopModeFor("newActionLoopModes", action)])),
+    detachedArtifactOverrides: Object.fromEntries(newActions
+      .map((action) => [action, maintainCleanDetachedArtifacts("newActionDetachedArtifactOverrides", action)])),
     fields: {
       species: fields.species,
       version: fields.version,
@@ -1995,7 +2033,9 @@ async function buildReplacePreview() {
     state.maintain.replacePreview = await api.buildReplaceActionsPreview({
       id: state.maintain.selectedId,
       actionVideos: state.maintain.replacementVideos,
-      loopModes: state.maintain.replacementLoopModes
+      loopModes: state.maintain.replacementLoopModes,
+      detachedArtifactOverrides: Object.fromEntries(Object.keys(state.maintain.replacementVideos)
+        .map((action) => [action, maintainCleanDetachedArtifacts("replacementDetachedArtifactOverrides", action)]))
     });
   } catch (error) {
     pushLog(error.message);
@@ -2019,6 +2059,7 @@ async function runReplaceAction(previewId) {
     state.stages.complete = "done";
     state.maintain.replacementVideos = {};
     state.maintain.replacementLoopModes = {};
+    state.maintain.replacementDetachedArtifactOverrides = {};
     await loadMaintainDetails(state.maintain.selectedId);
   } catch (error) {
     state.stages.complete = "failed";
@@ -2109,6 +2150,7 @@ async function applyMetadataEdit(previewId) {
     state.stages.complete = "done";
     state.maintain.newActionVideos = {};
     state.maintain.newActionLoopModes = {};
+    state.maintain.newActionDetachedArtifactOverrides = {};
     await refreshVariants({ preserveScroll: true });
     await loadMaintainDetails(state.maintain.selectedId, { preserveScroll: true });
   } catch (error) {
@@ -2339,6 +2381,10 @@ appNode.addEventListener("change", async (event) => {
     setLoopMode(event.target.dataset.loopMode, { mode: event.target.value });
   } else if (event.target.dataset.freezeLastFrame !== undefined) {
     setLoopMode(event.target.dataset.freezeLastFrame, { freezeLastFrame: event.target.checked });
+  } else if (event.target.dataset.cleanDetachedArtifacts !== undefined) {
+    state.form.detachedArtifactOverrides[event.target.dataset.cleanDetachedArtifacts] = event.target.checked;
+    clearNewPreview();
+    renderPreservingScroll();
   } else if (catalogFilter) {
     state.catalog.filters[catalogFilter] = event.target.value;
     const rows = filterVariants(state.variants, state.catalog.filters);
@@ -2357,8 +2403,10 @@ appNode.addEventListener("change", async (event) => {
     state.maintain.metadataPreview = null;
     state.maintain.replacementVideos = {};
     state.maintain.replacementLoopModes = {};
+    state.maintain.replacementDetachedArtifactOverrides = {};
     state.maintain.newActionVideos = {};
     state.maintain.newActionLoopModes = {};
+    state.maintain.newActionDetachedArtifactOverrides = {};
     state.maintain.deleteActionPreview = null;
     state.maintain.frameAction = "";
     state.maintain.framePool = null;
@@ -2381,6 +2429,14 @@ appNode.addEventListener("change", async (event) => {
     renderPreservingScroll();
   } else if (event.target.dataset.newActionFreezeLastFrame !== undefined) {
     maintainLoopModeFor("newActionLoopModes", event.target.dataset.newActionFreezeLastFrame).freezeLastFrame = event.target.checked;
+    state.maintain.metadataPreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.replaceCleanDetachedArtifacts !== undefined) {
+    state.maintain.replacementDetachedArtifactOverrides[event.target.dataset.replaceCleanDetachedArtifacts] = event.target.checked;
+    state.maintain.replacePreview = null;
+    renderPreservingScroll();
+  } else if (event.target.dataset.newActionCleanDetachedArtifacts !== undefined) {
+    state.maintain.newActionDetachedArtifactOverrides[event.target.dataset.newActionCleanDetachedArtifacts] = event.target.checked;
     state.maintain.metadataPreview = null;
     renderPreservingScroll();
   } else if (event.target.dataset.sourceFrame !== undefined) {
@@ -2434,6 +2490,7 @@ appNode.addEventListener("change", async (event) => {
     const enabled = new Set(newlyEnabledActions());
     state.maintain.newActionVideos = Object.fromEntries(Object.entries(state.maintain.newActionVideos).filter(([action]) => enabled.has(action)));
     state.maintain.newActionLoopModes = Object.fromEntries(Object.entries(state.maintain.newActionLoopModes).filter(([action]) => enabled.has(action)));
+    state.maintain.newActionDetachedArtifactOverrides = Object.fromEntries(Object.entries(state.maintain.newActionDetachedArtifactOverrides).filter(([action]) => enabled.has(action)));
     renderPreservingScroll();
   } else if (event.target.dataset.deleteSelect !== undefined) {
     state.deleteVariant.selectedId = event.target.value;

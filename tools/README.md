@@ -95,9 +95,10 @@ python tools\process_pet_actions.py process --variant tabby --actions look --vid
 | `--trim-ground-alpha` | 清理落地点以下残留透明边 |
 | `--trim-ground-alpha-auto` | 在生成素材池时安全检测并清理底部低透明 alpha 残留 |
 | `--clean-detached-artifacts` | 在素材池阶段清理主体外的小型离散 alpha 组件，例如抠像后残留的水印碎片 |
+| `--no-clean-detached-artifacts` | 显式关闭离散组件清理，并将关闭状态写入动作元数据 |
 | `--detached-artifact-max-area` | 限制 `--clean-detached-artifacts` 可清理组件的最大像素面积，默认 256px |
-| `--detached-artifact-max-span` | 限制 `--clean-detached-artifacts` 可清理组件的最大宽高，默认 64px |
-| `--detached-artifact-min-gap` | 限制 `--clean-detached-artifacts` 只清理与主体至少相隔的像素距离，默认 2px |
+| `--detached-artifact-max-span` | 限制 `--clean-detached-artifacts` 可清理组件的最大宽高，默认 32px |
+| `--detached-artifact-min-gap` | 限制 `--clean-detached-artifacts` 只清理与主体至少相隔的像素距离，默认 0px |
 | `--preserve-bright-color-foreground` | 按边缘采样到的绿幕颜色和局部前景密度，保护彩色道具中被误判为绿幕的高亮区域；variant 工具处理 `ball` 时自动启用 |
 | `--stable-ground` | 使用主体组件分析清理底部小型离散残点，并按稳定主体底线做垂直对齐 |
 | `--stable-ground-max-shift` | 限制 `--stable-ground` 的最大垂直平移，默认 32px |
@@ -134,7 +135,7 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 
 `pool` 从动作目录内标准 `<actionName>.mp4` 仅生成 `processed_frames`。它使用 `_replacement_work` 暂存并交换素材池，不修改源视频、`transparent_frames`、`loop.json` 或 manifest：
 
-通过 Devtools 重新生成素材池时，如果现有 `loop.json` 已启用 `detachedArtifacts`，会继续沿用对应的离散组件清理开关及面积、跨度和间距阈值，避免维护操作重新引入已清理的水印残留。
+通过 Devtools 重新生成素材池时，会优先沿用现有 `loop.json` 中明确记录的 `detachedArtifacts.enabled` 及面积、跨度和间距阈值；旧资源未记录开关时回退到动作注册表默认值。
 
 ```powershell
 python tools\process_pet_actions.py pool --action dog_walk --trim-ground-alpha 128 --trim-ground-alpha-auto
@@ -165,7 +166,9 @@ python tools\process_pet_actions.py reselect --action dog_walk --manifest dog_ac
 
 ### 主体外离散组件清理
 
-`--clean-detached-artifacts` 会在素材池生成阶段按 alpha 连通组件识别主体，再清理与主体分离、面积和宽高都低于阈值的小组件。它用于处理抠像后残留在主体外的水印、悬浮碎片或小块杂色；较大的离散组件会被保留，并在 `loop.json`/manifest 的 `detachedArtifacts.warnings` 中暴露风险。该能力默认关闭，避免误删动作本身需要的分离道具或特效。
+`--clean-detached-artifacts` 会在素材池生成阶段按 alpha 连通组件识别主体，再清理与主体分离、面积和宽高都低于阈值的小组件。它用于处理抠像后残留在主体外的水印、悬浮碎片或小块杂色；较大的离散组件会被保留，并在 `loop.json`/manifest 的 `detachedArtifacts.warnings` 中暴露风险。Python CLI 未指定开关时仍不启用；Devtools 和 variant 流程则使用动作注册表默认值，并允许逐动作覆盖。
+
+注册表默认对 `squat/walk/lie/lick/belly/stretch/splits/yawn/sleep/hiss/spin/look` 开启清理，对包含分离道具或特效风险的 `feed/ball/shake/pee` 关闭。Devtools 本次选择优先于已有 `loop.json`，已有元数据优先于注册表默认值；显式关闭会写回 `detachedArtifacts.enabled: false`，避免后续维护被默认值重新开启。
 
 ### 稳定贴地
 
@@ -223,7 +226,7 @@ python tools\process_pet_actions.py audit --variants tabby van bshmitted
 
 ### 新资源几何建议
 - 对新加入的变体和动作，优先使用默认 `source-canvas` 保留源视频构图；如果源视频本身主体整体偏左或偏右，再用 `--center-visible-action-x` 修正动作级画布 X 偏心。该参数只计算一次中位可见中心并对所有帧应用同一个平移，不会逐帧抵消动作本身的运动。
-- `variant:bootstrap` 会对 `grounded` 和 `nearSquat` 预设自动启用 `--stable-ground`，日常从 Devtools 新增变体时无需手动处理底部小型残点；生成后仍建议用 `audit` 抽查 `groundArtifacts` 和 `stableGround.warnings`。
+- `variant:bootstrap` 按动作注册表的 `processing.stableGround` 配置启用 `--stable-ground`：除 `look/pee` 外的现有动作默认开启；生成后仍建议用 `audit` 抽查 `groundArtifacts` 和 `stableGround.warnings`。
 - `variant:bootstrap` 为新建且启用 `idleYawn` 的变体处理 yawn 时，会自动写入 `freezeLastFrame: true`；已有变体重新生成动作时保留原 `loop.json` 的 `tailLoopStart` 或 `freezeLastFrame` 语义。
 - 对 `squat/lick/shake/yawn/hiss/look` 等近蹲坐动作，可在 squat 自身构图正确后，再叠加 `--align-reference-center-x --align-reference-bottom` 约束首帧和底线。
 - 对 `walk/ball/feed/sleep/lie/stretch` 等动作，不要默认强行匹配 squat 宽高；优先保证动作级构图、底线稳定和帧内漂移合理。

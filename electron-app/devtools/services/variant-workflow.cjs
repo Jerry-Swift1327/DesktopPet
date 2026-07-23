@@ -81,6 +81,11 @@ function getRequiredActions() {
   return getRequiredActionKeys();
 }
 
+function normalizeBooleanOverrides(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([, enabled]) => typeof enabled === "boolean"));
+}
+
 function getEffectiveRequiredActions(formState) {
   return Array.from(new Set(formState.advanced.enabledActions.length > 0
     ? formState.advanced.enabledActions
@@ -203,6 +208,7 @@ function normalizeFormState(formState = {}) {
     actionVideos: formState.actionVideos || {},
     autoSelectLoop: Boolean(formState.autoSelectLoop),
     loopModes: formState.loopModes && typeof formState.loopModes === "object" ? formState.loopModes : {},
+    detachedArtifactOverrides: normalizeBooleanOverrides(formState.detachedArtifactOverrides),
     force: Boolean(formState.force || advanced.force),
     skipProcessing: Boolean(formState.skipProcessing),
     skipPreflight: Boolean(formState.skipPreflight),
@@ -258,6 +264,9 @@ function buildBootstrapArgs(formState, stagingSource) {
   }
   if (formState.loopModes && Object.keys(formState.loopModes).length > 0) {
     args.loopModes = formState.loopModes;
+  }
+  if (Object.keys(formState.detachedArtifactOverrides).length > 0) {
+    args.detachedArtifactOverrides = formState.detachedArtifactOverrides;
   }
 
   return args;
@@ -405,6 +414,7 @@ function createVariantWorkflow(options = {}) {
   function buildReplaceActionPlans(payload = {}) {
     const actionVideos = payload.actionVideos || payload.replacements || {};
     const loopModes = payload.loopModes || {};
+    const detachedArtifactOverrides = normalizeBooleanOverrides(payload.detachedArtifactOverrides);
     return Object.entries(actionVideos)
       .filter(([, video]) => Boolean(typeof video === "string" ? video : video?.path))
       .map(([action, video]) => buildReplaceActionPlan({
@@ -412,7 +422,8 @@ function createVariantWorkflow(options = {}) {
         action,
         video: typeof video === "string" ? video : video.path,
         loopMode: loopModes[action] || video.loopMode || { mode: "full" },
-        freezeLastFrame: loopModes[action]?.freezeLastFrame ?? video.freezeLastFrame
+        freezeLastFrame: loopModes[action]?.freezeLastFrame ?? video.freezeLastFrame,
+        cleanDetachedArtifacts: detachedArtifactOverrides[action]
       }, { metadataFile, animationsRoot }));
   }
 
@@ -508,6 +519,7 @@ function createVariantWorkflow(options = {}) {
     const newlyEnabledActions = Array.from(new Set(requestedActions)).filter((action) => !currentActions.has(action));
     const actionVideos = payload.actionVideos || {};
     const loopModes = payload.loopModes || {};
+    const detachedArtifactOverrides = normalizeBooleanOverrides(payload.detachedArtifactOverrides);
     const actionPlans = newlyEnabledActions
       .filter((action) => Boolean(actionVideos[action]))
       .map((action) => buildAddActionPlan({
@@ -515,7 +527,8 @@ function createVariantWorkflow(options = {}) {
         action,
         video: typeof actionVideos[action] === "string" ? actionVideos[action] : actionVideos[action].path,
         loopMode: loopModes[action] || actionVideos[action].loopMode || { mode: "full" },
-        freezeLastFrame: loopModes[action]?.freezeLastFrame ?? actionVideos[action].freezeLastFrame
+        freezeLastFrame: loopModes[action]?.freezeLastFrame ?? actionVideos[action].freezeLastFrame,
+        cleanDetachedArtifacts: detachedArtifactOverrides[action]
       }, { metadataFile, animationsRoot }));
     const plannedActions = actionPlans.map((plan) => plan.action);
     const missingActionVideos = newlyEnabledActions.filter((action) => !plannedActions.includes(action));

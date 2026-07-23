@@ -111,8 +111,8 @@ def generate_processed_frame_pool(
     trim_ground_alpha_auto: bool = False,
     clean_detached_artifacts: bool = False,
     detached_artifact_max_area: int = 256,
-    detached_artifact_max_span: int = 64,
-    detached_artifact_min_gap: int = 2,
+    detached_artifact_max_span: int = 32,
+    detached_artifact_min_gap: int = 0,
     preserve_bright_color_foreground: bool = False,
     stable_ground: bool = False,
     stable_ground_max_shift: int = 32,
@@ -191,10 +191,10 @@ def process_action_core(
     trim_ground_alpha: int = 0,
     trim_ground_padding: int = 1,
     trim_ground_alpha_auto: bool = False,
-    clean_detached_artifacts: bool = False,
+    clean_detached_artifacts: bool | None = None,
     detached_artifact_max_area: int = 256,
-    detached_artifact_max_span: int = 64,
-    detached_artifact_min_gap: int = 2,
+    detached_artifact_max_span: int = 32,
+    detached_artifact_min_gap: int = 0,
     preserve_bright_color_foreground: bool = False,
     stable_ground: bool = False,
     stable_ground_max_shift: int = 32,
@@ -252,7 +252,7 @@ def process_action_core(
         trim_ground_alpha=trim_ground_alpha,
         trim_ground_padding=trim_ground_padding,
         trim_ground_alpha_auto=trim_ground_alpha_auto,
-        clean_detached_artifacts=clean_detached_artifacts,
+        clean_detached_artifacts=bool(clean_detached_artifacts),
         detached_artifact_max_area=detached_artifact_max_area,
         detached_artifact_max_span=detached_artifact_max_span,
         detached_artifact_min_gap=detached_artifact_min_gap,
@@ -294,8 +294,20 @@ def process_action_core(
     if stable_ground:
         metadata["stableGroundMode"] = "processed-subject-components"
         metadata["stableGroundMaxShift"] = int(stable_ground_max_shift)
-    if clean_detached_artifacts:
-        metadata["detachedArtifactMode"] = "processed-subject-components"
+    if clean_detached_artifacts is not None:
+        if clean_detached_artifacts:
+            metadata["detachedArtifactMode"] = "processed-subject-components"
+        else:
+            metadata["detachedArtifacts"] = {
+                "enabled": False,
+                "applied": False,
+                "cleanedComponents": 0,
+                "cleanedPixels": 0,
+                "maxCleanedArea": 0,
+                "keptComponents": 0,
+                "warningCount": 0,
+                "warnings": [],
+            }
         metadata["detachedArtifactMaxArea"] = int(detached_artifact_max_area)
         metadata["detachedArtifactMaxSpan"] = int(detached_artifact_max_span)
         metadata["detachedArtifactMinGap"] = int(detached_artifact_min_gap)
@@ -731,7 +743,7 @@ def cmd_pool(args: argparse.Namespace) -> None:
             trim_ground_alpha=args.trim_ground_alpha,
             trim_ground_padding=args.trim_ground_padding,
             trim_ground_alpha_auto=args.trim_ground_alpha_auto,
-            clean_detached_artifacts=args.clean_detached_artifacts,
+            clean_detached_artifacts=bool(args.clean_detached_artifacts),
             detached_artifact_max_area=args.detached_artifact_max_area,
             detached_artifact_max_span=args.detached_artifact_max_span,
             detached_artifact_min_gap=args.detached_artifact_min_gap,
@@ -887,10 +899,13 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--trim-ground-alpha", type=int, default=0, help="Clear rows below last solid-alpha row. Disabled by default.")
     parser.add_argument("--trim-ground-padding", type=int, default=1, help="Rows to keep below last solid-alpha row when --trim-ground-alpha is enabled.")
     parser.add_argument("--trim-ground-alpha-auto", action="store_true", help="Apply safe ground-alpha cleanup to processed_frames before runtime frames are selected.")
-    parser.add_argument("--clean-detached-artifacts", action="store_true", help="Remove small detached alpha components outside the main subject in processed_frames.")
+    detached_group = parser.add_mutually_exclusive_group()
+    detached_group.add_argument("--clean-detached-artifacts", dest="clean_detached_artifacts", action="store_true", help="Remove small detached alpha components outside the main subject in processed_frames.")
+    detached_group.add_argument("--no-clean-detached-artifacts", dest="clean_detached_artifacts", action="store_false", help="Explicitly disable detached alpha component cleanup and record that choice in action metadata.")
+    parser.set_defaults(clean_detached_artifacts=None)
     parser.add_argument("--detached-artifact-max-area", type=int, default=256, help="Maximum area for --clean-detached-artifacts components.")
-    parser.add_argument("--detached-artifact-max-span", type=int, default=64, help="Maximum width/height for --clean-detached-artifacts components.")
-    parser.add_argument("--detached-artifact-min-gap", type=int, default=2, help="Minimum pixel gap from the subject for --clean-detached-artifacts components.")
+    parser.add_argument("--detached-artifact-max-span", type=int, default=32, help="Maximum width/height for --clean-detached-artifacts components.")
+    parser.add_argument("--detached-artifact-min-gap", type=int, default=0, help="Minimum pixel gap from the subject for --clean-detached-artifacts components.")
     parser.add_argument("--preserve-bright-color-foreground", action="store_true", help="Protect bright colorful props that differ from the sampled green-screen color.")
     parser.add_argument("--stable-ground", action="store_true", help="Use subject-component analysis to clear small bottom artifacts and align frames to a stable subject bottom.")
     parser.add_argument("--stable-ground-max-shift", type=int, default=32, help="Maximum vertical shift for --stable-ground.")
