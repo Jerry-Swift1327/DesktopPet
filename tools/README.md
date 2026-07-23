@@ -134,6 +134,8 @@ python tools\process_pet_actions.py replace --action tabby_look --video path\to\
 
 `pool` 从动作目录内标准 `<actionName>.mp4` 仅生成 `processed_frames`。它使用 `_replacement_work` 暂存并交换素材池，不修改源视频、`transparent_frames`、`loop.json` 或 manifest：
 
+通过 Devtools 重新生成素材池时，如果现有 `loop.json` 已启用 `detachedArtifacts`，会继续沿用对应的离散组件清理开关及面积、跨度和间距阈值，避免维护操作重新引入已清理的水印残留。
+
 ```powershell
 python tools\process_pet_actions.py pool --action dog_walk --trim-ground-alpha 128 --trim-ground-alpha-auto
 ```

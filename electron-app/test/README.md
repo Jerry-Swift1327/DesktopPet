@@ -47,6 +47,7 @@ node --test "test/**/*.test.cjs"
 | `pet2611-assets.test.cjs` | pet2611 动作资源、manifest、冻结最后一帧的 yawn、去重 walk 循环元数据和主体外水印残留检查 | `../../assets/animations` |
 | `pet2612-assets.test.cjs` | pet2612 yawn 末帧冻结、spin 水印清理与稳定贴地元数据及 manifest 一致性 | `../../assets/animations` |
 | `pet2613-assets.test.cjs` | pet2613 dog yawn 末帧冻结、ball 彩色道具保护、长循环和 manifest 一致性 | `../../assets/animations` |
+| `pet2615-assets.test.cjs` | pet2615 walk 四角水印清理、运行帧映射、清理元数据和 manifest 一致性 | `../../assets/animations` |
 | `pet-stats-rules.test.cjs` | pet stats 纯规则（clampStat/daysBetween/createDefaultPetStats/normalizePetStats/applyDailyDecay/applyPromptStateRules/applyNaturalStatsTickRules/applyActionStatsRules/applyCompletedWalkStatsRules/recordInteractionRules） | `../electron/pet/pet-stats-rules.cjs` |
 | `pet-stats-store.test.cjs` | pet stats 读写边界（encode/decode 往返、readPetStatsFile 主文件与 legacy fallback、读取异常、writePetStatsFile 写入内容） | `../electron/pet/pet-stats-store.cjs` |
 | `pet-stats-controller-accessor.test.cjs` | pet-stats-controller 控制器访问器护栏与 main.cjs 薄包装接线结构断言（不直接 require electron/fs/path、不直接访问窗口/IPC/bubble、不使用 Math.random/new Date、context 注入完整、调用 rules/store 不重写、timer 所有权在控制器、main 不再持有 stats 运行态） | `../electron/pet/pet-stats-controller.cjs`、`../electron/main.cjs` |

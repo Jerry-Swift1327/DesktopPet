@@ -1248,6 +1248,18 @@ function buildGenerateFramePoolPlan(payload = {}, options = {}) {
   }
   const args = ["tools\\process_pet_actions.py", "pool", "--action", pool.actionName, "--trim-ground-alpha", "128", "--trim-ground-alpha-auto"];
   appendActionProcessingArgs(args, pool.action, { loopMode: { mode: "auto" } });
+  if (pool.playback.detachedArtifacts?.enabled === true) {
+    args.push("--clean-detached-artifacts");
+    for (const [field, option] of [
+      ["detachedArtifactMaxArea", "--detached-artifact-max-area"],
+      ["detachedArtifactMaxSpan", "--detached-artifact-max-span"],
+      ["detachedArtifactMinGap", "--detached-artifact-min-gap"]
+    ]) {
+      if (Number.isInteger(pool.playback[field])) {
+        args.push(option, String(pool.playback[field]));
+      }
+    }
+  }
   return { kind: "generateFramePool", id: pool.id, action: pool.action, command: { cwd: projectRoot, command: "python", args } };
 }
 
