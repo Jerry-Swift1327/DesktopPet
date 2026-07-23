@@ -59,10 +59,10 @@ for frame_path in frame_paths:
     subject = frame_components[0]
     for component in frame_components[1:]:
         separated = (
-            component["bottom"] < subject["top"] - 2
-            or component["top"] > subject["bottom"] + 2
-            or component["right"] < subject["left"] - 2
-            or component["left"] > subject["right"] + 2
+            component["bottom"] < subject["top"]
+            or component["top"] > subject["bottom"]
+            or component["right"] < subject["left"]
+            or component["left"] > subject["right"]
         )
         if separated:
             component["frame"] = frame_path.name
@@ -87,9 +87,9 @@ test("pet2615 walk removes detached corner watermarks and keeps its runtime sele
   assert.equal(loop.detachedArtifacts.applied, true);
   assert.equal(loop.detachedArtifacts.keptComponents, 0);
   assert.equal(loop.detachedArtifacts.warningCount, 0);
-  assert.equal(loop.detachedArtifactMaxArea, 192);
+  assert.equal(loop.detachedArtifactMaxArea, 256);
   assert.equal(loop.detachedArtifactMaxSpan, 32);
-  assert.equal(loop.detachedArtifactMinGap, 2);
+  assert.equal(loop.detachedArtifactMinGap, 0);
   assert.equal(inspection.frameCount, loop.frameCount);
   assert.deepEqual(inspection.detached, []);
   assert.deepEqual(manifestWalk, loop);

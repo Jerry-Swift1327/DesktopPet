@@ -751,9 +751,9 @@ test("frame pool plans use canonical video and sort explicit runtime frames", ()
   fs.writeFileSync(path.join(actionDir, "loop.json"), JSON.stringify({
     action: "pettest01_walk", frameCount: 2, loopStart: 0, loopEnd: 1, sourceLoopStart: 0, sourceLoopEnd: 1,
     detachedArtifacts: { enabled: true, applied: true },
-    detachedArtifactMaxArea: 192,
+    detachedArtifactMaxArea: 256,
     detachedArtifactMaxSpan: 32,
-    detachedArtifactMinGap: 2
+    detachedArtifactMinGap: 0
   }), "utf8");
   fs.writeFileSync(path.join(animationsRoot, "pettest01_actions_manifest.json"), JSON.stringify([{ action: "pettest01_walk" }]), "utf8");
 
@@ -768,9 +768,9 @@ test("frame pool plans use canonical video and sort explicit runtime frames", ()
   assert.deepEqual(poolPlan.command.args.slice(0, 4), ["tools\\process_pet_actions.py", "pool", "--action", "pettest01_walk"]);
   assert.deepEqual(poolPlan.command.args.slice(-7), [
     "--clean-detached-artifacts",
-    "--detached-artifact-max-area", "192",
+    "--detached-artifact-max-area", "256",
     "--detached-artifact-max-span", "32",
-    "--detached-artifact-min-gap", "2"
+    "--detached-artifact-min-gap", "0"
   ]);
   assert.deepEqual(reselect.sourceFrames, [0, 2]);
   assert.equal(reselect.command.args.includes("0,2"), true);
